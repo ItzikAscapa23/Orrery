@@ -869,3 +869,72 @@ describe('foldEvents — committedKinds', () => {
     expect(state.committedKinds.filter((k) => k === 'spec')).toHaveLength(1);
   });
 });
+
+describe('foldEvents — task-based agent status derivation', () => {
+  const baseTask = { side: 'server', status: 'pending', coveredByTestPlan: false, testsWritten: false };
+
+  it('returns no agent statuses when no tasks provided', () => {
+    const state = foldEvents([]);
+    expect(state.agentStatuses).toEqual({});
+  });
+
+  it('derives server=working when a server task is running', () => {
+    const state = foldEvents([], [{ ...baseTask, status: 'running' }]);
+    expect(state.agentStatuses['server']).toBe('working');
+  });
+
+  it('derives server=waiting when a server task is parked', () => {
+    const state = foldEvents([], [{ ...baseTask, status: 'parked' }]);
+    expect(state.agentStatuses['server']).toBe('waiting');
+  });
+
+  it('derives server=waiting when a server task is amendment_paused', () => {
+    const state = foldEvents([], [{ ...baseTask, status: 'amendment_paused' }]);
+    expect(state.agentStatuses['server']).toBe('waiting');
+  });
+
+  it('derives server=done when all server tasks are completed', () => {
+    const state = foldEvents([], [{ ...baseTask, status: 'completed' }]);
+    expect(state.agentStatuses['server']).toBe('done');
+  });
+
+  it('derives server=queued when all server tasks are pending', () => {
+    const state = foldEvents([], [{ ...baseTask, status: 'pending' }]);
+    expect(state.agentStatuses['server']).toBe('queued');
+  });
+
+  it('derives test=working when a covered task is running', () => {
+    const state = foldEvents([], [
+      { ...baseTask, coveredByTestPlan: true, status: 'running' },
+    ]);
+    expect(state.agentStatuses['test']).toBe('working');
+  });
+
+  it('derives test=done when all covered tasks have testsWritten', () => {
+    const state = foldEvents([], [
+      { ...baseTask, coveredByTestPlan: true, testsWritten: true, status: 'pending' },
+    ]);
+    expect(state.agentStatuses['test']).toBe('done');
+  });
+
+  it('does not set test status when no tasks are covered', () => {
+    const state = foldEvents([], [{ ...baseTask, status: 'running' }]);
+    expect(state.agentStatuses['test']).toBeUndefined();
+  });
+
+  it('task-derived working is overridden to done when feature is DONE', () => {
+    const state = foldEvents(
+      [makeRow(1, { type: 'phase.changed', from: 'IMPLEMENTING', to: 'DONE' })],
+      [{ ...baseTask, status: 'running' }],
+    );
+    expect(state.agentStatuses['server']).toBe('done');
+  });
+
+  it('event-sourced review agent status is preserved when tasks only cover server', () => {
+    const state = foldEvents(
+      [makeRow(1, { type: 'agent.status', agent: 'review', status: 'done' })],
+      [{ ...baseTask, status: 'running' }],
+    );
+    expect(state.agentStatuses['review']).toBe('done');
+  });
+});

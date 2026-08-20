@@ -40,7 +40,46 @@ const EMPTY_STATE: RunState = {
  * Pure reducer: fold an ordered array of EventRows into the complete RunState.
  * Called on every new event — safe to re-run from scratch on reconnect/refresh.
  */
-export function foldEvents(events: EventRow[]): RunState {
+interface TaskSummary {
+  side: string;
+  status: string;
+  coveredByTestPlan: boolean;
+  testsWritten: boolean;
+}
+
+function deriveAgentStatusesFromTasks(
+  tasks: TaskSummary[],
+): Partial<Record<string, AgentDisplayStatus>> {
+  const derived: Record<string, AgentDisplayStatus> = {};
+  for (const agentKey of ['server', 'client'] as const) {
+    const relevant = tasks.filter((t) => t.side === agentKey);
+    if (relevant.length === 0) continue;
+    if (relevant.some((t) => t.status === 'running')) {
+      derived[agentKey] = 'working';
+    } else if (relevant.some((t) => t.status === 'parked' || t.status === 'amendment_paused')) {
+      derived[agentKey] = 'waiting';
+    } else if (relevant.every((t) => t.status === 'completed')) {
+      derived[agentKey] = 'done';
+    } else {
+      derived[agentKey] = 'queued';
+    }
+  }
+  const testTasks = tasks.filter((t) => t.coveredByTestPlan);
+  if (testTasks.length > 0) {
+    if (testTasks.some((t) => t.status === 'running')) {
+      derived['test'] = 'working';
+    } else if (testTasks.some((t) => t.status === 'parked' || t.status === 'amendment_paused')) {
+      derived['test'] = 'waiting';
+    } else if (testTasks.every((t) => t.testsWritten || t.status === 'completed')) {
+      derived['test'] = 'done';
+    } else {
+      derived['test'] = 'queued';
+    }
+  }
+  return derived;
+}
+
+export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState {
   let currentPhase: PhaseId = null;
   const agentStatuses: Record<string, AgentDisplayStatus> = {};
   const chatEntries: ChatEntry[] = [];
@@ -366,6 +405,19 @@ export function foldEvents(events: EventRow[]): RunState {
         agentStatuses[agent] = terminalStatus;
       } else if (s === 'waiting' && !anyGateOpen) {
         agentStatuses[agent] = 'done';
+      }
+    }
+  }
+
+  // Override dev/test agent statuses from task rows — more reliable than the
+  // last agent.status event, which can be left stale on the gate-resolved path (O-14).
+  if (tasks && tasks.length > 0) {
+    Object.assign(agentStatuses, deriveAgentStatusesFromTasks(tasks));
+    // Re-apply terminal override to any newly merged task-derived statuses.
+    if (isTerminal) {
+      for (const agent of Object.keys(agentStatuses)) {
+        const s = agentStatuses[agent];
+        if (s === 'working' || s === 'waiting') agentStatuses[agent] = terminalStatus;
       }
     }
   }

@@ -18,6 +18,7 @@ import type { ArtifactKind } from '@orrery/shared';
 import { FILE_TO_KIND } from '@orrery/shared';
 import type { RepoEntry } from './hooks/useFeature.js';
 import type { SelectedEntity } from './types/ui.js';
+import type { TaskRow } from './components/TaskTable.js';
 
 // Respect prefers-reduced-motion on first render
 const prefersReducedMotion =
@@ -36,7 +37,14 @@ export function App() {
     loading,
   } = useFeature();
   const { events, error: sseError } = useEventStream(selectedId);
-  const runState = useMemo(() => (events.length > 0 ? foldEvents(events) : EMPTY_STATE), [events]);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
+  useEffect(() => {
+    setTasks([]);
+  }, [selectedId]);
+  const runState = useMemo(
+    () => (events.length > 0 ? foldEvents(events, tasks) : EMPTY_STATE),
+    [events, tasks],
+  );
   const usageEventCount = useMemo(
     () => events.filter((e) => e.payload.type === 'usage.recorded').length,
     [events],
@@ -50,6 +58,13 @@ export function App() {
       ).length,
     [events],
   );
+  useEffect(() => {
+    if (!selectedId) return;
+    fetch(`/api/features/${selectedId}/tasks`)
+      .then((r) => (r.ok ? (r.json() as Promise<TaskRow[]>) : Promise.reject()))
+      .then(setTasks)
+      .catch(() => undefined);
+  }, [selectedId, taskEventCount]);
   const agentLogEventCount = useMemo(
     () => events.filter((e) => e.payload.type === 'agent.log').length,
     [events],
