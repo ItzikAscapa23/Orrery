@@ -158,3 +158,50 @@ reading them for orientation gets a machine that no longer exists.
 npm test
 npm run typecheck
 ```
+
+---
+
+## Phase 11 — Lint debt
+
+**Goal:** Make `npm run lint` a gate that can pass, so a phase's Definition of
+Done stops carrying a permanent known failure.
+
+**PRD refs:** §2 C6, C7
+
+The 364 baseline problems are two unrelated jobs and must not share a commit.
+Doing them together produces a diff nobody can review: a mechanical reformat of
+~80 files interleaved with judgement calls about type safety.
+
+**Tasks:**
+- [ ] Formatting sweep — 232 `prettier/prettier` errors, resolved with
+      `--fix`. One mechanical commit, on its own branch, touching nothing else.
+      No feature work in the same commit. Verify the suite count is unchanged
+      before and after: a formatter should not alter behaviour, and if the count
+      moves, something else did.
+- [ ] Scoped ESLint override for test files — roughly 100 `no-unsafe-*`,
+      `no-explicit-any` and related errors, concentrated in
+      `apps/server/src/__tests__/`. These come from `vi.mocked()`, payload casts
+      and `as unknown as Anthropic.Message`, which are correct in test code.
+      Editing a hundred call sites to satisfy a rule that should not apply there
+      is the wrong fix. Declare the exemption once in the ESLint config for
+      `**/__tests__/**` rather than suppressing per line.
+- [ ] Whatever remains after those two — triage individually. Report the list
+      with rule and file; do not blanket-disable.
+
+**Definition of Done:**
+- `npm run lint` exits 0, or the residual count is recorded in `HANDOVER.md`
+  with a per-item reason for why each remaining problem is not fixable here.
+- No `eslint-disable` comment added to a source file to reach that state.
+  Exemptions are declared in config, scoped to a path glob.
+- Suite count unchanged across the formatting commit.
+
+**Verification:**
+```bash
+npm test
+npm run typecheck
+npm run lint
+```
+
+**Entry conditions for next phase:**
+- The lint baseline line in every earlier phase's Verification block is removed,
+  since the gate is now zero rather than a ceiling.
