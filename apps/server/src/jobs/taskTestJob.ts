@@ -1,0 +1,445 @@
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { getPrisma } from '../lib/prisma.js';
+import { appendEvent } from '../lib/events.js';
+import { checkSpendGuard } from '../lib/spendGuard.js';
+import { readArtifact, commitArtifact } from '../lib/artifacts.js';
+import {
+  startContainer,
+  AllowlistViolationError,
+  MetacharViolationError,
+  EXEC_MAX_BUFFER,
+} from '../lib/container.js';
+import { dispatchUnblockedTasks } from '../lib/dispatch.js';
+import { checkBedrockConnectivity } from '../lib/connectivity.js';
+import { readClaudeMdFromDefaultBranch, getRepoEntry, routeInstall } from './devJob.js';
+import { createWorktree } from '../lib/worktree.js';
+import { discoverTestDir, getAuthoredTestFilesForTask } from './testJob.js';
+import {
+  runTestAgent,
+  TestViolationInfo,
+  measurePromptSections as measureTestPromptSections,
+} from '../agents/testAgent.js';
+import type { ToolCallInfo } from '../agents/devAgent.js';
+import { usageEventPayload } from '../lib/usageEvent.js';
+import { scopeSpecByRefs, scopeContract } from '../lib/promptScope.js';
+import { loadHarnessBrief, HARNESS_BRIEF_WRITE_INSTRUCTION } from '../lib/harnessbrief.js';
+
+const GIT_AUTHOR_NAME = process.env['BOT_GIT_NAME'] ?? 'Orrery';
+const GIT_AUTHOR_EMAIL = process.env['BOT_GIT_EMAIL'] ?? 'orrery-bot@example.com';
+
+function git(worktreePath: string, ...args: string[]): string {
+  return execFileSync('git', ['-C', worktreePath, ...args], {
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    maxBuffer: EXEC_MAX_BUFFER,
+  });
+}
+
+function gitCommit(worktreePath: string, message: string): void {
+  execFileSync(
+    'git',
+    [
+      '-C',
+      worktreePath,
+      '-c',
+      `user.name=${GIT_AUTHOR_NAME}`,
+      '-c',
+      `user.email=${GIT_AUTHOR_EMAIL}`,
+      'commit',
+      '-m',
+      message,
+    ],
+    { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: EXEC_MAX_BUFFER },
+  );
+}
+
+export async function runTaskTestJob(
+  featureId: string,
+  taskId: string,
+  jobId: string,
+  side: 'server' | 'client',
+): Promise<void> {
+  const [task, feature] = await Promise.all([
+    getPrisma().task.findUnique({ where: { id: taskId } }),
+    getPrisma().feature.findUniqueOrThrow({
+      where: { id: featureId },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        status: true,
+        simulatedRun: true,
+      },
+    }),
+  ]);
+
+  if (!task) {
+    console.error(JSON.stringify({ event: 'task_test_job_task_not_found', featureId, taskId }));
+    return;
+  }
+
+  if (!task.coveredByTestPlan || task.testsWritten) {
+    // Not covered or already written — nothing to do.
+    return;
+  }
+
+  if (feature.status !== 'IMPLEMENTING') {
+    return;
+  }
+
+  if (await checkSpendGuard(featureId, taskId, task.title)) return;
+
+  await getPrisma().task.update({
+    where: { id: taskId },
+    data: { status: 'running', testTaskAttempts: { increment: 1 } },
+  });
+
+  await appendEvent(getPrisma(), featureId, {
+    type: 'agent.status',
+    agent: 'test',
+    status: 'working',
+  });
+  await appendEvent(getPrisma(), featureId, {
+    type: 'agent.log',
+    agent: 'test',
+    severity: 'action',
+    text: `▸ writing acceptance tests for task: ${task.title}`,
+  });
+
+  if (!(await checkBedrockConnectivity())) {
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.status',
+      agent: 'test',
+      status: 'failed',
+    });
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'test',
+      severity: 'muted',
+      text: '· task-test agent parked — Bedrock unreachable; check VPN / aws sso login',
+    });
+    await getPrisma().task.update({
+      where: { id: taskId },
+      data: { status: 'pending' },
+    });
+    return;
+  }
+
+  const rawSpec = readArtifact(feature.slug, 'spec.md') ?? '(spec not found)';
+  const rawContract = readArtifact(feature.slug, 'contract.yaml') ?? '(contract not found)';
+  const specRefs = task.specRefs as string[];
+  const specContent = scopeSpecByRefs(rawSpec, specRefs);
+  const contractContent = scopeContract(rawContract, {
+    side,
+    refs: specRefs,
+    taskDescription: '',
+    onFallback: () => {},
+  });
+
+  let repoEntry;
+  try {
+    repoEntry = getRepoEntry(task.repo);
+  } catch {
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'test',
+      severity: 'muted',
+      text: `· repo '${task.repo}' not in manifest — task-test agent cannot run`,
+    });
+    await getPrisma().task.update({ where: { id: taskId }, data: { status: 'pending' } });
+    return;
+  }
+
+  const worktreeInfo = createWorktree(
+    repoEntry.url,
+    feature.slug,
+    repoEntry.default_branch,
+    repoEntry.id,
+  );
+  const worktreePath = worktreeInfo.worktreePath;
+  git(worktreePath, 'checkout', '.');
+  git(worktreePath, 'clean', '-fd');
+  await appendEvent(getPrisma(), featureId, {
+    type: 'agent.log',
+    agent: 'orchestrator',
+    severity: 'muted',
+    text: `◦ worktree reset to clean branch HEAD (${worktreeInfo.branch})`,
+  });
+
+  const imageTag = process.env['AGENT_CONTAINER_IMAGE'] ?? 'node:20-alpine';
+  const installStrategy = process.env['INSTALL_STRATEGY'] ?? 'host';
+  const cafile = process.env['NODE_EXTRA_CA_CERTS'] ?? '';
+  const installTimeoutMs = repoEntry.install_timeout_ms ?? 300_000;
+  const execTimeoutMs = repoEntry.exec_timeout_ms ?? 120_000;
+  const maxTurns = repoEntry.max_turns;
+
+  let repoClaudeMd: string;
+  try {
+    repoClaudeMd = readClaudeMdFromDefaultBranch(worktreePath, repoEntry.default_branch);
+  } catch {
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'orchestrator',
+      repo: task.repo,
+      severity: 'muted',
+      text: `◦ CLAUDE.md not found on ${repoEntry.default_branch}:CLAUDE.md — using stub`,
+    });
+    repoClaudeMd = `# ${task.repo}\n## Commands\nnpm test\n`;
+  }
+
+  const testDir = discoverTestDir(worktreePath);
+
+  const harnessBrief = await loadHarnessBrief(feature.slug, worktreePath, featureId);
+  const isFirstTestTask = harnessBrief === null;
+
+  const testSections = measureTestPromptSections({
+    specMarkdown: specContent,
+    contractYaml: contractContent,
+    repoClaudeMd,
+    testDir,
+    ...(repoEntry.description ? { repoDescription: repoEntry.description } : {}),
+  });
+  await appendEvent(getPrisma(), featureId, {
+    type: 'agent.log',
+    agent: 'test',
+    severity: 'muted',
+    text: `◦ task-test prompt size: ${testSections.total} chars`,
+  });
+
+  try {
+    await routeInstall(repoEntry, worktreePath, imageTag, cafile, installTimeoutMs);
+  } catch (installErr) {
+    const msg = installErr instanceof Error ? installErr.message : String(installErr);
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'test',
+      severity: 'muted',
+      text: `· task-test install failed: ${msg.slice(0, 200)}`,
+    });
+    await getPrisma().task.update({ where: { id: taskId }, data: { status: 'pending' } });
+    return;
+  }
+
+  const container = startContainer(
+    worktreePath,
+    imageTag,
+    () => {
+      void appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'orchestrator',
+        severity: 'muted',
+        text: '⚠ AGENT_UNSAFE_HOST_EXEC active — container sandbox bypassed',
+      });
+    },
+    execTimeoutMs,
+  );
+
+  try {
+    void appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'orchestrator',
+      severity: 'muted',
+      text: `◦ container started — ${container.name}`,
+    });
+    void appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'orchestrator',
+      severity: 'muted',
+      text: '◦ probe skipped — test agent writes only to the test directory; a broken tree does not block test authoring',
+    });
+    // Inject the task title into the test agent context. The test agent must NOT
+    // read implementation source files — it writes tests from the spec only.
+    let taskContext =
+      `\n\n## This run: write acceptance tests for one task only\n` +
+      `Task title: ${task.title}\n` +
+      `Spec references: ${specRefs.join(', ') || '(none)'}\n` +
+      `Do NOT read implementation source files. Write tests from the spec and contract only.`;
+
+    if (isFirstTestTask) {
+      taskContext += HARNESS_BRIEF_WRITE_INSTRUCTION;
+    } else {
+      const strippedBrief = harnessBrief.replace(/<!--[\s\S]*?-->\n?/, '').trim();
+      taskContext +=
+        `\n\n## Test Harness Brief\n${strippedBrief}\n` +
+        `Do not re-read the files listed above — this brief already captures what you need.`;
+    }
+
+    await runTestAgent(
+      featureId,
+      {
+        specMarkdown: specContent + taskContext,
+        contractYaml: contractContent,
+        repoClaudeMd,
+        testDir,
+        ...(repoEntry.description ? { repoDescription: repoEntry.description } : {}),
+        ...(maxTurns !== undefined ? { maxTurns } : {}),
+      },
+      container,
+      worktreePath,
+      async (usage) => {
+        await appendEvent(
+          getPrisma(),
+          featureId,
+          usageEventPayload(usage, 'test', { jobId, taskId }),
+        );
+      },
+      async (info: TestViolationInfo) => {
+        const truncCmd = info.command.length > 80 ? info.command.slice(0, 80) + '…' : info.command;
+        await appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'test',
+          severity: 'muted',
+          text: `⚠ violation ${info.count}/${info.max}: ${info.rule} — ${truncCmd}`,
+        });
+      },
+      async (info: ToolCallInfo) => {
+        let text: string;
+        if (info.toolName === 'read_file') {
+          text = `◦ turn ${info.turn} · read_file ${info.path} (${info.range}, ${info.resultSize} chars)`;
+        } else if (info.toolName === 'bash') {
+          text = `◦ turn ${info.turn} · bash ${info.command ?? ''} (${info.resultSize} chars)`;
+        } else if (info.toolName === 'write_file') {
+          text = `◦ turn ${info.turn} · write_file ${info.path} (${info.contentLength} chars content)`;
+        } else {
+          text = `◦ turn ${info.turn} · ${info.toolName} (${info.resultSize} chars)`;
+        }
+        await appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'test',
+          severity: 'muted',
+          text,
+        });
+      },
+    );
+
+    // Harness brief: capture if agent produced it, then remove before the test commit so it
+    // stays out of the feature branch and is stored only in the artifacts repo.
+    const briefFilePath = path.join(worktreePath, '__orrery_harness_brief.md');
+    if (fs.existsSync(briefFilePath)) {
+      const briefContent = fs.readFileSync(briefFilePath, 'utf-8');
+      commitArtifact(feature.slug, 'test-harness-brief.md', briefContent, 'test-harness-brief');
+      fs.unlinkSync(briefFilePath);
+      void appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'orchestrator',
+        severity: 'muted',
+        text: '◦ harness brief committed as artifact',
+      });
+    } else if (isFirstTestTask) {
+      void appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'orchestrator',
+        severity: 'muted',
+        text: '◦ agent did not write harness brief — next task will try again',
+      });
+    }
+
+    // Commit any new test files.
+    // Red suite is expected — do NOT check exit code here.
+    const statusOut = git(worktreePath, 'status', '--porcelain').trim();
+    if (statusOut !== '') {
+      git(worktreePath, 'add', '-A');
+      const commitMessage = [
+        `test: acceptance tests for task ${taskId}`,
+        '',
+        `X-Orrery-Agent: test`,
+        `X-Orrery-Task: ${taskId}`,
+      ].join('\n');
+      gitCommit(worktreePath, commitMessage);
+    }
+
+    if (statusOut === '') {
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'test',
+        severity: 'muted',
+        text: `· task-test agent wrote no files for task ${taskId} — marking testsWritten and proceeding to dev job`,
+      });
+    }
+
+    // Find what was committed.
+    const authoredFiles = getAuthoredTestFilesForTask(worktreePath, testDir, taskId);
+
+    await appendEvent(getPrisma(), featureId, {
+      type: 'task.tests_written',
+      task_id: taskId,
+      files: authoredFiles,
+    });
+
+    await getPrisma().task.update({
+      where: { id: taskId },
+      data: { testsWritten: true, status: 'pending' },
+    });
+
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'test',
+      severity: 'ok',
+      text: `✓ acceptance tests written for task ${taskId} (${authoredFiles.length} file(s)) — suite may be red until implementation`,
+    });
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.status',
+      agent: 'test',
+      status: 'done',
+    });
+
+    // Re-dispatch so the dev job picks up this task now that testsWritten = true.
+    await dispatchUnblockedTasks(featureId, side);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(JSON.stringify({ event: 'task_test_job_error', featureId, taskId, error: msg }));
+
+    const isViolation =
+      err instanceof AllowlistViolationError || err instanceof MetacharViolationError;
+
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'test',
+      severity: 'muted',
+      text: `· task-test agent error: ${msg.slice(0, 200)}`,
+    });
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.status',
+      agent: 'test',
+      status: 'failed',
+    });
+
+    if (isViolation) {
+      // Policy violations are not retryable — skip test coverage for this task.
+      await getPrisma().task.update({
+        where: { id: taskId },
+        data: { testsWritten: true, status: 'pending' },
+      });
+      await dispatchUnblockedTasks(featureId, side);
+    } else {
+      // Transient error. After the first failed attempt, skip to the dev job
+      // rather than re-routing to test-task forever (one-round cap).
+      const refreshed = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+      if (refreshed.testTaskAttempts >= 1) {
+        await appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'test',
+          severity: 'muted',
+          text: `· task-test agent failed after ${refreshed.testTaskAttempts} attempt(s) — skipping to dev job`,
+        });
+        await getPrisma().task.update({
+          where: { id: taskId },
+          data: { testsWritten: true, status: 'pending' },
+        });
+        await dispatchUnblockedTasks(featureId, side);
+      } else {
+        await getPrisma().task.update({ where: { id: taskId }, data: { status: 'pending' } });
+      }
+    }
+  } finally {
+    void appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'orchestrator',
+      severity: 'muted',
+      text: `◦ container stopped — ${container.name}`,
+    });
+    await container.stop();
+  }
+}

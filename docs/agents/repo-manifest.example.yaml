@@ -1,0 +1,67 @@
+# docs/agents/repo-manifest.yaml — operator configuration
+#
+# Copy this file to docs/agents/repo-manifest.yaml and fill in your repos.
+# The live manifest is gitignored; this example is the committed template.
+#
+# Each entry maps a repo-id to the git remote Orrery will clone, branch
+# into, and run agents against. Only entries with active: true are dispatched.
+#
+# ── Repo readiness checklist (must pass before setting active: true) ─────────
+# [ ] package-lock.json committed (linux-musl lockfile, musl as optional entry)
+# [ ] .gitignore present and covers node_modules/, dist/
+# [ ] CLAUDE.md present with: commands (npm test, npm run lint), folder layout
+# [ ] npm test passes against the committed lockfile before first push
+# [ ] All imports in test files have matching entries in devDependencies
+# [ ] Cold-cache bootstrap: run `npm ci --os=linux --cpu=arm64 --libc=musl
+#     --prefer-offline` once on the host to seed ~/.npm with linux-musl tarballs
+# [ ] If the repo has a `prisma` dependency:
+#     - prisma.schema generator block has binaryTargets including "linux-musl-arm64"
+#     - Engine binaries available offline (PRISMA_ENGINES_MIRROR=file:// path)
+#
+# SECURITY: `bootstrap` is trusted operator config — never expose it through
+# a feature requirement, task payload, or any API surface.
+# ─────────────────────────────────────────────────────────────────────────────
+
+repos:
+  # ── Server-side repos ────────────────────────────────────────────────────
+  - id: demo-server
+    side: server
+    active: true
+    url: https://dev.azure.com/my-org/my-project/_git/demo-server
+    default_branch: main
+    probe_command: "npx vitest run --reporter=json --passWithNoTests"
+    binary_sentinel: "node_modules/@rollup/rollup-linux-arm64-musl/rollup.linux-arm64-musl.node"
+    description: >
+      Primary server-side repo. New/changed endpoints land here.
+
+  # Uncomment and fill in additional repos as needed.
+  # - id: my-api
+  #   side: server
+  #   active: false
+  #   url: https://dev.azure.com/my-org/my-project/_git/my-api
+  #   default_branch: main
+  #   probe_command: "npx vitest run --reporter=json --passWithNoTests"
+  #   description: >
+  #     Secondary API repo.
+
+  # ── Client-side repos ────────────────────────────────────────────────────
+  - id: demo-client
+    side: client
+    active: false
+    url: https://dev.azure.com/my-org/my-project/_git/demo-client
+    default_branch: main
+    probe_command: "npm test -- --passWithNoTests"
+    exec_timeout_ms: 240000
+    install_timeout_ms: 600000
+    description: >
+      Primary client-side repo (React Native / Expo).
+
+  # ── Light repos (config/spec files only — no npm install) ────────────────
+  # - id: api-contracts
+  #   side: server
+  #   active: false
+  #   path: light
+  #   url: https://dev.azure.com/my-org/my-project/_git/api-contracts
+  #   default_branch: main
+  #   description: >
+  #     OpenAPI/Swagger specs consumed by unit tests.

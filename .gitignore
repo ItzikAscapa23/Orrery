@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.env
+*.tsbuildinfo
+.DS_Store
+*.local
+coverage/
+apps/server/data/
+
+# Local env overrides — use env.template as the committed reference
+.env.example
+apps/server/.env.example
+
+# Tenant-specific files — not shipped in the public repo
+docs/agents/repo-manifest.yaml
+docs/architecture/
+docs/design/
+docs/reviews/
+.claude/skills/
+.idea/
+KICKOFF.md

@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FeatureStatus {
+  DRAFTING_SPEC
+  AWS_REVIEW
+  AWAITING_APPROVAL
+  PLANNING
+  AWAITING_PLAN_APPROVAL
+  PLANNING_TESTS
+  AWAITING_TEST_PLAN_APPROVAL
+  IMPLEMENTING
+  LIGHT_IMPLEMENTING
+  CODE_REVIEW
+  TESTING
+  DONE
+  FAILED
+}
+
+enum FeaturePath {
+  FULL
+  LIGHT
+}
+
+model Feature {
+  id          String        @id @default(uuid())
+  slug        String        @unique
+  name        String
+  requirement String
+  status      FeatureStatus @default(DRAFTING_SPEC)
+  // read-model cache; see event-sourcing note in docs/specs/02-orchestrator.md
+  proposedSpec String?      @map("proposed_spec")
+  // true when this feature's run was started via POST /simulate; used by the
+  // approve handler to enqueue simulate-resume instead of real agent work.
+  simulatedRun  Boolean   @default(false) @map("simulated_run")
+  // Per-repo branch map: { repoId: branch }. Each dev-agent run upserts its
+  // repoId → branch entry. Replaces the single current_branch column (T-4c-1).
+  currentBranches Json @default("{}") @map("current_branches")
+  // Simulator sub-path for CODE_REVIEW: 'forced-fix' (default) or 'gate'.
+  simulatorReviewPath String? @map("simulator_review_path")
+  // Operator-declared list of manifest repo ids this feature targets.
+  // Empty array = legacy row; planner falls back to all active repos.
+  repos         String[]    @default([]) @map("repos")
+  // LIGHT when every selected repo has path:light in the manifest; FULL otherwise.
+  featurePath   FeaturePath @default(FULL) @map("feature_path")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  // Set to true when review.skipped fires (non-credential error), surfaced in UI
+  reviewSkipped Boolean     @default(false) @map("review_skipped")
+
+  messages Message[]
+  events   Event[]
+  findings Finding[]
+  tasks    Task[]
+
+  @@map("features")
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  featureId   String   @map("feature_id")
+  role        String
+  contentJson String   @map("content_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Event {
+  id        BigInt   @id @default(autoincrement())
+  featureId String   @map("feature_id")
+  seq       Int
+  type      String
+  agent     String?
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([featureId, seq])
+  @@map("events")
+}
+
+model Finding {
+  // Model-assigned label ("f1", "f2", ...). Unique only within one review
+  // cycle of one feature — identity is the composite key below.
+  id            String
+  featureId     String   @map("feature_id")
+  specRev       Int      @map("spec_rev")
+  severity      String
+  section       String
+  issue         String
+  suggestedText String?  @map("suggested_text")
+  resolution    String? // null | 'accepted' | 'dismissed'
+  reason        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@id([featureId, specRev, id])
+  @@map("findings")
+}
+
+model ModelRate {
+  provider            String
+  model               String
+  effectiveFrom       DateTime @map("effective_from")
+  inputPerMToken      Float    @map("input_per_m_token")
+  outputPerMToken     Float    @map("output_per_m_token")
+  cacheWritePerMToken Float?   @map("cache_write_per_m_token")
+  cacheReadPerMToken  Float?   @map("cache_read_per_m_token")
+
+  @@id([provider, model, effectiveFrom])
+  @@map("model_rates")
+}
+
+model Task {
+  id           String   @id @default(uuid())
+  featureId    String   @map("feature_id")
+  repo         String
+  side         String   // 'server' | 'client'
+  title        String
+  description  String
+  specRefs     Json     @default("[]") @map("spec_refs")
+  dependsOn    Json     @default("[]") @map("depends_on")
+  // pending | running | completed | parked | amendment_paused
+  status       String   @default("pending")
+  attemptCount      Int      @default(0) @map("attempt_count")
+  bullJobId         String?  @map("bull_job_id")
+  commitSha         String?  @map("commit_sha")
+  coveredByTestPlan Boolean  @default(false) @map("covered_by_test_plan")
+  testsWritten      Boolean  @default(false) @map("tests_written")
+  testTaskAttempts  Int      @default(0)     @map("test_task_attempts")
+  orphanCount       Int      @default(0)     @map("orphan_count")
+  parkReason        String?                  @map("park_reason")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}

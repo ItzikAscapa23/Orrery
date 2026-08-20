@@ -1,0 +1,48 @@
+import Fastify from 'fastify';
+import { healthRoutes } from './routes/health.js';
+import { featureRoutes } from './routes/features.js';
+import { featureMessagesRoutes } from './routes/featureMessages.js';
+import { featureApproveRoutes } from './routes/featureApprove.js';
+import { featureEventsRoutes } from './routes/featureEvents.js';
+import { featureSimulateRoutes } from './routes/featureSimulate.js';
+import { featureFindingsRoutes } from './routes/featureFindings.js';
+import { featurePlanGateRoutes } from './routes/featurePlanGate.js';
+import { featureRedispatchRoutes } from './routes/featureRedispatch.js';
+import { featureAmendmentRoutes } from './routes/featureAmendment.js';
+import { featureRetryPrRoutes } from './routes/featureRetryPr.js';
+import { featureRetryBounceRoutes } from './routes/featureRetryBounce.js';
+import { featureArtifactsRoutes } from './routes/featureArtifacts.js';
+import { featureReviewGateRoutes } from './routes/featureReviewGate.js';
+import { featureTestGateRoutes } from './routes/featureTestGate.js';
+import { featureCostRoutes } from './routes/featureCost.js';
+import { featureAttachmentsRoutes } from './routes/featureAttachments.js';
+import { featureTestPlanGateRoutes } from './routes/featureTestPlanGate.js';
+import { featureSpendGateRoutes } from './routes/featureSpendGate.js';
+import { featureTasksRoutes } from './routes/featureTasks.js';
+import { reposRoutes } from './routes/repos.js';
+
+export async function createApp() {
+  const app = Fastify({ logger: true });
+  await app.register(healthRoutes);
+  await app.register(featureRoutes);
+  await app.register(featureMessagesRoutes);
+  await app.register(featureApproveRoutes);
+  await app.register(featureEventsRoutes);
+  await app.register(featureSimulateRoutes);
+  await app.register(featureFindingsRoutes);
+  await app.register(featurePlanGateRoutes);
+  await app.register(featureRedispatchRoutes);
+  await app.register(featureAmendmentRoutes);
+  await app.register(featureRetryPrRoutes);
+  await app.register(featureRetryBounceRoutes);
+  await app.register(featureArtifactsRoutes);
+  await app.register(featureReviewGateRoutes);
+  await app.register(featureTestGateRoutes);
+  await app.register(featureCostRoutes);
+  await app.register(featureAttachmentsRoutes);
+  await app.register(featureTestPlanGateRoutes);
+  await app.register(featureSpendGateRoutes);
+  await app.register(featureTasksRoutes);
+  await app.register(reposRoutes);
+  return app;
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "test_task_attempts" INTEGER NOT NULL DEFAULT 0;

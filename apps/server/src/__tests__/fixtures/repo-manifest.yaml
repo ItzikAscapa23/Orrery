@@ -1,0 +1,26 @@
+repos:
+  - id: demo-server
+    side: server
+    active: true
+    url: https://dev.azure.com/my-org/my-project/_git/demo-server
+    default_branch: main
+    description: Demo server (fixture)
+  - id: demo-server-2
+    side: server
+    active: true
+    url: https://dev.azure.com/my-org/my-project/_git/demo-server-2
+    default_branch: main
+    description: Demo server 2 (fixture)
+  - id: demo-client
+    side: client
+    active: true
+    url: https://dev.azure.com/my-org/my-project/_git/demo-client
+    default_branch: main
+    description: Demo client (fixture)
+  - id: swaggers
+    side: server
+    active: false
+    path: light
+    url: https://dev.azure.com/my-org/my-project/_git/swaggers
+    default_branch: main
+    description: Swagger specs (fixture)

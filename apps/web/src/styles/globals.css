@@ -1,0 +1,263 @@
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
+:root {
+  /* Accent / brand */
+  --accent: #ff5b45;
+  --accent-22: rgba(255, 91, 69, 0.13);
+  --accent-55: rgba(255, 91, 69, 0.33);
+  --accent-66: rgba(255, 91, 69, 0.4);
+
+  /* Tier colors */
+  --teal: #2ee6c9;
+  --violet: #8b7bff;
+  --amber: #ffb24d;
+  --green: #37e0a0;
+
+  /* Status colors */
+  --status-working: var(--amber);
+  --status-done: var(--green);
+  --status-queued: #6b7290;
+  --status-active: var(--violet);
+  --status-failed: #ff5b45;
+
+  /* Backgrounds */
+  --bg-space: #05060d;
+  --bg-panel: rgba(8, 9, 16, 0.6);
+  --bg-panel-solid: rgba(8, 9, 16, 0.72);
+  --bg-topbar: rgba(8, 9, 16, 0.72);
+
+  /* Text */
+  --text-primary: #f2f0ff;
+  --text-secondary: #8a91ad;
+  --text-muted: #6b7290;
+  --text-faint: #5f6684;
+  --text-watermark: #454b66;
+
+  /* Hairlines */
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-faint: rgba(255, 255, 255, 0.06);
+  --border-medium: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Sun */
+  --sun-gold: #ffc98a;
+
+  /* Fonts */
+  --font-ui: 'Space Grotesk', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  /* Layout */
+  --panel-left: 336px;
+  --panel-right: 480px;
+  --topbar-height: 54px;
+
+  /* Radii */
+  --r-chip: 5px;
+  --r-btn: 8px;
+  --r-input: 9px;
+  --r-card: 13px;
+  --r-plate: 7px;
+  --r-pill: 20px;
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  background: var(--bg-space);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+/* ── Custom scrollbar ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 123, 255, 0.28);
+  border-radius: 4px;
+}
+
+/* ── Root app shell ────────────────────────────────────────────────────────── */
+.app-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-space);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+/* Background layers */
+.app-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.22) 1px, transparent 1.4px),
+    radial-gradient(rgba(139, 123, 255, 0.18) 1px, transparent 1.4px);
+  background-size:
+    110px 110px,
+    190px 190px;
+  background-position:
+    0 0,
+    55px 80px;
+}
+
+.app-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 55% at 55% 45%, rgba(255, 91, 69, 0.08) 0%, transparent 60%);
+}
+
+/* ── Layout regions ────────────────────────────────────────────────────────── */
+.app-topbar {
+  position: relative;
+  z-index: 10;
+  flex: 0 0 var(--topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-topbar);
+  backdrop-filter: blur(10px);
+}
+
+.app-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.app-panel-left {
+  flex: 0 0 var(--panel-left);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  backdrop-filter: blur(8px);
+  min-height: 0;
+}
+
+.app-center-stack {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.app-center {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-panel-right {
+  flex: 0 0 var(--panel-right);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  backdrop-filter: blur(8px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Shared panel section label ────────────────────────────────────────────── */
+.section-label {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* ── Panel header ──────────────────────────────────────────────────────────── */
+.panel-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-faint);
+  flex-shrink: 0;
+}
+
+/* ── Mono label (small uppercase tag) ─────────────────────────────────────── */
+.mono-tag {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+/* ── Status dot ────────────────────────────────────────────────────────────── */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Placeholder panels (Task 1 only — replaced in later tasks) ────────────── */
+.placeholder-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+}

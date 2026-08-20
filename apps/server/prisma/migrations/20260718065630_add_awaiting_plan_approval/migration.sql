@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "FeatureStatus" ADD VALUE 'AWAITING_PLAN_APPROVAL';
