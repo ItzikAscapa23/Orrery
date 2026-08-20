@@ -83,7 +83,12 @@ export function buildSystemPrompt(selectedRepos: string[] = [], manifestPath = M
     '- contract_yaml must be a valid OpenAPI 3.0 YAML document as a JSON string.\n' +
     '- Every task must reference a repo id from the selected repos.\n' +
     '- depends_on lists task titles this task must wait for (empty array if none).\n' +
-    '- Emit each distinct task once. Do not invent tasks not implied by the spec.'
+    '- Emit each distinct task once. Do not invent tasks not implied by the spec.\n' +
+    '- Granularity: the test planner will later decide which tasks need acceptance tests; ' +
+    'each covered task triggers one full test-agent run. Split tasks only when they have ' +
+    'distinct acceptance criteria testable in isolation. Merge tasks that share the same ' +
+    'observable behaviour — one endpoint, one mutation, one screen — into a single task. ' +
+    'Do not split a single behaviour across multiple tasks just to create smaller units of work.'
   );
 }
 

@@ -183,6 +183,20 @@ describe('buildSystemPrompt — selected repo filtering', () => {
   });
 });
 
+// ── Granularity rule ─────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — granularity cost hint', () => {
+  it('prompt states the per-covered-task test-agent cost', () => {
+    const prompt = buildSystemPrompt([], FIXTURE_PATH);
+    expect(prompt).toContain('each covered task triggers one full test-agent run');
+  });
+
+  it('prompt instructs merging tasks that share the same observable behaviour', () => {
+    const prompt = buildSystemPrompt([], FIXTURE_PATH);
+    expect(prompt).toContain('Merge tasks that share the same');
+  });
+});
+
 // ── Revision mode ─────────────────────────────────────────────────────────────
 
 describe('runPlannerAgent — revision mode', () => {
