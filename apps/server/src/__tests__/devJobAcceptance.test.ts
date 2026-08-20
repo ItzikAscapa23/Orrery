@@ -615,11 +615,12 @@ describe('devJob — max_turns threading', () => {
     expect(ctx.maxTurns).toBe(5);
   });
 
-  it('omits maxTurns from context when manifest has no max_turns', async () => {
+  it('uses the default 40-turn cap when manifest has no max_turns', async () => {
     const taskId = await makeCoveredTask(0);
     await runDevJob(featureId, taskId, 'job-maxturns-2');
     expect(mockRunDevAgent).toHaveBeenCalled();
     const ctx = mockRunDevAgent.mock.calls[0]![2] as { maxTurns?: number };
-    expect(ctx.maxTurns).toBeUndefined();
+    // effectiveCap = Math.max(1, Math.min(40, 150)) = 40
+    expect(ctx.maxTurns).toBe(40);
   });
 });

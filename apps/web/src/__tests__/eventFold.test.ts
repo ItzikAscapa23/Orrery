@@ -354,16 +354,14 @@ describe('foldEvents — pr.created', () => {
         type: 'pr.created',
         repo: 'demo-server',
         pr_id: 42,
-        pr_url:
-          'https://dev.azure.com/my-org/my-project/_git/demo-server/pullrequest/42',
+        pr_url: 'https://dev.azure.com/my-org/my-project/_git/demo-server/pullrequest/42',
         title: 'feat: my-feature',
       }),
       makeRow(3, {
         type: 'pr.created',
         repo: 'demo-client',
         pr_id: 43,
-        pr_url:
-          'https://dev.azure.com/my-org/my-project/_git/demo-client/pullrequest/43',
+        pr_url: 'https://dev.azure.com/my-org/my-project/_git/demo-client/pullrequest/43',
         title: 'feat: my-feature',
       }),
     ]);
@@ -871,7 +869,12 @@ describe('foldEvents — committedKinds', () => {
 });
 
 describe('foldEvents — task-based agent status derivation', () => {
-  const baseTask = { side: 'server', status: 'pending', coveredByTestPlan: false, testsWritten: false };
+  const baseTask = {
+    side: 'server',
+    status: 'pending',
+    coveredByTestPlan: false,
+    testsWritten: false,
+  };
 
   it('returns no agent statuses when no tasks provided', () => {
     const state = foldEvents([]);
@@ -904,16 +907,15 @@ describe('foldEvents — task-based agent status derivation', () => {
   });
 
   it('derives test=working when a covered task is running', () => {
-    const state = foldEvents([], [
-      { ...baseTask, coveredByTestPlan: true, status: 'running' },
-    ]);
+    const state = foldEvents([], [{ ...baseTask, coveredByTestPlan: true, status: 'running' }]);
     expect(state.agentStatuses['test']).toBe('working');
   });
 
   it('derives test=done when all covered tasks have testsWritten', () => {
-    const state = foldEvents([], [
-      { ...baseTask, coveredByTestPlan: true, testsWritten: true, status: 'pending' },
-    ]);
+    const state = foldEvents(
+      [],
+      [{ ...baseTask, coveredByTestPlan: true, testsWritten: true, status: 'pending' }],
+    );
     expect(state.agentStatuses['test']).toBe('done');
   });
 

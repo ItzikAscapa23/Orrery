@@ -4,9 +4,9 @@ process.env['ANTHROPIC_API_KEY'] = 'test-key';
 process.env['ARTIFACTS_REPO_PATH'] = '/tmp/test-artifacts';
 
 const { mockQueryRaw, mockTransaction } = vi.hoisted(() => {
-  const mockTransaction = vi.fn().mockImplementation(async (fn: (tx: unknown) => unknown) =>
-    fn({ task: { update: vi.fn() } }),
-  );
+  const mockTransaction = vi
+    .fn()
+    .mockImplementation((fn: (tx: unknown) => unknown) => fn({ task: { update: vi.fn() } }));
   const mockQueryRaw = vi.fn();
   return { mockQueryRaw, mockTransaction };
 });

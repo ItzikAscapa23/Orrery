@@ -61,8 +61,9 @@ export function App() {
   useEffect(() => {
     if (!selectedId) return;
     fetch(`/api/features/${selectedId}/tasks`)
-      .then((r) => (r.ok ? (r.json() as Promise<TaskRow[]>) : Promise.reject()))
-      .then(setTasks)
+      .then(async (r) => {
+        if (r.ok) setTasks((await r.json()) as TaskRow[]);
+      })
       .catch(() => undefined);
   }, [selectedId, taskEventCount]);
   const agentLogEventCount = useMemo(
