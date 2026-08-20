@@ -26,7 +26,7 @@ export interface TaskSummary {
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(): string {
+export function buildSystemPrompt(): string {
   return (
     'You are a QA lead deciding test coverage for a software feature.\n\n' +
     'You will receive: the approved spec, the API contract, and a task list ' +
@@ -39,6 +39,11 @@ function buildSystemPrompt(): string {
     '- Mark a task SKIPPED if it has no public surface: database migrations, shared ' +
     'utility functions, type definitions, logging helpers, configuration files, or ' +
     'internal refactors. State the reason explicitly.\n' +
+    '- A task whose primary deliverable is test code must always be marked SKIPPED ' +
+    '(examples: "Write acceptance tests for …", "Add tests for …", "Unit tests for …"). ' +
+    'The test agent authors test files for every covered task; covering a test-authoring ' +
+    'task would be a loop. Use skip reason: "Deliverable is test code — not subject to ' +
+    'acceptance testing."\n' +
     '- When several tasks in a dependency chain contribute to ONE observable behaviour — ' +
     'for example, helper computations or sub-routines that are only externally visible ' +
     'through a single endpoint, resolver, or mutation — cover the task at which that ' +

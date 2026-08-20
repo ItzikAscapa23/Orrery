@@ -11,7 +11,7 @@ vi.mock('../lib/anthropic.js', () => ({
   createMessageStream: mockCreateMessageStream,
 }));
 
-import { runTestPlannerAgent } from '../agents/testPlannerAgent.js';
+import { runTestPlannerAgent, buildSystemPrompt } from '../agents/testPlannerAgent.js';
 import type { TaskSummary } from '../agents/testPlannerAgent.js';
 
 function makeMockStream(responseText: string) {
@@ -188,5 +188,20 @@ describe('testPlannerAgent — prompt context', () => {
     expect(result.coverage).toHaveLength(1);
     expect(result.coverage[0]!.covered).toBe(true);
     expect(result.coverage[0]!.taskId).toBe('task-g');
+  });
+});
+
+describe('testPlannerAgent — test-authoring task exclusion', () => {
+  it('system prompt explicitly excludes tasks whose deliverable is test code', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('primary deliverable is test code');
+    expect(prompt).toContain('loop');
+    expect(prompt).toContain('Deliverable is test code');
+  });
+
+  it('system prompt gives examples of test-authoring task titles', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('Write acceptance tests for');
+    expect(prompt).toContain('Add tests for');
   });
 });
