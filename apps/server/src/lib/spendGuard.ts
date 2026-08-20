@@ -1,16 +1,19 @@
 import { getPrisma } from './prisma.js';
 import { appendEvent } from './events.js';
 
+export type SpendGuardResult = { parked: true } | { parked: false; remainingBudget: number };
+
 /**
- * Returns true and parks the task when cumulative turns across all jobs exceed
- * the threshold. Callers must return early — no further Bedrock/container work
- * should be started after this fires.
+ * Checks whether cumulative turns exceed the threshold. When admitted, returns
+ * the remaining budget so callers can cap the per-job maxTurns to
+ * min(repoMaxTurns, remainingBudget) and structurally prevent overrun.
+ * When the threshold is reached, parks the task and returns { parked: true }.
  */
 export async function checkSpendGuard(
   featureId: string,
   taskId: string,
   taskTitle: string,
-): Promise<boolean> {
+): Promise<SpendGuardResult> {
   const threshold = parseInt(process.env['SPEND_GUARD_MAX_TURNS'] ?? '150', 10);
 
   const result = await getPrisma().$queryRaw<[{ turns: bigint; job_count: bigint }]>`
@@ -26,7 +29,7 @@ export async function checkSpendGuard(
   const turns    = Number(result[0]?.turns    ?? 0);
   const jobCount = Number(result[0]?.job_count ?? 0);
 
-  if (turns < threshold) return false;
+  if (turns < threshold) return { parked: false, remainingBudget: threshold - turns };
 
   const summary =
     `Task "${taskTitle}" accumulated ${turns} turns across ${jobCount} jobs ` +
@@ -53,5 +56,5 @@ export async function checkSpendGuard(
   console.error(
     JSON.stringify({ event: 'spend_guard_triggered', featureId, taskId, turns, threshold }),
   );
-  return true;
+  return { parked: true };
 }

@@ -93,7 +93,9 @@ export async function runTaskTestJob(
     return;
   }
 
-  if (await checkSpendGuard(featureId, taskId, task.title)) return;
+  const sg = await checkSpendGuard(featureId, taskId, task.title);
+  if (sg.parked) return;
+  const spendGuardRemainingBudget = sg.remainingBudget;
 
   await getPrisma().task.update({
     where: { id: taskId },
@@ -177,7 +179,11 @@ export async function runTaskTestJob(
   const cafile = process.env['NODE_EXTRA_CA_CERTS'] ?? '';
   const installTimeoutMs = repoEntry.install_timeout_ms ?? 300_000;
   const execTimeoutMs = repoEntry.exec_timeout_ms ?? 120_000;
-  const maxTurns = repoEntry.max_turns;
+  const TEST_AGENT_DEFAULT_MAX_TURNS = 30; // mirrors testAgent.ts MAX_TURNS
+  const effectiveCap = Math.max(
+    1,
+    Math.min(repoEntry.max_turns ?? TEST_AGENT_DEFAULT_MAX_TURNS, spendGuardRemainingBudget),
+  );
 
   let repoClaudeMd: string;
   try {
@@ -279,7 +285,7 @@ export async function runTaskTestJob(
         repoClaudeMd,
         testDir,
         ...(repoEntry.description ? { repoDescription: repoEntry.description } : {}),
-        ...(maxTurns !== undefined ? { maxTurns } : {}),
+        maxTurns: effectiveCap,
         ...(existingTestFiles.length > 0 ? { existingTestFiles } : {}),
       },
       container,

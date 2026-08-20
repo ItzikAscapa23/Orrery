@@ -372,7 +372,9 @@ export async function runDevJob(
     return 'parked';
   }
 
-  if (await checkSpendGuard(featureId, taskId, task.title)) return 'parked';
+  const sg = await checkSpendGuard(featureId, taskId, task.title);
+  if (sg.parked) return 'parked';
+  const spendGuardRemainingBudget = sg.remainingBudget;
 
   const attempt = task.attemptCount + 1;
 
@@ -481,7 +483,11 @@ export async function runDevJob(
   const cafile = process.env['NODE_EXTRA_CA_CERTS'] ?? '';
   const installTimeoutMs = repoEntry.install_timeout_ms ?? 300_000;
   const execTimeoutMs = repoEntry.exec_timeout_ms ?? 120_000;
-  const maxTurns = repoEntry.max_turns;
+  const DEV_AGENT_DEFAULT_MAX_TURNS = 40; // mirrors devAgent.ts MAX_TURNS
+  const effectiveCap = Math.max(
+    1,
+    Math.min(repoEntry.max_turns ?? DEV_AGENT_DEFAULT_MAX_TURNS, spendGuardRemainingBudget),
+  );
 
   const installStart = Date.now();
   const installDesc = repoEntry.bootstrap
@@ -692,7 +698,7 @@ export async function runDevJob(
         orientationBlock,
         ...(repoEntry.description ? { repoDescription: repoEntry.description } : {}),
         ...(rejectedAmendments.length > 0 ? { rejectedAmendments } : {}),
-        ...(maxTurns !== undefined ? { maxTurns } : {}),
+        maxTurns: effectiveCap,
         ...(repoEntry.probe_command ? { probeCommand: repoEntry.probe_command } : {}),
       },
       container,
