@@ -11,11 +11,17 @@ apps/server/data/
 .env.example
 apps/server/.env.example
 
+apps/web/.env.local
+
 # Tenant-specific files — not shipped in the public repo
 docs/agents/repo-manifest.yaml
 docs/architecture/
 docs/design/
 docs/reviews/
-.claude/skills/
+.claude/skills/*
+!.claude/skills/phase/
+!.claude/skills/handover/
 .idea/
 KICKOFF.md
+
+.claude/settings.local.json
