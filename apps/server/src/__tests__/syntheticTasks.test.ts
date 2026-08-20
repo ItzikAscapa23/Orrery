@@ -128,4 +128,15 @@ describe('createSyntheticFixTasks', () => {
     const tasks = await getPrisma().task.findMany({ where: { featureId } });
     expect(tasks).toHaveLength(0);
   });
+
+  it('returns empty array immediately when findings is empty', async () => {
+    const featureId = 'aaa00000-0000-0000-0000-000000000006';
+    await seedFeature(featureId);
+
+    const result = await createSyntheticFixTasks(featureId, [], ['any-repo']);
+    expect(result).toHaveLength(0);
+
+    const tasks = await getPrisma().task.findMany({ where: { featureId } });
+    expect(tasks).toHaveLength(0);
+  });
 });

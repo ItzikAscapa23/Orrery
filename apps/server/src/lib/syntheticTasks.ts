@@ -19,6 +19,7 @@ export async function createSyntheticFixTasks(
   fallbackRepos: string[],
 ): Promise<SyntheticTaskResult[]> {
   const blockers = findings.filter((f) => f.severity === 'blocker');
+  if (blockers.length === 0) return [];
 
   // Collect repos from blockers; fall back to all currentBranches repos when
   // the finding has no repo field (e.g. older AWS review agent output).
