@@ -9,6 +9,7 @@ import {
   checkTestBashAllowed,
   TestAllowlistViolationError,
   TestMetacharViolationError,
+  buildSystemPrompt,
 } from '../agents/testAgent.js';
 
 process.env['ANTHROPIC_API_KEY'] = 'test-key';
@@ -1327,5 +1328,49 @@ describe('testAgent — turn cap respects maxTurns', () => {
         tmpRootCap,
       ),
     ).rejects.toThrow('Test Agent hit 2-turn safety cap without completing');
+  });
+});
+
+const BASE_CTX = {
+  specMarkdown: '## Spec',
+  contractYaml: 'openapi: "3.0"',
+  repoClaudeMd: '# CLAUDE',
+  testDir: '__tests__',
+};
+
+describe('buildSystemPrompt — existingTestFiles injection', () => {
+  it('omits existing-coverage section when existingTestFiles is absent', () => {
+    const prompt = buildSystemPrompt(BASE_CTX);
+    expect(prompt).not.toContain('## Existing test coverage');
+  });
+
+  it('omits existing-coverage section when existingTestFiles is empty', () => {
+    const prompt = buildSystemPrompt({ ...BASE_CTX, existingTestFiles: [] });
+    expect(prompt).not.toContain('## Existing test coverage');
+  });
+
+  it('injects the section when existingTestFiles is populated', () => {
+    const prompt = buildSystemPrompt({
+      ...BASE_CTX,
+      existingTestFiles: [
+        { path: '__tests__/foo.test.ts', describes: ['GET /health', 'POST /users'] },
+      ],
+    });
+    expect(prompt).toContain('## Existing test coverage');
+    expect(prompt).toContain('__tests__/foo.test.ts');
+    expect(prompt).toContain('"GET /health"');
+    expect(prompt).toContain('"POST /users"');
+  });
+
+  it('lists multiple files', () => {
+    const prompt = buildSystemPrompt({
+      ...BASE_CTX,
+      existingTestFiles: [
+        { path: '__tests__/a.test.ts', describes: ['suite A'] },
+        { path: '__tests__/b.test.ts', describes: ['suite B'] },
+      ],
+    });
+    expect(prompt).toContain('__tests__/a.test.ts');
+    expect(prompt).toContain('__tests__/b.test.ts');
   });
 });

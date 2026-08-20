@@ -114,6 +114,31 @@ export function getAuthoredTestFiles(worktreePath: string, testDir: string): str
   }
 }
 
+export function extractDescribeBlocks(worktreePath: string, relPath: string): string[] {
+  try {
+    const content = fs.readFileSync(path.join(worktreePath, relPath), 'utf-8');
+    const titles: string[] = [];
+    const re = /^describe\s*\(\s*['"`]([^'"`]+)['"`]/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+      // m[1] is always defined — the capture group is required in the regex
+      titles.push(m[1]!);
+    }
+    return titles;
+  } catch {
+    return [];
+  }
+}
+
+export function getExistingTestFilesWithDescribes(
+  worktreePath: string,
+  testDir: string,
+): { path: string; describes: string[] }[] {
+  return getAuthoredTestFiles(worktreePath, testDir)
+    .map((p) => ({ path: p, describes: extractDescribeBlocks(worktreePath, p) }))
+    .filter((f) => f.describes.length > 0);
+}
+
 function findTestFiles(dir: string, maxDepth: number): string[] {
   if (maxDepth === 0) return [];
   let entries: fs.Dirent[];
@@ -611,6 +636,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
       text: `▸ test agent running — writing acceptance tests to ${testDir}/`,
     });
 
+    const existingTestFiles = getExistingTestFilesWithDescribes(worktreePath, testDir);
     await runTestAgent(
       featureId,
       {
@@ -622,6 +648,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
         ...(repoEntry.description ? { repoDescription: repoEntry.description } : {}),
         ...(maxTurns !== undefined ? { maxTurns } : {}),
         ...(repoEntry.probe_command ? { probeCommand: repoEntry.probe_command } : {}),
+        ...(existingTestFiles.length > 0 ? { existingTestFiles } : {}),
       },
       container,
       worktreePath,

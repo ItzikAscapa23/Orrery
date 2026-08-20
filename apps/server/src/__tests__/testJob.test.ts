@@ -141,7 +141,13 @@ import { getPrisma, disconnectPrisma } from '../lib/prisma.js';
 import { createApp } from '../app.js';
 import { createFeature } from '../lib/features.js';
 import { appendEvent } from '../lib/events.js';
-import { runTestJob, parseTestOutput, TEST_REPORT_FILE } from '../jobs/testJob.js';
+import {
+  runTestJob,
+  parseTestOutput,
+  TEST_REPORT_FILE,
+  extractDescribeBlocks,
+  getExistingTestFilesWithDescribes,
+} from '../jobs/testJob.js';
 import { getRepoEntry } from '../jobs/devJob.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -1193,5 +1199,63 @@ describe('testJob — bootstrap install routing', () => {
         (e.payload as { text: string }).text.includes('npm install failed'),
     );
     expect(installFailLog).toBeDefined();
+  });
+});
+
+describe('extractDescribeBlocks', () => {
+  it('returns empty array when readFileSync throws', () => {
+    mockReadFileSync.mockImplementationOnce(() => {
+      throw new Error('ENOENT');
+    });
+    expect(extractDescribeBlocks('/wt', '__tests__/missing.test.ts')).toEqual([]);
+  });
+
+  it('returns empty array when file has no describe calls', () => {
+    mockReadFileSync.mockReturnValueOnce('it("does something", () => {});\n');
+    expect(extractDescribeBlocks('/wt', '__tests__/notests.test.ts')).toEqual([]);
+  });
+
+  it('extracts top-level describe titles', () => {
+    mockReadFileSync.mockReturnValueOnce(
+      'describe("GET /health", () => {\n  it("works", () => {});\n});\n' +
+        'describe("POST /users", () => {});\n',
+    );
+    expect(extractDescribeBlocks('/wt', '__tests__/api.test.ts')).toEqual([
+      'GET /health',
+      'POST /users',
+    ]);
+  });
+
+  it('handles backtick and double-quote delimiters', () => {
+    mockReadFileSync.mockReturnValueOnce('describe(`suite A`, () => {});\n');
+    expect(extractDescribeBlocks('/wt', '__tests__/t.test.ts')).toEqual(['suite A']);
+  });
+});
+
+describe('getExistingTestFilesWithDescribes', () => {
+  beforeEach(() => {
+    mockReadFileSync.mockReturnValue('');
+  });
+
+  it('returns empty array when git log returns no files', async () => {
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValueOnce('');
+    expect(getExistingTestFilesWithDescribes('/wt', '__tests__')).toEqual([]);
+  });
+
+  it('excludes files with no describe blocks', async () => {
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValueOnce('__tests__/empty.test.ts\n');
+    mockReadFileSync.mockReturnValueOnce('it("x", () => {});\n');
+    expect(getExistingTestFilesWithDescribes('/wt', '__tests__')).toEqual([]);
+  });
+
+  it('returns files with their describe titles', async () => {
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValueOnce('__tests__/suite.test.ts\n');
+    mockReadFileSync.mockReturnValueOnce('describe("my suite", () => {});\n');
+    expect(getExistingTestFilesWithDescribes('/wt', '__tests__')).toEqual([
+      { path: '__tests__/suite.test.ts', describes: ['my suite'] },
+    ]);
   });
 });

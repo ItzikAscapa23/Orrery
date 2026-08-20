@@ -15,7 +15,11 @@ import { dispatchUnblockedTasks } from '../lib/dispatch.js';
 import { checkBedrockConnectivity } from '../lib/connectivity.js';
 import { readClaudeMdFromDefaultBranch, getRepoEntry, routeInstall } from './devJob.js';
 import { createWorktree } from '../lib/worktree.js';
-import { discoverTestDir, getAuthoredTestFilesForTask } from './testJob.js';
+import {
+  discoverTestDir,
+  getAuthoredTestFilesForTask,
+  getExistingTestFilesWithDescribes,
+} from './testJob.js';
 import {
   runTestAgent,
   TestViolationInfo,
@@ -266,6 +270,7 @@ export async function runTaskTestJob(
         `Do not re-read the files listed above — this brief already captures what you need.`;
     }
 
+    const existingTestFiles = getExistingTestFilesWithDescribes(worktreePath, testDir);
     await runTestAgent(
       featureId,
       {
@@ -275,6 +280,7 @@ export async function runTaskTestJob(
         testDir,
         ...(repoEntry.description ? { repoDescription: repoEntry.description } : {}),
         ...(maxTurns !== undefined ? { maxTurns } : {}),
+        ...(existingTestFiles.length > 0 ? { existingTestFiles } : {}),
       },
       container,
       worktreePath,

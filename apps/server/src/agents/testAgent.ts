@@ -393,13 +393,16 @@ export interface TestAgentContext {
   // Optional: manifest probe_command for this repo. When set, its extra flags
   // (e.g. --maxWorkers=2) are grafted onto every agent-issued test command.
   probeCommand?: string;
+  // Optional: test files already authored by the test agent for this feature.
+  // When populated, the system prompt instructs the agent to extend rather than duplicate.
+  existingTestFiles?: { path: string; describes: string[] }[];
 }
 
 export type TestAgentOutcome = { kind: 'completed' };
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(ctx: TestAgentContext): string {
+export function buildSystemPrompt(ctx: TestAgentContext): string {
   const repoLine = ctx.repoDescription
     ? `You are a test engineer writing acceptance tests for: ${ctx.repoDescription}`
     : 'You are a test engineer writing acceptance tests for a TypeScript repository.';
@@ -424,6 +427,17 @@ function buildSystemPrompt(ctx: TestAgentContext): string {
     '## Relevant spec sections',
     ctx.specMarkdown,
     '',
+    ...(ctx.existingTestFiles && ctx.existingTestFiles.length > 0
+      ? [
+          '## Existing test coverage',
+          'The following test files were already authored by the test agent for this feature.',
+          'Extend them (using edit_file) rather than creating new files that duplicate their describe blocks:',
+          ...ctx.existingTestFiles.map(
+            (f) => `- ${f.path}: [${f.describes.map((d) => `"${d}"`).join(', ')}]`,
+          ),
+          '',
+        ]
+      : []),
     '## Rules',
     `- Write test files ONLY to the test directory: ${ctx.testDir}/`,
     '- Do not import from src/, lib/, app/, or any implementation directory.',

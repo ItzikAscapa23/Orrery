@@ -107,6 +107,7 @@ vi.mock('../jobs/testJob.js', () => ({
   detectJsonCommand: vi.fn().mockReturnValue('npx vitest run --reporter=json'),
   findingsFromTests: vi.fn().mockReturnValue([]),
   getAuthoredTestFiles: vi.fn().mockReturnValue([]),
+  getExistingTestFilesWithDescribes: vi.fn().mockReturnValue([]),
 }));
 
 const { mockReadClaudeMd } = vi.hoisted(() => ({
