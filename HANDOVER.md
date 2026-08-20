@@ -29,7 +29,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 **Key directories:**
 - `apps/server/src/lib/` — orchestrator, events, container, anthropic, spendGuard
 - `apps/server/src/jobs/` — devJob, testJob, taskTestJob, createAdoPrJob, agentWorker
-- `apps/server/src/agents/` — devAgent, testAgent and their prompt construction
+- `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
 - `packages/shared/` — event payload schemas
 - `docs/specs/` — numbered phase specs (phases 0–5)
@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 7 — Agent spend and test redundancy
+- **Current phase:** 8 — Planner efficiency
 - **State:** `complete`
 - **Last updated:** 2026-08-21
 
@@ -56,12 +56,10 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 7 closed. Phase 8 has not started.*
+*Phase 8 closed. Phase 9 has not started.*
 
-- [x] `58-test-file-reuse` — test agent injected with existing authored test files + describe titles
-- [x] `60-spend-guard-budget` — spend guard now returns remainingBudget; agents capped at min(repoMaxTurns, remainingBudget)
-- [x] `61-empty-fix-task-guard` — explicit early-return guard in createSyntheticFixTasks for zero blockers
-- [x] `62-agent-status-from-tasks` — foldEvents derives dev/test agent status from task rows; fixes O-14
+- [x] Planner granularity — added per-covered-task cost hint to `plannerAgent.ts` prompt
+- [x] Test planner coverage exclusion — added explicit SKIPPED rule for test-authoring tasks in `testPlannerAgent.ts`
 
 ---
 
@@ -69,9 +67,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — 1059 passed (1059) across 84 files, 2026-08-21 |
+| `npm test` (repo root) | passed — 1063 passed (1063) across 84 files, 2026-08-21 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-21 |
-| `npm run lint` | 362 problems (356 errors, 6 warnings) — below 364 baseline, 2026-08-21 |
+| `npm run lint` | 362 problems (356 errors, 6 warnings) — unchanged from phase 7 baseline, 2026-08-21 |
 
 ---
 
@@ -83,47 +81,37 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **Phase `Verification:` = the standing four** — repo-root suite count,
   typecheck, lint, commit SHA. Per-brief fail-first evidence stays in the brief.
 - **`PRD.md` points into `docs/specs/` rather than duplicating it** — duplicating
-  would be a further violation of C6, the constraint this project has broken five
-  times.
-- **`.claude/skills/*` wildcard with negations for `phase` and `handover`** — the
-  blanket `.claude/skills/` ignore was deliberate, to keep the tenant-specific
-  `bff` skill out of the public repo.
-- **Product name reads from a single accessor** (brief 59) — `VITE_PRODUCT_NAME ?? 'Orrery'`
-  was duplicated in `TopBar` and `SolarMesh`; centralised at `4a1dc80`.
-- **`checkSpendGuard` returns a discriminated union, not a boolean** — callers
-  need `remainingBudget` to compute `effectiveCap = Math.max(1, Math.min(repoMaxTurns, remaining))`.
-  A boolean return forced callers to re-query the DB or over-run the cap.
-- **`buildSystemPrompt` exported from testAgent.ts** — exported for direct test
-  coverage of the `existingTestFiles` injection, rather than testing it only
-  indirectly through `runTestAgent`.
+  would be a further violation of C6.
+- **`checkSpendGuard` returns a discriminated union** — callers need `remainingBudget`
+  to compute `effectiveCap`. A boolean return forced callers to re-query or over-run.
 - **Task-derived agent status applied after the event-sourced fold** — O-14 root
   cause: `agent.status` events can be stale on the gate-resolved path. Task rows
-  are the authoritative record; the event-sourced path remains for review/spec/planner
-  agents which have no task rows.
+  are authoritative for dev/test agents; review/spec/planner remain event-sourced.
+- **Phase 8 is prompt-only** — both tasks (planner granularity, test-authoring exclusion)
+  are prompt changes. No code structure, schema, or API changes required.
+- **`buildSystemPrompt` exported from testPlannerAgent.ts** — enables direct
+  string-assertion test coverage without going through `runTestPlannerAgent`.
 
 ---
 
 ## Assumptions
 
-- Phases 0–6 are complete as recorded in `docs/specs/` and `docs/phase-6.md`,
-  notwithstanding the backlog inaccuracies noted below.
+- Phase 8 DoD item "task count varies by ≤ 1 across three runs" is a behavioral
+  property of the model's response to the new prompt. The added cost hint steers
+  toward fewer tasks; a real feature run is needed to validate empirically.
 - `apps/web/.env.local` setting `VITE_PRODUCT_NAME=PepperOrchestrator` is a
-  deliberate local brand override, not a rename. The fallback `'Orrery'` stays.
-- No feature was mid-run when phase 7 work landed. The worker re-registers on
-  server restart; any in-flight task at that point would already have failed.
+  deliberate local brand override. The fallback `'Orrery'` stays.
 
 ---
 
 ## Open questions / blockers
 
 - **`docs/phase-6.md` is inaccurate.** C-3, C-4 and C-5 are resolved in code but
-  still listed STANDING in the Phase 7 carry-forward. Scheduled as Phase 9.
+  still listed STANDING. Scheduled as Phase 9.
 - **Git history is a single squashed commit** before `4a1dc80`. SHAs cited in
   `docs/phase-6.md` are unreachable; descriptions remain trustworthy.
 - **`bff` skill is machine-local.** `.claude/skills/orchestrator-server.md` is
   gitignored. PRD Q3. Scheduled as Phase 10.
-- **Brief 59 acceptance block incomplete.** `4a1dc80` landed and suite is green,
-  but the original acceptance block asked for greps not yet supplied. Low priority.
 
 ---
 
@@ -141,7 +129,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 6 | Cost instrumentation and blocking backlog | squashed into `54bdf20` | 2026-08 |
 | — | Brief 59 — product name single source | `4a1dc80` | 2026-08-21 |
 | — | Tooling — phase and handover skills | `d13e9c2` | 2026-08-21 |
-| 7 | Agent spend and test redundancy | `ae3d755` | 2026-08-21 |
+| 7 | Agent spend and test redundancy | `4a16025` | 2026-08-21 |
+| 8 | Planner efficiency | `55a0c5b` | 2026-08-21 |
 
 ---
 
