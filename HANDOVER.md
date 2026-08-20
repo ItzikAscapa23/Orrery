@@ -72,9 +72,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **count to confirm**: baseline was 1024 passed / 1 failed (1025) before brief 59; 59 added N cases and turned the failure green. Record the real number at the next handover. |
-| `npm run typecheck` | not run since brief 59 |
-| `npm run lint` | not run since brief 59 |
+| `npm test` (repo root) | passed — 1029 passed (1029) across 83 files, 2026-08-21 |
+| `npm run typecheck` | not run |
+| `npm run lint` | not run |
 
 ---
 
