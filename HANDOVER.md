@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 6 — Cost instrumentation and blocking backlog
+- **Current phase:** 7 — Agent spend and test redundancy
 - **State:** `complete`
 - **Last updated:** 2026-08-21
 
@@ -56,15 +56,12 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 6 closed before this plan was adopted. Phase 7 has not started.*
+*Phase 7 closed. Phase 8 has not started.*
 
-- [x] Usage instrumentation — `anthropic_usage` events on every API call
-- [x] Rate table — `model_rates` seed, time-aware lookup
-- [x] Cost endpoint + UI card — `GET /features/:id/cost`, `GET /cost`, CostCard
-- [x] C-1 review findings deleted on re-review
-- [x] C-2 operator resolutions no longer silently discarded
-- [x] U-16 `activeCount` no longer conflates `working` with `waiting`
-- [x] U-17 `WORKER_CODE_COMMIT` re-evaluated at dispatch
+- [x] `58-test-file-reuse` — test agent injected with existing authored test files + describe titles
+- [x] `60-spend-guard-budget` — spend guard now returns remainingBudget; agents capped at min(repoMaxTurns, remainingBudget)
+- [x] `61-empty-fix-task-guard` — explicit early-return guard in createSyntheticFixTasks for zero blockers
+- [x] `62-agent-status-from-tasks` — foldEvents derives dev/test agent status from task rows; fixes O-14
 
 ---
 
@@ -72,9 +69,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — 1029 passed (1029) across 83 files, 2026-08-21 |
-| `npm run typecheck` | passed - clean across all three workspaces, 2026-08-21 |
-| `npm run lint` | **failed at baseline** - 364 problems (358 errors, 6 warnings), pre-existing, almost entirely apps/server/src/__tests__/. Not introduced by brief 59 or the tooling commits. Phase gates check does-not-increase, not zero. |
+| `npm test` (repo root) | passed — 1059 passed (1059) across 84 files, 2026-08-21 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-08-21 |
+| `npm run lint` | 362 problems (356 errors, 6 warnings) — below 364 baseline, 2026-08-21 |
 
 ---
 
@@ -90,13 +87,19 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   times.
 - **`.claude/skills/*` wildcard with negations for `phase` and `handover`** — the
   blanket `.claude/skills/` ignore was deliberate, to keep the tenant-specific
-  `bff` skill out of the public repo. Generic workflow tooling does not belong in
-  that category. Git will not descend into an excluded directory, so the rule had
-  to become a wildcard before negations could work.
-- **Product name reads from a single accessor** (brief 59, `4a1dc80`) — the
-  `VITE_PRODUCT_NAME ?? 'Orrery'` expression was duplicated in `TopBar` and
-  `SolarMesh`, and `App.test.tsx` asserted the fallback literal, so the suite
-  result depended on whether `.env.local` existed on the machine running it.
+  `bff` skill out of the public repo.
+- **Product name reads from a single accessor** (brief 59) — `VITE_PRODUCT_NAME ?? 'Orrery'`
+  was duplicated in `TopBar` and `SolarMesh`; centralised at `4a1dc80`.
+- **`checkSpendGuard` returns a discriminated union, not a boolean** — callers
+  need `remainingBudget` to compute `effectiveCap = Math.max(1, Math.min(repoMaxTurns, remaining))`.
+  A boolean return forced callers to re-query the DB or over-run the cap.
+- **`buildSystemPrompt` exported from testAgent.ts** — exported for direct test
+  coverage of the `existingTestFiles` injection, rather than testing it only
+  indirectly through `runTestAgent`.
+- **Task-derived agent status applied after the event-sourced fold** — O-14 root
+  cause: `agent.status` events can be stale on the gate-resolved path. Task rows
+  are the authoritative record; the event-sourced path remains for review/spec/planner
+  agents which have no task rows.
 
 ---
 
@@ -106,25 +109,21 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   notwithstanding the backlog inaccuracies noted below.
 - `apps/web/.env.local` setting `VITE_PRODUCT_NAME=PepperOrchestrator` is a
   deliberate local brand override, not a rename. The fallback `'Orrery'` stays.
+- No feature was mid-run when phase 7 work landed. The worker re-registers on
+  server restart; any in-flight task at that point would already have failed.
 
 ---
 
 ## Open questions / blockers
 
-- **Brief 59 acceptance is incomplete.** `4a1dc80` landed and the suite is green,
-  but the acceptance block asked for four things not yet supplied: the repo-root
-  suite count, the `grep -rn "VITE_PRODUCT_NAME" apps/web/src` output, the full
-  audit list of files inspected, and the list of other tests whose assertions
-  depend on ambient env. Unblocked by: re-running the greps.
 - **`docs/phase-6.md` is inaccurate.** C-3, C-4 and C-5 are resolved in code but
-  still listed STANDING in the Phase 7 carry-forward. Real remaining count is
-  nine, not twelve. Scheduled as Phase 9.
-- **Git history is a single squashed commit** before `4a1dc80`. Every SHA cited
-  in `docs/phase-6.md` is unreachable, so "resolved in commit X" cannot be
-  verified against a diff. Descriptions remain trustworthy; provenance does not.
+  still listed STANDING in the Phase 7 carry-forward. Scheduled as Phase 9.
+- **Git history is a single squashed commit** before `4a1dc80`. SHAs cited in
+  `docs/phase-6.md` are unreachable; descriptions remain trustworthy.
 - **`bff` skill is machine-local.** `.claude/skills/orchestrator-server.md` is
-  gitignored and points at `docs/architecture/bff.md`, also gitignored. No fresh
-  checkout has either. PRD Q3.
+  gitignored. PRD Q3. Scheduled as Phase 10.
+- **Brief 59 acceptance block incomplete.** `4a1dc80` landed and suite is green,
+  but the original acceptance block asked for greps not yet supplied. Low priority.
 
 ---
 
@@ -142,6 +141,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 6 | Cost instrumentation and blocking backlog | squashed into `54bdf20` | 2026-08 |
 | — | Brief 59 — product name single source | `4a1dc80` | 2026-08-21 |
 | — | Tooling — phase and handover skills | `d13e9c2` | 2026-08-21 |
+| 7 | Agent spend and test redundancy | `ae3d755` | 2026-08-21 |
 
 ---
 
