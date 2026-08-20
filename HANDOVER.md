@@ -73,8 +73,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | Command | Result |
 |---|---|
 | `npm test` (repo root) | passed — 1029 passed (1029) across 83 files, 2026-08-21 |
-| `npm run typecheck` | not run |
-| `npm run lint` | not run |
+| `npm run typecheck` | passed - clean across all three workspaces, 2026-08-21 |
+| `npm run lint` | **failed at baseline** - 364 problems (358 errors, 6 warnings), pre-existing, almost entirely apps/server/src/__tests__/. Not introduced by brief 59 or the tooling commits. Phase gates check does-not-increase, not zero. |
 
 ---
 

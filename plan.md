@@ -61,7 +61,7 @@ admitted.
 ```bash
 npm test            # from the REPO ROOT — apps/server under-reports by ~130
 npm run typecheck
-npm run lint
+npm run lint     # baseline 364 problems (358 errors) - must not increase
 ```
 
 **Entry conditions for next phase:**
@@ -93,7 +93,7 @@ the test agent runs once per covered task plus once at the final gate.
 ```bash
 npm test
 npm run typecheck
-npm run lint
+npm run lint     # baseline 364 problems (358 errors) - must not increase
 ```
 
 **Entry conditions for next phase:**
@@ -128,7 +128,7 @@ if it were accurate.
 ```bash
 npm test
 npm run typecheck
-npm run lint
+npm run lint     # baseline 364 problems (358 errors) - must not increase
 ```
 
 ---
