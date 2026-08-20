@@ -5,6 +5,7 @@ import { RINGS, PLANETS, getRingForAgent } from './ringConfig.js';
 import { OrbitRing } from './OrbitRing.js';
 import { Planet } from './Planet.js';
 import { Sun } from './Sun.js';
+import { productName } from '../../lib/productName.js';
 import '../../styles/solar.css';
 
 interface SolarMeshProps {
@@ -42,7 +43,7 @@ export function SolarMesh({
 
   return (
     <div className="solar-mesh" ref={paneRef}>
-      <div className="solar-watermark">{import.meta.env['VITE_PRODUCT_NAME'] ?? 'Orrery'} / Solar Mesh · Heliocentric View</div>
+      <div className="solar-watermark">{productName()} / Solar Mesh · Heliocentric View</div>
 
       {/* Scale wrapper — zero-size anchor at pane center */}
       <div

@@ -3,6 +3,7 @@ import type { PhaseId, AgentDisplayStatus } from '../types/ui.js';
 import type { FeatureSummary, RepoEntry } from '../hooks/useFeature.js';
 import { FeatureSelector } from './FeatureSelector.js';
 import { CreateFeatureForm } from './CreateFeatureForm.js';
+import { productName } from '../lib/productName.js';
 
 const PHASE_NAMES: Partial<Record<NonNullable<PhaseId>, string>> = {
   DRAFTING_SPEC: 'Drafting Spec',
@@ -94,7 +95,7 @@ export function TopBar({
               color: '#f2f0ff',
             }}
           >
-            {import.meta.env['VITE_PRODUCT_NAME'] ?? 'Orrery'}
+            {productName()}
           </div>
           <div
             style={{

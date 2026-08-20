@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TopBar } from '../components/TopBar.js';
 import type { FeatureSummary } from '../hooks/useFeature.js';
 
@@ -86,5 +86,21 @@ describe('TopBar — feature navigation', () => {
     render(<TopBar {...baseProps} agentStatuses={{}} />);
     fireEvent.click(screen.getByRole('button', { name: /\+ New feature/i }));
     expect(screen.getByText('New Feature')).toBeInTheDocument();
+  });
+});
+
+describe('TopBar — product name', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('renders the fallback brand when VITE_PRODUCT_NAME is unset', () => {
+    vi.stubEnv('VITE_PRODUCT_NAME', undefined as unknown as string);
+    render(<TopBar {...baseProps} agentStatuses={{}} />);
+    expect(screen.getByText('Orrery')).toBeInTheDocument();
+  });
+
+  it('renders the configured brand when VITE_PRODUCT_NAME is set', () => {
+    vi.stubEnv('VITE_PRODUCT_NAME', 'TestBrand');
+    render(<TopBar {...baseProps} agentStatuses={{}} />);
+    expect(screen.getByText('TestBrand')).toBeInTheDocument();
   });
 });

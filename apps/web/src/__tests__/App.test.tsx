@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { vi, beforeEach, describe, it, expect } from 'vitest';
+import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest';
 import { App } from '../App.js';
 
 // Stub fetch so useFeature doesn't fail in jsdom
@@ -24,10 +24,13 @@ beforeEach(() => {
   );
 });
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe('App', () => {
   it('renders the app shell without crashing', () => {
+    vi.stubEnv('VITE_PRODUCT_NAME', 'TestBrand');
     render(<App />);
-    expect(screen.getByText('Orrery')).toBeInTheDocument();
+    expect(screen.getByText('TestBrand')).toBeInTheDocument();
   });
 
   it('renders the solar mesh center pane', () => {
