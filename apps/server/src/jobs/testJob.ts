@@ -159,9 +159,14 @@ function findTestFiles(dir: string, maxDepth: number): string[] {
   return results;
 }
 
+export interface DiscoverTestDirResult {
+  dir: string;
+  method: 'candidate' | 'deep-scan' | 'fallback';
+}
+
 // Nested locations first so src/__tests__ wins over an empty root __tests__/.
 // A candidate must exist AND contain at least one test file.
-export function discoverTestDir(worktreePath: string): string {
+export function discoverTestDir(worktreePath: string): DiscoverTestDirResult {
   if (!fs.existsSync(worktreePath)) {
     throw new Error(`discoverTestDir: worktree path does not exist: ${worktreePath}`);
   }
@@ -177,19 +182,16 @@ export function discoverTestDir(worktreePath: string): string {
   for (const candidate of candidates) {
     const abs = path.join(worktreePath, candidate);
     if (fs.existsSync(abs) && findTestFiles(abs, 1).length > 0) {
-      return candidate;
+      return { dir: candidate, method: 'candidate' };
     }
   }
   // No candidate matched — deep scan up to 3 levels.
   const found = findTestFiles(worktreePath, 3);
   if (found.length > 0) {
-    return path.relative(worktreePath, path.dirname(found[0]!));
+    return { dir: path.relative(worktreePath, path.dirname(found[0]!)), method: 'deep-scan' };
   }
-  // Nothing found anywhere — emit a visible log and return the conventional fallback.
-  console.warn(
-    `[discoverTestDir] no test files found under ${worktreePath}; falling back to '__tests__'`,
-  );
-  return '__tests__';
+  // Nothing found anywhere — return the conventional fallback; caller emits agent.log.
+  return { dir: '__tests__', method: 'fallback' };
 }
 
 // ── Stable finding ID ─────────────────────────────────────────────────────────
@@ -558,7 +560,15 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     repoClaudeMd = `# ${repoId}\n## Commands\nnpm test\n`;
   }
 
-  const testDir = discoverTestDir(worktreePath);
+  const { dir: testDir, method: testDirMethod } = discoverTestDir(worktreePath);
+  if (testDirMethod === 'fallback') {
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'orchestrator',
+      severity: 'info',
+      text: `⚠ discoverTestDir: no test files found under ${worktreePath} — falling back to '__tests__'. Verify the repo has a test directory.`,
+    });
+  }
 
   const orientationBlock = generateRepoOrientation(worktreePath);
   await appendEvent(getPrisma(), featureId, {

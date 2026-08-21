@@ -48,18 +48,22 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 8 — Planner efficiency
-- **State:** `complete`
+- **Current phase:** 9 — Backlog sweep
+- **State:** `in-progress`
 - **Last updated:** 2026-08-21
 
 ---
 
 ## Current phase progress
 
-*Phase 8 closed. Phase 9 has not started.*
-
-- [x] Planner granularity — added per-covered-task cost hint to `plannerAgent.ts` prompt
-- [x] Test planner coverage exclusion — added explicit SKIPPED rule for test-authoring tasks in `testPlannerAgent.ts`
+- [ ] Correct `docs/phase-6.md` — C-3 mitigated, C-4/C-5 resolved
+- [x] R-8 gate card header copy for non-spec_approval gates
+- [x] R-9 `discoverTestDir` fallback reaches event log
+- [x] R-10 stale docblock at `maybeAdvance.ts`
+- [x] O-13 `POST /simulate` status guard (409 for non-initial states)
+- [ ] O-12 duplicate `pr.created` events — diagnose
+- [ ] C-6 nested test directories in `resolveReal` — record analysis
+- [ ] R-7 test.report blocker vocabulary — record as moot
 
 ---
 

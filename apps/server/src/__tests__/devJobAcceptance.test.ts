@@ -127,7 +127,7 @@ const { mockGetAuthoredTestFilesForTask, mockParseTestOutput, mockDetectJsonComm
 
 vi.mock('../jobs/testJob.js', () => ({
   getAuthoredTestFilesForTask: mockGetAuthoredTestFilesForTask,
-  discoverTestDir: vi.fn().mockReturnValue('src/__tests__'),
+  discoverTestDir: vi.fn().mockReturnValue({ dir: 'src/__tests__', method: 'candidate' }),
   parseTestOutput: mockParseTestOutput,
   detectJsonCommand: mockDetectJsonCommand,
   plainTestCommand: mockPlainTestCommand,

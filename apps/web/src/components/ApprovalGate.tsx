@@ -357,7 +357,11 @@ export function ApprovalGate({
           marginBottom: 12,
         }}
       >
-        Spec revision #{gate.revision + 1} is ready for review.{' '}
+        {gate.gate === 'spec_approval'
+          ? `Spec revision #${gate.revision + 1} is ready for review.`
+          : gate.gate === 'code_review'
+            ? `Code review round #${gate.revision + 1} is open.`
+            : `Gate #${gate.revision + 1} requires your decision.`}{' '}
         <em style={{ color: 'var(--text-secondary)' }}>{gate.summary}</em>
       </div>
 

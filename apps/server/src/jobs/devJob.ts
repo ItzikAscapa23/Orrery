@@ -906,7 +906,7 @@ export async function runDevJob(
     // Only runs for tasks that had acceptance tests written before implementation.
     // Uses the X-Orrery-Task trailer to scope to this task's authored files.
     if (task.coveredByTestPlan && task.testsWritten) {
-      const testDir = discoverTestDir(worktreeInfo.worktreePath);
+      const testDir = discoverTestDir(worktreeInfo.worktreePath).dir;
       const taskTestFiles = getAuthoredTestFilesForTask(
         worktreeInfo.worktreePath,
         testDir,

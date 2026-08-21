@@ -101,7 +101,7 @@ const {
 }));
 
 vi.mock('../jobs/testJob.js', () => ({
-  discoverTestDir: vi.fn().mockReturnValue('src/__tests__'),
+  discoverTestDir: vi.fn().mockReturnValue({ dir: 'src/__tests__', method: 'candidate' }),
   getAuthoredTestFilesForTask: mockGetAuthoredTestFilesForTask,
   parseTestOutput: vi.fn(),
   detectJsonCommand: vi.fn().mockReturnValue('npx vitest run --reporter=json'),
@@ -349,7 +349,7 @@ describe('runTaskTestJob', () => {
     });
     vi.mocked(discoverTestDir).mockImplementation(() => {
       callOrder.push('discoverTestDir');
-      return 'src/__tests__';
+      return { dir: 'src/__tests__', method: 'candidate' as const };
     });
     await runTaskTestJob(featureId, taskId, 'job-1', 'server');
     const wtIdx = callOrder.indexOf('createWorktree');

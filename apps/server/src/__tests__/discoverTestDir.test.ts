@@ -24,27 +24,31 @@ function touch(rel: string) {
 describe('discoverTestDir', () => {
   it('returns src/__tests__ when tests live there', () => {
     touch('src/__tests__/foo.test.ts');
-    expect(discoverTestDir(tmpRoot)).toBe('src/__tests__');
+    const result = discoverTestDir(tmpRoot);
+    expect(result.dir).toBe('src/__tests__');
+    expect(result.method).toBe('candidate');
   });
 
   it('returns test when tests live at root test/', () => {
     touch('test/bar.test.ts');
-    expect(discoverTestDir(tmpRoot)).toBe('test');
+    const result = discoverTestDir(tmpRoot);
+    expect(result.dir).toBe('test');
+    expect(result.method).toBe('candidate');
   });
 
   it('returns src/__tests__ over empty root __tests__/ (content check, not existence)', () => {
     // empty root-level __tests__ — existence alone should not win
     fs.mkdirSync(path.join(tmpRoot, '__tests__'));
     touch('src/__tests__/baz.test.ts');
-    expect(discoverTestDir(tmpRoot)).toBe('src/__tests__');
+    const result = discoverTestDir(tmpRoot);
+    expect(result.dir).toBe('src/__tests__');
+    expect(result.method).toBe('candidate');
   });
 
-  it('returns __tests__ and logs when no test files exist anywhere', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('returns __tests__ with method=fallback when no test files exist anywhere', () => {
     const result = discoverTestDir(tmpRoot);
-    expect(result).toBe('__tests__');
-    expect(warnSpy).toHaveBeenCalledOnce();
-    expect(warnSpy.mock.calls[0]![0]).toMatch(/falling back/);
+    expect(result.dir).toBe('__tests__');
+    expect(result.method).toBe('fallback');
   });
 
   it('throws when worktreePath does not exist', () => {

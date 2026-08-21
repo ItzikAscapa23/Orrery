@@ -10,11 +10,10 @@ import { applyTransition } from './orchestrator.js';
  * IMPLEMENTING (handles the double-fire race when server and client tasks
  * complete within the same event loop tick).
  *
- * For simulated runs: auto-advances CODE_REVIEW → TESTING → DONE immediately
- * inside the same transaction (Phase-2 skip-log pattern).
- *
- * For real runs: stops at CODE_REVIEW and returns 'CODE_REVIEW' so the caller
- * can dispatchForState, which enqueues the create-ado-pr job.
+ * Both real and simulated runs stop at CODE_REVIEW. The caller should call
+ * dispatchForState('CODE_REVIEW'), which enqueues create-ado-pr for real runs
+ * and simulate-resume (walking the configured CODE_REVIEW sub-path) for
+ * simulated runs.
  *
  * Returns the new FeatureStatus if a transition fired, null otherwise.
  */

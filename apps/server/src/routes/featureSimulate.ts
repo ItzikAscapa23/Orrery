@@ -16,6 +16,11 @@ export async function featureSimulateRoutes(app: FastifyInstance): Promise<void>
       if (!feature) {
         return reply.status(404).send({ error: 'Feature not found' });
       }
+      if (feature.status !== 'DRAFTING_SPEC' && feature.status !== 'AWAITING_APPROVAL') {
+        return reply.status(409).send({
+          error: `Cannot simulate a feature in ${feature.status} — only DRAFTING_SPEC or AWAITING_APPROVAL`,
+        });
+      }
 
       // review_path controls the CODE_REVIEW sub-path the simulator walks.
       // 'forced-fix' (default): blocker → bounce-back → fix → re-review passes.

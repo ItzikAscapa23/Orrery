@@ -92,6 +92,13 @@ describe('POST /features/:id/simulate', () => {
     expect(feature?.simulatorReviewPath).toBe('gate');
   });
 
+  it('returns 409 when feature is not in DRAFTING_SPEC or AWAITING_APPROVAL', async () => {
+    await getPrisma().feature.update({ where: { id: featureId }, data: { status: 'DONE' } });
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/simulate` });
+    expect(res.statusCode).toBe(409);
+    expect(mockEnqueueJob).not.toHaveBeenCalled();
+  });
+
   it('sets simulatorReviewPath to forced-fix for unknown review_path values', async () => {
     await app.inject({
       method: 'POST',

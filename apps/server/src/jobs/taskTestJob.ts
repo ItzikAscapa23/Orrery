@@ -199,7 +199,16 @@ export async function runTaskTestJob(
     repoClaudeMd = `# ${task.repo}\n## Commands\nnpm test\n`;
   }
 
-  const testDir = discoverTestDir(worktreePath);
+  const { dir: testDir, method: testDirMethod } = discoverTestDir(worktreePath);
+  if (testDirMethod === 'fallback') {
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.log',
+      agent: 'orchestrator',
+      repo: task.repo,
+      severity: 'info',
+      text: `⚠ discoverTestDir: no test files found — falling back to '__tests__'. Verify the repo has a test directory.`,
+    });
+  }
 
   const harnessBrief = await loadHarnessBrief(feature.slug, worktreePath, featureId);
   const isFirstTestTask = harnessBrief === null;
