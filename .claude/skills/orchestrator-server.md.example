@@ -1,0 +1,51 @@
+---
+name: bff
+description: Reference skill for working within the BFF architecture. Loads when touching routes, events, shared types, or client-server contracts.
+triggers:
+  - new route
+  - new event type
+  - new agent
+  - shared type
+  - SSE
+  - state machine
+  - transition
+  - foldEvents
+---
+
+# BFF Skill — Working in Orrery
+
+*This is a committed example. The operator's actual skill is gitignored. Copy
+this file to `.claude/skills/orchestrator-server.md` (no `.example`) to activate
+it. Same treatment as `docs/agents/repo-manifest.example.yaml`.*
+
+Read `docs/architecture/bff.md` (or `docs/architecture/bff.example.md` on a fresh
+checkout) for the full picture. This skill distills the rules you must follow.
+
+## Before adding a new endpoint
+
+1. Create the route file in `apps/server/src/routes/`.
+2. Register it in `apps/server/src/app.ts` via `app.register(...)`.
+3. Validate the request body with a Zod schema (no raw `req.body`).
+4. If the endpoint triggers a state transition, call `applyTransition` inside a Prisma `$transaction` that also appends the relevant event in the same transaction.
+5. If the new state requires a job, add the mapping in `lib/dispatch.ts → dispatchForState`. Do NOT add a second BullMQ Worker — add a case to the switch in `jobs/agentWorker.ts`.
+
+## Before adding a new event type
+
+1. Edit `packages/shared/src/types/events.ts` first — add the payload schema to `EventPayloadSchema`.
+2. Add a handler case in `apps/web/src/lib/eventFold.ts` — derive the UI state the new event represents.
+
+## Before adding a new agent
+
+1. Register the agent id in `packages/shared/src/agents.ts` → `AGENT_REGISTRY`.
+2. Create the job file in `apps/server/src/jobs/`.
+3. Add the job type to `lib/queue.ts → AgentJobPayload['task']`.
+4. Add a `case` in `jobs/agentWorker.ts` switch — never create a second Worker.
+5. Add the state→job mapping in `lib/dispatch.ts → dispatchForState`.
+
+## Key invariants (never break these)
+
+- `applyTransition` + `phase.changed` event must be in the same DB transaction.
+- `foldEvents` must remain a pure function — no side effects, no external calls.
+- Finding identity is composite: `(featureId, specRev, id)` — never look up by plain `id`.
+- All LLM calls must go through `lib/anthropic.ts` — never call the Anthropic/Bedrock SDK directly.
+- `@orrery/shared` is the single source of truth — never add event payload types unilaterally in server or web.

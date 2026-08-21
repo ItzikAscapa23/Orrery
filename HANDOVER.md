@@ -32,7 +32,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
 - `packages/shared/` — event payload schemas
-- `docs/specs/` — numbered phase specs (phases 0–5)
+- `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 10)
 - `docs/agents/repo-manifest.yaml` — operator config, gitignored, example committed
 
 **Conventions:**
@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 9 — Backlog sweep
+- **Current phase:** 10 — Spec reconciliation
 - **State:** `complete`
 - **Last updated:** 2026-08-21
 
@@ -56,16 +56,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 9 closed. Phase 10 has not started.*
+*Phase 10 closed. Phase 11 tasks below (unticked = not yet started).*
 
-- [x] Correct `docs/phase-6.md` — C-3 mitigated, C-4/C-5 resolved, O-14 done
-- [x] R-8 gate card header copy for non-spec_approval gates (`ApprovalGate.tsx`)
-- [x] R-9 `discoverTestDir` fallback reaches event log (returns `{dir, method}`)
-- [x] R-10 stale docblock at `maybeAdvance.ts`
-- [x] O-13 `POST /simulate` status guard — 409 unless DRAFTING_SPEC or AWAITING_APPROVAL
-- [x] O-12 duplicate `pr.created` events — root cause diagnosed, not yet fixed
-- [x] C-6 nested test directories in `resolveReal` — confirmed macOS jail bug by analysis
-- [x] R-7 test.report blocker vocabulary — recorded as moot
+- [ ] Formatting sweep — 232 `prettier/prettier` errors, `--fix`. One mechanical
+      commit alone; verify suite count unchanged before and after.
+- [ ] Scoped ESLint override for `**/__tests__/**` — ~100 `no-unsafe-*` /
+      `no-explicit-any` errors from `vi.mocked()` and `as unknown as` casts.
+      Declare the exemption once in ESLint config, not per-line suppressions.
+- [ ] Triage remaining lint problems individually; report rule + file. No blanket
+      disables. Target: `npm run lint` exits 0.
 
 ---
 
@@ -85,20 +84,17 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   per three-file change costs more than the change.
 - **Phase `Verification:` = the standing four** — repo-root suite count, typecheck,
   lint, commit SHA. Per-brief fail-first evidence stays in the brief.
-- **`PRD.md` points into `docs/specs/` rather than duplicating it** — duplicating
-  would be a further violation of C6.
 - **`checkSpendGuard` returns a discriminated union** — callers need `remainingBudget`
   to compute `effectiveCap`. A boolean return forced callers to re-query or over-run.
 - **Task-derived agent status applied after the event-sourced fold** — O-14 root
   cause: `agent.status` events can be stale on the gate-resolved path. Task rows
   are authoritative for dev/test agents; review/spec/planner remain event-sourced.
-- **`discoverTestDir` returns `{dir, method}`** — keeps the pure fs function decoupled
-  from the database; callers that have `featureId` emit `agent.log` when
-  `method === 'fallback'`. Three callers updated: testJob, taskTestJob, devJob.
-- **R-7 recorded as moot, not fixed** — `MissionControl.tsx:341` already excludes
-  `test_report` from `ApprovalGate`; `featureFindings` routes 409 when not in
-  AWAITING_APPROVAL or CODE_REVIEW. Counts vocabulary in the event payload is
-  cosmetic; it does not gate approval.
+- **Spec 02 amended in place (not a new 06 file)** — keeps the canonical orchestrator
+  reference in one file; an agent reading spec 02 gets the full current picture.
+  The addendum section is clearly marked so the Phase 2 design is preserved.
+- **`bff` skill and architecture doc committed as `.example` files** — same pattern
+  as `repo-manifest.example.yaml`; the operator copies and customises, the repo
+  ships a working template.
 
 ---
 
@@ -122,10 +118,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   per-repo loop immediately before each ADO call. Carry to Phase 12+.
 - **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
   features. Carry forward.
-- **`bff` skill is machine-local.** `.claude/skills/orchestrator-server.md` is
-  gitignored. PRD Q3. Scheduled as Phase 10.
-- **Git history is a single squashed commit** before `4a1dc80`. SHAs cited in
-  `docs/phase-6.md` are unreachable; descriptions remain trustworthy.
 
 ---
 
@@ -145,7 +137,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | — | Tooling — phase and handover skills | `d13e9c2` | 2026-08-21 |
 | 7 | Agent spend and test redundancy | `4a16025` | 2026-08-21 |
 | 8 | Planner efficiency | `55a0c5b` | 2026-08-21 |
-| 9 | Backlog sweep | `b41310d` | 2026-08-21 |
+| 9 | Backlog sweep | `2723ba0` | 2026-08-21 |
+| 10 | Spec reconciliation | `1b1c64a` | 2026-08-21 |
 
 ---
 

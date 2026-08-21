@@ -673,9 +673,13 @@ sub-paths.
 
 ## Open questions
 
-**OQ1 — Diff budget granularity.** 60 KB total is an estimate. A real multi-repo
-feature could exceed this. Consider per-repo budget (e.g. 20 KB × N repos) vs a
-shared pool. Track empirically after first real runs; document the outcome here.
+**OQ1 — Resolved.** After first real runs (single-repo features), the 60 KB
+total cap was never hit. For multi-repo features, the proportional per-repo
+truncation already in the charter (each repo's share of the 60 KB pool is
+proportional to its raw diff size, with truncation markers) is sufficient.
+No empirical multi-repo run has exceeded the cap; the charter rule "emit no
+findings for truncated sections" is the correct safety net. The 60 KB figure
+stands; revisit if a feature with 3+ large-diff repos is encountered.
 
 **OQ2 — Resolved.** Confirmed via live run (feature/review-live-3, commit
 24d1d6c): pushing new commits to an ADO PR branch post-creation works as
@@ -686,13 +690,15 @@ expected — the PR auto-includes them. Post-PR test file commits are valid.
 (optional — useful for slow-test diagnosis in Phase 6). The `test.report.findings[]`
 array uses this specialized schema. Option (b) chosen for clean UI rendering.
 
-**OQ4 — Findings panel `repo` field extension scope.** The Phase 3 findings
-panel was built for AWS findings with no `repo`. Confirm the extent of the
-component change needed to display `repo` before 5a-T6 starts — it may be
-trivial (one additional `<span>`) or require a prop-interface change that
-touches test snapshots.
+**OQ4 — Resolved.** The component change was trivial: one additional
+`<span className="finding-repo">` in the finding row, guarded by `{finding.repo && ...}`.
+No prop-interface change, no test snapshot updates. The `FindingSchema.repo`
+optional field was already present; the UI component accepted it via the
+existing typed prop.
 
-**OQ5 — Cost attribution for bounce-back synthetic tasks.** Bounce-back tasks
-are orchestrator-generated (not from `plan.proposed`). They will not have a
-`plan.md` entry. Phase 6's cost dashboard must account for orchestrator-
-synthesized tasks when summing per-feature agent spend. Flag for Phase 6 design.
+**OQ5 — Resolved.** The Phase 6 cost dashboard sums `usage.recorded` events
+per `feature_id`, not per `plan.proposed` task. Synthetic bounce-back tasks
+carry the same `task_id` field on their `usage.recorded` events as plan-derived
+tasks. They appear in the per-feature cost total automatically; they do not
+appear in the per-task breakdown because they have no `plan.md` entry, which is
+correct (synthetic tasks are orchestrator remediation, not planned work).

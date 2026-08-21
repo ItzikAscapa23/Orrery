@@ -195,3 +195,177 @@ doc is the full spec; follow its tokens, metrics, and animations):
 ## Out of scope
 - Real AWS/dev/review/test agent logic (Phases 3-5). Bedrock provider switch
   (stub ANTHROPIC_PROVIDER env only). Auth. Multi-run history UI. Deployment.
+
+---
+
+## Current system state (Phases 3–9)
+
+*The sections above describe the Phase 2 design. This addendum records every
+material change since. A fresh reader should read the Phase 2 sections first
+for architectural context, then this addendum for the current machine.*
+
+### Full state machine (as of Phase 9)
+
+The seven-state machine from Phase 2 has expanded to twelve states plus a
+parallel light path. `lib/orchestrator.ts` is the single source of truth.
+
+```
+DRAFTING_SPEC
+  ├─ SUBMIT_SPEC ──────────────────────────────► AWS_REVIEW
+  │                                                │ AWS_DONE / AWS_SKIP
+  └─ SUBMIT_SPEC_LIGHT ────────────────────────┐  ▼
+                                               AWAITING_APPROVAL
+                                                │ APPROVE
+                                                │  └─► PLANNING
+                                                │        ├─ SUBMIT_PLAN ──► AWAITING_PLAN_APPROVAL
+                                                │        │                    │ APPROVE_PLAN
+                                                │        │                    ▼
+                                                │        │              PLANNING_TESTS
+                                                │        │                    │ SUBMIT_TEST_PLAN
+                                                │        │                    ▼
+                                                │        │          AWAITING_TEST_PLAN_APPROVAL
+                                                │        │                    │ APPROVE_TEST_PLAN
+                                                │        └──────────────────► IMPLEMENTING
+                                                │                              │ SUBMIT_REVIEW
+                                                │                              ▼
+                                                └─ APPROVE_LIGHT ──► LIGHT_IMPLEMENTING
+                                                                       │ SUBMIT_REVIEW
+                                                                       ▼
+                                                                    CODE_REVIEW
+                                                                       ├─ REVIEW_PASS ──► TESTING
+                                                                       │                    │ TEST_PASS
+                                                                       │                    ▼
+                                                                       │                  DONE ◄─┐
+                                                                       └─ REVIEW_PASS_LIGHT ─────┘
+                                                                       (light path skips TESTING)
+
+FAILED is reachable from any non-terminal state via the FAIL event.
+```
+
+**Bounce-backs:**
+- `REVIEW_FAIL` → `IMPLEMENTING` (round 0) or `gate.opened { gate: 'code_review' }` (round 1+)
+- `REVIEW_FAIL_LIGHT` → `LIGHT_IMPLEMENTING`
+- `TEST_FAIL` → `IMPLEMENTING` (round 0) or `gate.opened { gate: 'test_report' }` (round 1+)
+
+### Light path
+
+A feature created with `feature_path: 'LIGHT'` takes a stripped-down route
+intended for configuration/contract changes where a full plan+test cycle is
+disproportionate.
+
+| Step | Full path | Light path |
+|---|---|---|
+| Spec → review | `SUBMIT_SPEC` → `AWS_REVIEW` | `SUBMIT_SPEC_LIGHT` — skips AWS_REVIEW |
+| Approval → impl | `APPROVE` → `PLANNING` → … → `IMPLEMENTING` | `APPROVE_LIGHT` → `LIGHT_IMPLEMENTING` |
+| Implementation | Task-driven dev agents with test coverage | One `light-dev` job per repo — no tasks, no test runner |
+| Post-review | `REVIEW_PASS` → `TESTING` → `DONE` | `REVIEW_PASS_LIGHT` → `DONE` (skips TESTING) |
+
+`dispatchForState` handles `LIGHT_IMPLEMENTING` by dispatching one `light-dev`
+job per repo in `feature.repos`. There are no Task rows; `maybeAdvanceLightImpl`
+watches `light_dev.completed` events and fires `SUBMIT_REVIEW` when all repos
+are done.
+
+### `dispatchForState`
+
+`lib/dispatch.ts → dispatchForState(featureId, newState, feature)` is the
+single source of truth for "entering state X enqueues job Y". Route handlers
+and job handlers must never call `enqueueJob` directly — always go through
+`dispatchJob` or `dispatchForState`.
+
+| New state | Dispatched job | Notes |
+|---|---|---|
+| `AWS_REVIEW` | `aws-review` | |
+| `PLANNING` | `plan` | |
+| `PLANNING_TESTS` | `test-plan` (real) or `simulate-resume` (sim) | |
+| `IMPLEMENTING` | `server-dev` + `client-dev` per unblocked task | Tasks seeded from `plan.proposed` on plan approval |
+| `LIGHT_IMPLEMENTING` | `light-dev` per repo | One job per `feature.repos` entry |
+| `CODE_REVIEW` | `create-ado-pr` (real) or `simulate-resume` (sim) | `reviewJob` is dispatched by `createAdoPrJob` after PR creation |
+| `TESTING` | `test` (real) or `simulate-resume` (sim) | |
+
+### Plan approval gates
+
+After `PLANNING`, the Planner Agent proposes a task list (`plan.proposed` event).
+The plan does not take effect until human approval.
+
+- `gate.opened { gate: 'plan_approval' }` — pauses until the operator acts.
+- `POST /features/:id/approve-plan` — seeds `Task` rows from `plan.proposed`,
+  transitions to `PLANNING_TESTS`.
+- `POST /features/:id/request-plan-changes { comment }` — returns to `PLANNING`;
+  the comment is delivered to the Planner as the next user message.
+- Task `depends_on` is stored as task IDs (resolved at seed time from human-
+  readable titles in the plan JSON).
+
+Similarly, after `PLANNING_TESTS`, the Test Planner proposes covered task
+assignments (`test_plan.proposed` event):
+
+- `gate.opened { gate: 'test_plan_approval' }` — pauses.
+- `POST /features/:id/approve-test-plan` — marks `Task.coveredByTestPlan` and
+  transitions to `IMPLEMENTING`.
+- `POST /features/:id/request-test-plan-changes { comment }` — returns to
+  `PLANNING_TESTS`.
+
+### Spend guard
+
+`lib/spendGuard.ts → checkSpendGuard(featureId, taskId, taskTitle)`
+
+At job dispatch, the guard counts cumulative `usage.recorded` events for the
+task. When the total reaches `SPEND_GUARD_MAX_TURNS` (default 150):
+
+1. Task is parked (`status: 'parked', parkReason: 'spend_limit'`).
+2. `gate.opened { gate: 'spend_guard', taskId, turns, threshold }` is emitted.
+3. `{ parked: true }` is returned; the caller must not dispatch a new job.
+
+When admitted, the guard returns `{ parked: false, remainingBudget }`. Job
+callers use `min(repoMaxTurns, remainingBudget)` as the effective turn cap,
+so structural overrun is impossible rather than merely detected.
+
+### Amendment gate
+
+When a dev agent determines the spec requires a contract change, it emits
+`contract.amendment.proposed` and parks itself (`amendment_paused`). All
+other tasks for the feature are also paused.
+
+- `POST /features/:id/approve-amendment` — writes the proposed `contract.yaml`
+  to the artifacts repo, emits `contract.revised` + `gate.resolved { gate:
+  'amendment', resolution: 'approved' }`, and resumes all `amendment_paused`
+  tasks (attempt counts reset to 0).
+- `POST /features/:id/reject-amendment` — emits `amendment.rejected` (stored
+  as a feature-level record so every subsequent dev-agent prompt includes the
+  ruling), appends the rejection reason to the proposing task's description,
+  and resumes tasks within the existing contract.
+
+The `amendment.rejected` event is the two-layer guard against re-proposal:
+the first layer is prompt injection (the ruling appears in every task prompt),
+the second is the dedup handler that parks a task that re-proposes an already-
+rejected amendment.
+
+### Per-task acceptance gate (`task_acceptance_gate`)
+
+When a task is covered by the test plan and has test files written (determined
+by the `X-Orrery-Task` commit trailer), the dev job runs the acceptance tests
+after each commit. On failure:
+
+- Attempt 1: task reset to `pending`; `dispatchUnblockedTasks` re-dispatches.
+- Attempt 2 (cap): task parked, `gate.opened { gate: 'task_acceptance_gate',
+  taskId, findings }` emitted.
+
+`POST /features/:id/tasks/:taskId/accept` or `/dismiss` resolves the gate and
+re-dispatches the task.
+
+### ADO PR job (`create-ado-pr`)
+
+Dispatched at `CODE_REVIEW` entry (real runs only). For each repo in
+`feature.currentBranches`:
+
+1. Reads `spec.md` from the artifacts repo to build a budget-aware PR body
+   (hard cap 3,900 chars; spec overview truncated proportionally).
+2. Creates an ADO pull request via `lib/ado.ts → createAdoPullRequest`.
+3. Emits `pr.created { repoId, prUrl, prNumber }`.
+
+After all repos are processed, `createAdoPrJob` dispatches `reviewJob` directly
+(bypassing `dispatchForState` — it is the continuation of the same CODE_REVIEW
+entry). A repo absent from `currentBranches` is logged and skipped (partial PR
+creation is preferred over a crash).
+
+`POST /features/:id/retry-pr` is the recovery door for Bedrock 403 / STS expiry
+mid-job.

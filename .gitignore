@@ -15,12 +15,14 @@ apps/web/.env.local
 
 # Tenant-specific files — not shipped in the public repo
 docs/agents/repo-manifest.yaml
-docs/architecture/
+docs/architecture/**
+!docs/architecture/bff.example.md
 docs/design/
 docs/reviews/
 .claude/skills/*
 !.claude/skills/phase/
 !.claude/skills/handover/
+!.claude/skills/orchestrator-server.md.example
 .idea/
 KICKOFF.md
 
