@@ -56,14 +56,14 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [ ] Correct `docs/phase-6.md` — C-3 mitigated, C-4/C-5 resolved
+- [x] Correct `docs/phase-6.md` — C-3 mitigated, C-4/C-5 resolved
 - [x] R-8 gate card header copy for non-spec_approval gates
 - [x] R-9 `discoverTestDir` fallback reaches event log
 - [x] R-10 stale docblock at `maybeAdvance.ts`
 - [x] O-13 `POST /simulate` status guard (409 for non-initial states)
-- [ ] O-12 duplicate `pr.created` events — diagnose
-- [ ] C-6 nested test directories in `resolveReal` — record analysis
-- [ ] R-7 test.report blocker vocabulary — record as moot
+- [x] O-12 duplicate `pr.created` events — diagnosed (non-atomic ADO call + event append)
+- [x] C-6 nested test directories in `resolveReal` — confirmed macOS jail bug by analysis
+- [x] R-7 test.report blocker vocabulary — recorded as moot
 
 ---
 

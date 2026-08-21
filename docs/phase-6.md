@@ -47,49 +47,65 @@ Re-evaluate `git rev-parse` at dispatch and compare.
 
 ## Correctness
 
-**C-3. `detectJsonCommand` infers test runner from CLAUDE.md prose.** `STANDING`
-`testJob.ts:195-201`. `repo-manifest.yaml` already carries `probe_command`;
-`package.json` carries `scripts.test`. A jest repo whose CLAUDE.md mentions
-vitest gets `npx vitest run`, and npx will try to fetch a missing runner from
-inside a network-isolated container.
+**C-3. `detectJsonCommand` infers test runner from CLAUDE.md prose.** `MITIGATED`
+`testJob.ts:360-379`. `probe_command` from `repo-manifest.yaml` is now the
+primary source and is passed as the first argument to `detectJsonCommand`.
+CLAUDE.md inference (`lower.includes('jest')`) is a fallback-only path used
+only when no `probe_command` is set. The original bug (jest repo mentioning
+vitest → wrong runner) only triggers on repos without `probe_command`. Fix:
+ensure `probe_command` is set in `repo-manifest.yaml` for every repo; the
+inference fallback should be removed in a future phase.
 
-**C-4. Double suite execution on reporter miss.** `STANDING`
-`testJob.ts:401` then `412`. On any repo without a JSON reporter the entire
-suite runs twice. `--outputFile` plus a file read removes both this and the
-stdout-interleaving fragility.
+**C-4. Double suite execution on reporter miss.** ✅ DONE (f260973 area; already fixed in earlier phases)
+`testJob.ts:701-733`. The `--outputFile` flag writes the JSON report to a
+temp file; the suite runs once. On parse failure the fallback re-runs a
+plain command (no JSON re-parse) — no double execution.
 
-**C-5. Fallback path never re-parses.** `STANDING`
-`testJob.ts:412` re-runs `npm test` but `parsed` still holds the first
-attempt's `parseError`. Result: exit code correct, counts `null`, `tests[]`
-empty — on what is probably the most common real-world path.
+**C-5. Fallback path never re-parses.** ✅ DONE by design
+`testJob.ts:724-726`. The fallback run preserves `parsed.parseError`
+intentionally — exit code is authoritative, and keeping `parseError` makes
+the `test.report` payload honest about missing counts rather than fabricating
+zeros. Comment at line 726 explains the choice.
 
-**C-6. Nested test directories — unverified.** `WATCH LIST`
-`resolveReal` realpaths the parent and re-appends the basename. If the parent
-itself doesn't exist (`__tests__/acceptance/api.test.ts` where `acceptance/`
-hasn't been created), behaviour is unknown; `mkdirSync(recursive)` runs after
-the jail check so it can't help. Hypothesis — never tested.
+**C-6. Nested test directories — confirmed bug on macOS.** `WATCH LIST`
+`testAgent.ts:209-221`. Code analysis (Phase 9): when the nested parent
+(`acceptance/`) doesn't exist, `resolveReal` falls back to returning the
+un-`realpathSync`-resolved path. On macOS `/var → /private/var` symlink
+setups, `absTestDir` is realpathSync'd (`/private/var/…/__tests__`) but the
+candidate is unresolved (`/var/…/__tests__/acceptance/api.test.ts`). The jail
+check then fails — `path.relative(absTestDir, abs)` starts with `..` — and
+the write is blocked before `mkdirSync(recursive)` ever runs. Hypothesis
+confirmed by static analysis. Fix: in the inner catch of `resolveReal`, use
+`path.resolve` rather than `fs.realpathSync.native` for the parent, so the
+unresolved macOS prefix is stripped. Not fixed in Phase 9; scheduled forward.
 
 ---
 
 ## Representation
 
-**R-7. `test.report` shares the review-counts vocabulary.** `STANDING`
-`testJob.ts:470` — `counts: { blockers: failed, warnings: 0, suggestions: 0 }`.
-Test failures flow into Phase 3's blocker-gating machinery, which means they
-may be dismissible as review findings.
+**R-7. `test.report` shares the review-counts vocabulary.** ✅ MOOT (Phase 9 analysis)
+`MissionControl.tsx:341` explicitly excludes `gate === 'test_report'` from
+`ApprovalGate`. The `featureFindings` accept/dismiss routes require
+`AWAITING_APPROVAL` or `CODE_REVIEW`; `TESTING` is neither, so test-failure
+findings cannot be dismissed via the findings API. The `counts.blockers` field
+in the `gate.opened` payload is cosmetic and not read by the approval logic.
+No action required.
 
-**R-8. Gate card header uses spec-approval copy on other gate types.** `STANDING`
-"Spec revision #2 is ready for review" renders on `code_review` and
-`test_report` gates. Body text is correct; the header isn't.
+**R-8. Gate card header uses spec-approval copy on other gate types.** ✅ DONE (f260973)
+`ApprovalGate.tsx` now switches on `gate.gate`: `spec_approval` → "Spec
+revision #N is ready for review", `code_review` → "Code review round #N is
+open.", fallthrough → generic "Gate #N requires your decision."
 
-**R-9. `discoverTestDir`'s fallback is `console.warn` only.** `STANDING`
-Never reaches the event log or UI. A guessed jail is exactly the thing an
-operator needs to see. Return `{ dir, method }` and emit the `agent.log` from
-`runTestJob`, which has the `featureId`.
+**R-9. `discoverTestDir`'s fallback is `console.warn` only.** ✅ DONE (f260973)
+`testJob.ts:164`. `discoverTestDir` now returns `{ dir: string; method:
+'candidate' | 'deep-scan' | 'fallback' }`. `runTestJob` and
+`runTaskTestJob` emit `agent.log` (severity 'info') when `method ===
+'fallback'`, making the guessed jail visible in the event log and UI.
 
-**R-10. Stale docblock at `maybeAdvance.ts:13`.** `STANDING`
-Describes a `CODE_REVIEW → TESTING → DONE` auto-advance the code no longer
-has (the accurate comment is at 42–45).
+**R-10. Stale docblock at `maybeAdvance.ts:13`.** ✅ DONE (f260973)
+Stale "auto-advances CODE_REVIEW → TESTING → DONE" lines removed; docblock
+now matches the actual behavior (both paths stop at CODE_REVIEW for the
+caller to dispatchForState).
 
 ---
 
@@ -101,20 +117,27 @@ The route accepts a `limit` query param (default 100); the client (`useEventStre
 ceiling — an initial-history baseline for a long-running feature is silently truncated beyond
 event 500. Not blocking.
 
-**O-12. Duplicate PR opened event.** `STANDING`
-Confirmed on the ping-feature run: PRs #89905 and #89906 each emitted two identical
-`pr.opened` events. Root cause not yet diagnosed. (Earlier instance: PR #89853 in the
-coin-flip run.)
+**O-12. Duplicate `pr.created` event / duplicate ADO PRs.** `WATCH LIST`
+Phase 9 diagnosis: `createAdoPrJob.ts:146-154` builds `alreadyCreated` once at
+job start from existing `pr.created` events, then loops per repo. The ADO API
+call and `appendEvent(pr.created)` are NOT in the same DB transaction. If the
+job fails after the ADO API call succeeds but before the event is appended
+(network timeout, Bedrock error, process crash), BullMQ retries the job. On
+retry, `alreadyCreated` is empty → second PR created → second event appended.
+The confirmed duplicates (ping-feature PRs #89905/#89906, coin-flip PR #89853)
+fit this pattern. Fix: re-query existing `pr.created` events inside the
+per-repo loop (after the set is built), immediately before the ADO API call.
+Not fixed in Phase 9.
 
-**O-13. `POST /simulate` has no status guard.** `STANDING`
-Returned 202 and enqueued a no-op job against a feature already at `DONE`.
-`retry-test` correctly 409s in the analogous case; simulate should too.
+**O-13. `POST /simulate` has no status guard.** ✅ DONE (f260973)
+Route now 409s unless `feature.status` is `DRAFTING_SPEC` or
+`AWAITING_APPROVAL`. Test added in `featureSimulate.test.ts`.
 
-**O-14. Agent status not terminal on the gate-resolved path.** `WATCH LIST`
-Final screenshot: Review Agent and Test Agent both `WAITING`, Spec Agent
-`QUEUED`, on a feature the orchestrator reports `DONE`. May share a root with
-U-16 (activeCount conflation), or may be a missing `agent.status: done`
-emission — not diagnosed.
+**O-14. Agent status not terminal on the gate-resolved path.** ✅ DONE (Phase 7 task 62-agent-status-from-tasks)
+Agent display status is now derived from `task.status` aggregates rather than
+the last `agent.status` event. See HANDOVER.md `## Decisions`: "Task-derived
+agent status applied after the event-sourced fold." Structural root cause
+eliminated; no corrective events needed.
 
 **O-15. AWS review returned 8 output tokens.** `WATCH LIST`
 1843 in / 8 out on the coin-flip run — that's an empty findings array, not a
@@ -127,6 +150,20 @@ response nobody would notice. Low confidence; Phase 3 territory.
 
 All 12 remaining STANDING / WATCH LIST items above carry forward unchanged:
 C-3, C-4, C-5, C-6, R-7, R-8, R-9, R-10, O-12, O-13, O-14, O-15.
+
+---
+
+## Phase 9 sweep (2026-08-21)
+
+Resolved or diagnosed all Phase 7 carry-forwards. Remaining open items:
+
+- **C-3** MITIGATED — `probe_command` is primary; CLAUDE.md inference is fallback-only. Still open for repos without `probe_command`.
+- **C-6** WATCH LIST — confirmed macOS jail bug by static analysis. Fix scheduled forward.
+- **O-12** WATCH LIST — root cause diagnosed (non-atomic ADO call + event append). Fix not implemented.
+- **O-14** ✅ DONE — structural fix (agent status from task rows) shipped in Phase 7 (62-agent-status-from-tasks). Item closed above.
+- **O-15** WATCH LIST — 8-output-token review; low confidence, low priority. Carry forward.
+
+Items closed in Phase 9: C-4, C-5, R-7 (moot), R-8, R-9, R-10, O-13.
 
 **Intermittent test failure (6b/2a, resolved 2026-08-02)** — featureFindings timeout; root cause was git subprocess at dispatch.ts module load; fixed by stubbing `_headCommit` in featureFindings.test.ts (6-U17-flake).
 
