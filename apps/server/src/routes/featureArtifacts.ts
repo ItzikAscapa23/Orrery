@@ -20,11 +20,9 @@ export async function featureArtifactsRoutes(app: FastifyInstance): Promise<void
 
       const filename = KIND_TO_FILE[kind];
       if (!filename) {
-        return reply
-          .status(400)
-          .send({
-            error: `Unknown artifact kind '${kind}'. Valid values: ${Object.keys(KIND_TO_FILE).join(', ')}`,
-          });
+        return reply.status(400).send({
+          error: `Unknown artifact kind '${kind}'. Valid values: ${Object.keys(KIND_TO_FILE).join(', ')}`,
+        });
       }
 
       const feature = await findFeatureById(id);

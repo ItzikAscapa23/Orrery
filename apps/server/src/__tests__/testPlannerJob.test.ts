@@ -14,13 +14,11 @@ const { mockRunTestPlannerAgent, mockCommitArtifact, mockReadArtifact, MockArtif
     }
     return {
       mockRunTestPlannerAgent: vi.fn(),
-      mockCommitArtifact: vi
-        .fn()
-        .mockReturnValue({
-          path: 'features/t/test-plan.md',
-          commit: 'def',
-          message: 'test-plan: t test-plan.md',
-        }),
+      mockCommitArtifact: vi.fn().mockReturnValue({
+        path: 'features/t/test-plan.md',
+        commit: 'def',
+        message: 'test-plan: t test-plan.md',
+      }),
       mockReadArtifact: vi.fn().mockReturnValue('# Spec'),
       MockArtifactCommitError,
     };

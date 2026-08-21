@@ -117,17 +117,15 @@ vi.mock('../agents/devAgent.js', () => ({
   AgentOutcome: {},
   ViolationInfo: class {},
   ToolCallInfo: class {},
-  measurePromptSections: vi
-    .fn()
-    .mockReturnValue({
-      total: 100,
-      claudeMd: 10,
-      contract: 30,
-      spec: 50,
-      task: 5,
-      orientation: 5,
-      rules: 0,
-    }),
+  measurePromptSections: vi.fn().mockReturnValue({
+    total: 100,
+    claudeMd: 10,
+    contract: 30,
+    spec: 50,
+    task: 5,
+    orientation: 5,
+    rules: 0,
+  }),
 }));
 
 // Mock getAuthoredTestFilesForTask and parseTestOutput from testJob
@@ -141,17 +139,15 @@ const {
   mockGetAuthoredTestFilesForTask: vi.fn(),
   mockParseTestOutput: vi.fn(),
   mockDetectJsonCommand: vi.fn().mockReturnValue('npx vitest run --reporter=json'),
-  mockFindingsFromTests: vi
-    .fn()
-    .mockReturnValue([
-      {
-        id: 'f1',
-        severity: 'blocker',
-        section: 'acceptance tests',
-        issue: 'Test failed',
-        test_name: 'test 1',
-      },
-    ]),
+  mockFindingsFromTests: vi.fn().mockReturnValue([
+    {
+      id: 'f1',
+      severity: 'blocker',
+      section: 'acceptance tests',
+      issue: 'Test failed',
+      test_name: 'test 1',
+    },
+  ]),
   mockPlainTestCommand: vi.fn().mockImplementation((p?: string) => p ?? 'npm test'),
 }));
 
