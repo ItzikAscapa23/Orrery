@@ -162,6 +162,26 @@ Resolved or diagnosed all Phase 7 carry-forwards. Remaining open items:
 - **O-12** WATCH LIST — root cause diagnosed (non-atomic ADO call + event append). Fix not implemented.
 - **O-14** ✅ DONE — structural fix (agent status from task rows) shipped in Phase 7 (62-agent-status-from-tasks). Item closed above.
 - **O-15** WATCH LIST — 8-output-token review; low confidence, low priority. Carry forward.
+- **O-16** Dispatch never persists `bullJobId`. `queue.ts:56` discards the job
+  returned by `add()`; the only write is `devJob.ts:389`, inside the running
+  handler, and `testJob.ts` never writes it. `taskReconciler.ts:69`
+  (`if (task.bullJobId && liveJobIds.has(task.bullJobId)) continue;`)
+  short-circuits on null before consulting `liveJobIds`, so a task in the
+  running-but-not-yet-registered window is declared orphaned and re-enqueued.
+  Observed 2026-08-21: task 5c34af00 ran jobs 623/624/625 concurrently on one
+  worktree — identical turn numbers and token deltas (8855 → 4952 → 1848 → 529)
+  through turn 7, diverging at turn 8. 84 `usage.recorded` on one task_id.
+- **R-11** `parseTestOutput()` failure *list* includes skipped/disabled entries
+  while the count does not. Agent run reported `1 failed` with six names listed,
+  two of them `"temporarily disabled"`. The count was correct; the list was not.
+- **R-12** Test gate has no baseline diff. BFF clean-branch baseline is
+  `1 failed, 16 skipped, 2146 passed`; the agent run reported `2145 passed,
+  1 failed` — the same inherited failure. Correct work was rejected.
+  `assessProbeResult()` already embodies the principle; the gate doesn't apply it.
+- **R-13** Environmental failures consume agent retry slots. `task.failed
+  {"final": true, "reason": "Bedrock unreachable — check VPN / aws sso login",
+  "attempt": 2}` parked a task permanently. `taskReconciler.ts:73` already states
+  the opposite principle for orphans. Fifth occurrence of one rule in two places.
 
 Items closed in Phase 9: C-4, C-5, R-7 (moot), R-8, R-9, R-10, O-13.
 

@@ -62,6 +62,11 @@ Full statement: `docs/specs/00-project-overview.md`.
   threshold parks rather than re-running.
 - **R7** Test coverage is authored, not assumed. `TEST_PASS` requires that the
   test agent actually wrote tests this run, discriminated by commit trailer.
+- **R8** A task has exactly one live agent. Dispatch records the queue job
+    identity before the task is observable as running; no recovery path may
+    enqueue for a task that already has one.
+- **R9** The test gate judges the delta, not the absolute. A failure that
+  predates the agent's work is not the agent's failure.
 
 Spec detail per subsystem:
 

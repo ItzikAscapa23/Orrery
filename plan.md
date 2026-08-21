@@ -205,3 +205,43 @@ npm run lint
 **Entry conditions for next phase:**
 - The lint baseline line in every earlier phase's Verification block is removed,
   since the gate is now zero rather than a ceiling.
+---
+## Phase 12 — Dispatch identity and gate baseline
+**Goal:** One live agent per task, and a test gate that fails only on new failures.
+**PRD refs:** §3 R8, R9
+**Tasks:**
+- [ ] `63-dispatch-records-job-id` — `queue.ts:56` captures the job returned by
+      `add()` and persists its `id` with the dispatch status write. Remove the
+      redundant write at `devJob.ts:389`
+- [ ] Rewrite the `taskReconciler.ts:69` predicate so null `bullJobId` means
+      "not yet dispatched", not "orphaned"; quote the new form in the handover
+- [ ] Make both attempt-counter updates at `taskReconciler.ts:82` atomic —
+      `{ decrement: 1 }` currently sits beside `Math.max(0, attemptCount - 1)`
+- [ ] Enumerate every path that can enqueue for a running task — list, not
+      summary: `taskReconciler.ts:185` (immediate + 60s), `featureRedispatch.ts:113`,
+      `startupResume.ts:14`, BullMQ `maxStalledCount: 1` (`agentWorker.ts:204`).
+      Confirm `queue.ts:56` is still the only `add()` call site
+- [ ] Report whether anything writes `parkReason: 'orphan'` — `startupResume.ts:31,40`
+      filters on it, the reconciler only writes `'orphan_cap'` (line 122). If
+      nothing does, say the path is dead; do not silently fix
+- [ ] `64-gate-baseline-diff` — capture the pre-agent probe result and fail a task
+      only on tests that newly fail relative to it (R-12)
+- [ ] `parseTestOutput()` failure list excludes skipped/disabled entries; list and
+      count agree (R-11)
+- [ ] Report whether `spendGuard` needs dedup by `job_id` — duplicates consumed 84
+      of a 150 budget on one task. Do not implement
+**Definition of Done:**
+- No task row is queryable with a dispatched status and `bullJobId` null
+- Two reconciler passes over one running task produce exactly one enqueue
+- A repo with a pre-existing failing test can complete a task
+- Failure list and failure count agree on a suite with skipped tests
+- Enqueue-path and `parkReason` enumerations recorded in HANDOVER.md
+- Fail-first red output captured per case
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1064 tests — must not decrease
+npm run typecheck
+npm run lint      # baseline 364 problems (358 errors) — must not increase
+```
+**Entry conditions for next phase:**
+- A restart mid-dispatch produces exactly one container
