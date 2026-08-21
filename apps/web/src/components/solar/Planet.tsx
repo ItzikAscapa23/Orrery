@@ -77,14 +77,12 @@ export function Planet({ config, ring, status, selected, motionEnabled, onSelect
       {/* Orb arm — centred on the ring circle, counter-rotated for upright text */}
       <div
         className="orb-arm"
-        style={
-          {
-            top: orbArmTop,
-            left: 0,
-            animationPlayState: playState,
-            zIndex: 1,
-          } as CSSProperties
-        }
+        style={{
+          top: orbArmTop,
+          left: 0,
+          animationPlayState: playState,
+          zIndex: 1,
+        }}
         onClick={() => onSelect(agentId)}
         role="button"
         aria-label={`Select ${meta.displayName}`}
@@ -124,13 +122,11 @@ export function Planet({ config, ring, status, selected, motionEnabled, onSelect
       {/* Label arm — beyond the orb, radially outward from the Sun */}
       <div
         className="label-arm"
-        style={
-          {
-            top: labelArmTop,
-            left: 0,
-            animationPlayState: playState,
-          } as CSSProperties
-        }
+        style={{
+          top: labelArmTop,
+          left: 0,
+          animationPlayState: playState,
+        }}
         onClick={() => onSelect(agentId)}
         aria-hidden="true"
       >

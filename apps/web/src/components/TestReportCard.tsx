@@ -143,7 +143,7 @@ export function TestReportCard({ testReport: r, featureId, gate, onAction }: Tes
   const hiddenCount = sortedTests.length - COLLAPSE_THRESHOLD;
 
   // Headline text
-  let headline = '';
+  let headline: string;
   let subline: string | null = null;
 
   if (variant === 'skipped') {
@@ -364,7 +364,7 @@ export function TestReportCard({ testReport: r, featureId, gate, onAction }: Tes
         >
           <button
             disabled={loading}
-            onClick={() => postGateAction('approve-test')}
+            onClick={() => void postGateAction('approve-test')}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
@@ -383,7 +383,7 @@ export function TestReportCard({ testReport: r, featureId, gate, onAction }: Tes
           </button>
           <button
             disabled={loading}
-            onClick={() => postGateAction('retry-test')}
+            onClick={() => void postGateAction('retry-test')}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 10,

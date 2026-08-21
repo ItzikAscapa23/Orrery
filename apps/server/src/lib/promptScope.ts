@@ -98,7 +98,7 @@ export function scopeContract(contractYaml: string, opts: ScopeContractOpts): st
   for (const ref of opts.refs ?? []) {
     ref
       .toLowerCase()
-      .split(/[\/_\-\s]+/)
+      .split(/[/_\-\s]+/)
       .filter(Boolean)
       .forEach((t) => tokens.add(t));
   }
@@ -112,7 +112,7 @@ export function scopeContract(contractYaml: string, opts: ScopeContractOpts): st
   for (const [pathKey, pathItem] of Object.entries(doc.paths ?? {})) {
     const pathTokens = pathKey
       .toLowerCase()
-      .split(/[\/_\-{}\s]+/)
+      .split(/[/_\-{}\s]+/)
       .filter(Boolean);
     if (pathTokens.some((t) => tokens.has(t))) {
       retainedPaths.add(pathKey);
@@ -121,9 +121,9 @@ export function scopeContract(contractYaml: string, opts: ScopeContractOpts): st
     for (const opValue of Object.values(pathItem as Record<string, unknown>)) {
       const op = opValue as Record<string, unknown> | null;
       if (op && typeof op === 'object' && typeof op['operationId'] === 'string') {
-        const opTokens = (op['operationId'] as string)
+        const opTokens = op['operationId']
           .toLowerCase()
-          .split(/[\/_\-]+/)
+          .split(/[/_-]+/)
           .filter(Boolean);
         if (opTokens.some((t) => tokens.has(t))) {
           retainedPaths.add(pathKey);

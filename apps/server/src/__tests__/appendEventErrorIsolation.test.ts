@@ -25,11 +25,11 @@ vi.mock('../lib/prisma.js', () => ({
   // The mock calls the callback so insertWithCte's tx.$queryRaw calls land on
   // mockQueryRaw, keeping P2028 injection working after the $transaction wrap.
   getPrisma: () => ({
-    $transaction: vi.fn().mockImplementation(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async (cb: (tx: { $queryRaw: typeof mockQueryRaw }) => any) =>
+    $transaction: vi
+      .fn()
+      .mockImplementation(async (cb: (tx: { $queryRaw: typeof mockQueryRaw }) => any) =>
         cb({ $queryRaw: mockQueryRaw }),
-    ),
+      ),
     $queryRaw: mockQueryRaw,
   }),
   disconnectPrisma: vi.fn(),

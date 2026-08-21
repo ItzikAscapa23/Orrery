@@ -94,16 +94,16 @@ vi.mock('../lib/promptScope.js', () => ({
 }));
 
 // Mock devAgent to return 'code' outcome (normal completion)
-const { mockRunDevAgent, mockGetRepoEntry, mockReadClaudeMd } = vi.hoisted(() => ({
+const { mockRunDevAgent, _mockGetRepoEntry, _mockReadClaudeMd } = vi.hoisted(() => ({
   mockRunDevAgent: vi.fn(),
-  mockGetRepoEntry: vi.fn().mockReturnValue({
+  _mockGetRepoEntry: vi.fn().mockReturnValue({
     id: 'demo-server',
     side: 'server',
     description: 'Demo',
     install_timeout_ms: 10_000,
     exec_timeout_ms: 10_000,
   }),
-  mockReadClaudeMd: vi.fn().mockReturnValue('# CLAUDE.md\n## Commands\nnpm test\n'),
+  _mockReadClaudeMd: vi.fn().mockReturnValue('# CLAUDE.md\n## Commands\nnpm test\n'),
 }));
 
 vi.mock('../agents/devAgent.js', () => ({

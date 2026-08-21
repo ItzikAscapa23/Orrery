@@ -88,7 +88,6 @@ describe('runPlannerAgent', () => {
     await runPlannerAgent('feat-2b', 'Test Feature', '## Overview\nSpec here.');
 
     const retryCall = mockCreateMessageStream.mock.calls[1];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const retryMessages = retryCall?.[0]?.messages as Array<{
       role: string;
       content: string;

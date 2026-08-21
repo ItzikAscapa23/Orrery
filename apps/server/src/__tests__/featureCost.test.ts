@@ -406,7 +406,6 @@ describe('GET /features/:id/cost', () => {
     const body = res.json<CostResult>();
 
     expect(body.by_agent).toHaveLength(1);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(body.by_agent[0]!.elapsed_ms).toBe(0);
   });
 
@@ -502,7 +501,6 @@ describe('GET /features/:id/cost', () => {
 
     expect(body.by_agent).toHaveLength(1);
     // Sum of spans: 5 min + 3 min = 8 min = 480000 ms
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(body.by_agent[0]!.elapsed_ms).toBe(480_000);
   });
 });

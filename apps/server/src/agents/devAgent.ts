@@ -123,7 +123,7 @@ export const PROPOSE_AMENDMENT_TOOL: Anthropic.Tool = {
 };
 
 const MAX_TURNS = 40;
-const BUDGET_WARNING_TURN = 31; // inject nudge at this turn so 10 turns remain
+const _BUDGET_WARNING_TURN = 31; // inject nudge at this turn so 10 turns remain
 const MAX_VIOLATIONS = 3;
 const OUTPUT_MAX_BYTES = 8 * 1024;
 const OUTPUT_MAX_LINES = 200;

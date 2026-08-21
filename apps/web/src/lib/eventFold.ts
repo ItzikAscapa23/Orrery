@@ -337,7 +337,7 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
           findings = findings.map((f, i) => (i === idx ? { ...f, resolution: p.resolution } : f));
         }
         if (testReport !== null) {
-          const prev = testReport as TestReportState;
+          const prev: TestReportState = testReport;
           const tidx = prev.findings.findIndex((f) => f.id === p.finding_id);
           if (tidx !== -1) {
             testReport = {

@@ -32,7 +32,7 @@ export async function runTestingStubJob(featureId: string): Promise<void> {
   });
 
   if (nextState) {
-    await dispatchForState(featureId, nextState as import('@prisma/client').FeatureStatus, {
+    await dispatchForState(featureId, nextState, {
       simulated_run: feature.simulatedRun,
     });
   }

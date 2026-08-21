@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { EventRow } from '@orrery/shared';
 import {
   foldActivityEvents,
-  type ActivitySection,
   type ActivityTask,
   type ActivityJob,
   type FeatureAgentSection,

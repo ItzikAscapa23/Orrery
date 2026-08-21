@@ -336,7 +336,7 @@ export function checkListFilesTarget(worktreeRoot: string, dir: string, testDir:
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_TURNS = 30;
-const BUDGET_WARNING_TURN = 22;
+const _BUDGET_WARNING_TURN = 22;
 const MAX_VIOLATIONS = 3;
 const OUTPUT_MAX_BYTES = 8 * 1024;
 const OUTPUT_MAX_LINES = 200;

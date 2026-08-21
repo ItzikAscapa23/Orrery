@@ -175,7 +175,7 @@ export async function runTaskTestJob(
   });
 
   const imageTag = process.env['AGENT_CONTAINER_IMAGE'] ?? 'node:20-alpine';
-  const installStrategy = process.env['INSTALL_STRATEGY'] ?? 'host';
+  const _installStrategy = process.env['INSTALL_STRATEGY'] ?? 'host';
   const cafile = process.env['NODE_EXTRA_CA_CERTS'] ?? '';
   const installTimeoutMs = repoEntry.install_timeout_ms ?? 300_000;
   const execTimeoutMs = repoEntry.exec_timeout_ms ?? 120_000;

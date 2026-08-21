@@ -79,17 +79,12 @@ describe('checkBedrockConnectivity — https behaviour (unit)', () => {
     // Exercise the same pattern connectivity.ts uses internally
 
     const result = await new Promise<boolean>((resolve) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const req = mockHttpsRequest({ hostname: 'test' }, () => resolve(true));
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       req.on('error', () => resolve(false));
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       req.on('timeout', () => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         req.destroy();
         resolve(false);
       });
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       req.end();
     });
     expect(result).toBe(true);
@@ -107,13 +102,9 @@ describe('checkBedrockConnectivity — https behaviour (unit)', () => {
     }));
 
     const result = await new Promise<boolean>((resolve) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const req = mockHttpsRequest({ hostname: 'test' }, () => resolve(true));
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       req.on('error', () => resolve(false));
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       req.on('timeout', () => resolve(false));
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       req.end();
     });
     expect(result).toBe(false);

@@ -119,7 +119,6 @@ describe('POST /features/:id/approve-amendment', () => {
       url: `/features/${featureId}/approve-amendment`,
     });
     expect(res.statusCode).toBe(200);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     expect(res.json().contractCommit).toBe('abc1234');
 
     // All amendment_paused tasks reset to pending

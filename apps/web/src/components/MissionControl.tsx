@@ -142,7 +142,7 @@ export function MissionControl({
   const [attachRefreshTick, setAttachRefreshTick] = useState(0);
   const [localErrors, setLocalErrors] = useState<ChatEntry[]>([]);
   const [kindSelectorOpen, setKindSelectorOpen] = useState(false);
-  const [pendingKind, setPendingKind] = useState<'input' | 'reference' | null>(null);
+  const [_pendingKind, setPendingKind] = useState<'input' | 'reference' | null>(null);
   const pendingKindRef = useRef<'input' | 'reference' | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

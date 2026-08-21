@@ -52,7 +52,6 @@ import {
   discoverTestDir,
   parseTestOutput,
   detectJsonCommand,
-  plainTestCommand,
   findingsFromTests,
   TEST_REPORT_FILE,
 } from './testJob.js';

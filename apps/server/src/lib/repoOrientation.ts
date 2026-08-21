@@ -26,7 +26,7 @@ const TSCONFIG_KEYS_TO_SHOW = new Set([
 ]);
 
 function walkTree(dir: string, excludedDirs: Set<string>): string[] {
-  const entries = fs.readdirSync(dir, { withFileTypes: true, recursive: true }) as fs.Dirent[];
+  const entries = fs.readdirSync(dir, { withFileTypes: true, recursive: true });
   const results: string[] = [];
   for (const entry of entries) {
     // parentPath is the dir containing the entry (Node 20+); name is the basename

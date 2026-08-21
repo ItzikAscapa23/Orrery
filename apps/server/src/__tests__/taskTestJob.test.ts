@@ -161,7 +161,6 @@ vi.mock('node:child_process', async (importActual) => {
 vi.mock('node:fs', async (importActual) => {
   const actual = await importActual<typeof import('node:fs')>();
   const isWt = (p: unknown) => typeof p === 'string' && p.startsWith('/tmp/test-wt');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sm = {
     existsSync: (p: any) => (isWt(p) ? (mockFsExistsSync(p) as boolean) : actual.existsSync(p)),
     readFileSync: (...a: any[]) =>

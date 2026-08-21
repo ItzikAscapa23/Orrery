@@ -555,7 +555,7 @@ describe('git() spawn failure — catchable error', () => {
     const enobufs: NodeJS.ErrnoException = new Error('spawnSync git ENOBUFS');
     enobufs.code = 'ENOBUFS';
 
-    let caught: Error | null = null;
+    let caught!: Error;
     try {
       throw enobufs;
     } catch (e) {

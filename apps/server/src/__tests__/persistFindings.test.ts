@@ -32,7 +32,7 @@ const FID = 'feat-pf';
 const SPEC_REV = 0;
 
 const f1 = { id: 'f1', severity: 'blocker', section: 'POST /foo', issue: 'missing field' };
-const f2 = { id: 'f2', severity: 'warning', section: 'GET /bar', issue: 'slow response' };
+const _f2 = { id: 'f2', severity: 'warning', section: 'GET /bar', issue: 'slow response' };
 
 async function seedFinding(
   id: string,

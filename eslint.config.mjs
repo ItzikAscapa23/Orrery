@@ -47,6 +47,23 @@ export default [
     },
   },
 
+  // Test files: relax type-safety rules that are correct in test code.
+  // vi.mocked(), `as unknown as T` casts, and mock return values produce `any`
+  // legitimately — suppressing per-line would create hundreds of comments.
+  {
+    files: ['**/__tests__/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
+
   // Prettier last — disables conflicting formatting rules, adds prettier/prettier error
   prettierRecommended,
 
@@ -56,6 +73,7 @@ export default [
       'node_modules/',
       'dist/',
       'docs/',
+      'apps/server/prisma/',
       '**/*.config.cjs',
       '**/*.config.ts',
       'vitest.workspace.ts',

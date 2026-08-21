@@ -1017,9 +1017,9 @@ async function _handleNoAuthoredTests(
   specRev: number,
   parsed: ParsedTestOutput,
   priorTestRounds: number,
-  repos: string[],
-  repoId: string,
-  feature: { simulatedRun: boolean },
+  _repos: string[],
+  _repoId: string,
+  _feature: { simulatedRun: boolean },
 ): Promise<void> {
   const syntheticFinding: import('@orrery/shared').TestFinding = {
     id: 'no-authored-tests',

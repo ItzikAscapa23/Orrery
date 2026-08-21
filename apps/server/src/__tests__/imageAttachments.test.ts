@@ -5,7 +5,6 @@ import type { FastifyRequest } from 'fastify';
 function makeRequest(parts: unknown[]): FastifyRequest {
   return {
     headers: { 'content-type': 'multipart/form-data' },
-    // eslint-disable-next-line @typescript-eslint/require-await
     parts: async function* () {
       for (const p of parts) yield p;
     },
