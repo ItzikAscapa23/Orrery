@@ -178,12 +178,12 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
           spendGates = [
             ...spendGates,
             {
-              taskId:    typeof g['taskId']    === 'string' ? g['taskId']    : '',
+              taskId: typeof g['taskId'] === 'string' ? g['taskId'] : '',
               taskTitle: typeof g['taskTitle'] === 'string' ? g['taskTitle'] : '',
-              turns:     typeof g['turns']     === 'number' ? g['turns']     : 0,
-              jobCount:  typeof g['jobCount']  === 'number' ? g['jobCount']  : 0,
+              turns: typeof g['turns'] === 'number' ? g['turns'] : 0,
+              jobCount: typeof g['jobCount'] === 'number' ? g['jobCount'] : 0,
               threshold: typeof g['threshold'] === 'number' ? g['threshold'] : 150,
-              summary:   typeof g['summary']   === 'string' ? g['summary']   : '',
+              summary: typeof g['summary'] === 'string' ? g['summary'] : '',
             },
           ];
         } else {

@@ -66,7 +66,10 @@ describe('createSyntheticFixTasks', () => {
     const repos = result.map((r) => r.repo).sort();
     expect(repos).toEqual(['repo-client', 'repo-server']);
 
-    const tasks = await getPrisma().task.findMany({ where: { featureId }, orderBy: { createdAt: 'asc' } });
+    const tasks = await getPrisma().task.findMany({
+      where: { featureId },
+      orderBy: { createdAt: 'asc' },
+    });
     expect(tasks).toHaveLength(2);
     expect(tasks.every((t) => t.status === 'pending')).toBe(true);
   });

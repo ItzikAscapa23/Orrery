@@ -30,9 +30,10 @@ function walkTree(dir: string, excludedDirs: Set<string>): string[] {
   const results: string[] = [];
   for (const entry of entries) {
     // parentPath is the dir containing the entry (Node 20+); name is the basename
-    const parentPath = (entry as unknown as { parentPath?: string; path?: string }).parentPath
-      ?? (entry as unknown as { path?: string }).path
-      ?? dir;
+    const parentPath =
+      (entry as unknown as { parentPath?: string; path?: string }).parentPath ??
+      (entry as unknown as { path?: string }).path ??
+      dir;
     const rel = path.relative(dir, path.join(parentPath, entry.name));
     const topLevel = rel.split(path.sep)[0]!;
     if (excludedDirs.has(topLevel)) continue;

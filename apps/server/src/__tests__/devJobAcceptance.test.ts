@@ -108,22 +108,52 @@ const { mockRunDevAgent, mockGetRepoEntry, mockReadClaudeMd } = vi.hoisted(() =>
 
 vi.mock('../agents/devAgent.js', () => ({
   runDevAgent: mockRunDevAgent,
-  AgentNoopError: class extends Error { constructor(m: string) { super(m); this.name = 'AgentNoopError'; } },
+  AgentNoopError: class extends Error {
+    constructor(m: string) {
+      super(m);
+      this.name = 'AgentNoopError';
+    }
+  },
   AgentOutcome: {},
   ViolationInfo: class {},
   ToolCallInfo: class {},
-  measurePromptSections: vi.fn().mockReturnValue({ total: 100, claudeMd: 10, contract: 30, spec: 50, task: 5, orientation: 5, rules: 0 }),
+  measurePromptSections: vi
+    .fn()
+    .mockReturnValue({
+      total: 100,
+      claudeMd: 10,
+      contract: 30,
+      spec: 50,
+      task: 5,
+      orientation: 5,
+      rules: 0,
+    }),
 }));
 
 // Mock getAuthoredTestFilesForTask and parseTestOutput from testJob
-const { mockGetAuthoredTestFilesForTask, mockParseTestOutput, mockDetectJsonCommand, mockFindingsFromTests, mockPlainTestCommand } =
-  vi.hoisted(() => ({
-    mockGetAuthoredTestFilesForTask: vi.fn(),
-    mockParseTestOutput: vi.fn(),
-    mockDetectJsonCommand: vi.fn().mockReturnValue('npx vitest run --reporter=json'),
-    mockFindingsFromTests: vi.fn().mockReturnValue([{ id: 'f1', severity: 'blocker', section: 'acceptance tests', issue: 'Test failed', test_name: 'test 1' }]),
-    mockPlainTestCommand: vi.fn().mockImplementation((p?: string) => p ?? 'npm test'),
-  }));
+const {
+  mockGetAuthoredTestFilesForTask,
+  mockParseTestOutput,
+  mockDetectJsonCommand,
+  mockFindingsFromTests,
+  mockPlainTestCommand,
+} = vi.hoisted(() => ({
+  mockGetAuthoredTestFilesForTask: vi.fn(),
+  mockParseTestOutput: vi.fn(),
+  mockDetectJsonCommand: vi.fn().mockReturnValue('npx vitest run --reporter=json'),
+  mockFindingsFromTests: vi
+    .fn()
+    .mockReturnValue([
+      {
+        id: 'f1',
+        severity: 'blocker',
+        section: 'acceptance tests',
+        issue: 'Test failed',
+        test_name: 'test 1',
+      },
+    ]),
+  mockPlainTestCommand: vi.fn().mockImplementation((p?: string) => p ?? 'npm test'),
+}));
 
 vi.mock('../jobs/testJob.js', () => ({
   getAuthoredTestFilesForTask: mockGetAuthoredTestFilesForTask,
@@ -177,7 +207,9 @@ vi.mock('../routes/featureAmendment.js', () => ({
 }));
 
 const { mockGenerateOrientation } = vi.hoisted(() => ({
-  mockGenerateOrientation: vi.fn().mockReturnValue('## Repository orientation\n\n### File tree\nsrc/index.ts'),
+  mockGenerateOrientation: vi
+    .fn()
+    .mockReturnValue('## Repository orientation\n\n### File tree\nsrc/index.ts'),
 }));
 
 vi.mock('../lib/repoOrientation.js', () => ({
@@ -250,7 +282,14 @@ describe('devJob acceptance check', () => {
       .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' }) // acceptance json cmd
       .mockResolvedValueOnce({ exitCode: 0, stdout: '{}', stderr: '' }); // cat acceptance report
     mockParseTestOutput
-      .mockReturnValueOnce({ passed: 1, failed: 0, tests: [], authoredPassed: 0, authoredFailed: 0, parseError: null }) // probe
+      .mockReturnValueOnce({
+        passed: 1,
+        failed: 0,
+        tests: [],
+        authoredPassed: 0,
+        authoredFailed: 0,
+        parseError: null,
+      }) // probe
       .mockReturnValue({
         passed: 0,
         failed: 1,
@@ -359,7 +398,14 @@ describe('devJob — orientation block', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // acceptance json cmd
       .mockResolvedValueOnce({ exitCode: 0, stdout: '{}', stderr: '' }); // cat acceptance report
     mockParseTestOutput
-      .mockReturnValueOnce({ passed: 1, failed: 0, tests: [], authoredPassed: 0, authoredFailed: 0, parseError: null }) // probe
+      .mockReturnValueOnce({
+        passed: 1,
+        failed: 0,
+        tests: [],
+        authoredPassed: 0,
+        authoredFailed: 0,
+        parseError: null,
+      }) // probe
       .mockReturnValue({
         passed: 1,
         failed: 0,
@@ -386,7 +432,8 @@ describe('devJob — orientation block', () => {
 
     const events = await getPrisma().event.findMany({ where: { featureId } });
     const sizeLog = events.find(
-      (e) => e.type === 'agent.log' && (e.payload as { text?: string }).text?.includes('prompt size:'),
+      (e) =>
+        e.type === 'agent.log' && (e.payload as { text?: string }).text?.includes('prompt size:'),
     );
     expect(sizeLog).not.toBeUndefined();
     expect((sizeLog!.payload as { text: string }).text).toContain('orientation=');
@@ -406,12 +453,10 @@ describe('devJob — orientation block', () => {
     expect(mockGenerateOrientation).toHaveBeenCalled();
 
     // The last git reset call (checkout .) must have a lower invocation order than orientation
-    const resetCalls = execFileSyncMock.mock.invocationCallOrder.filter(
-      (_order, idx) => {
-        const args = execFileSyncMock.mock.calls[idx]!;
-        return Array.isArray(args[1]) && (args[1] as string[]).includes('checkout');
-      },
-    );
+    const resetCalls = execFileSyncMock.mock.invocationCallOrder.filter((_order, idx) => {
+      const args = execFileSyncMock.mock.calls[idx]!;
+      return Array.isArray(args[1]) && (args[1] as string[]).includes('checkout');
+    });
     const lastResetOrder = Math.max(...resetCalls);
     const orientationOrder = mockGenerateOrientation.mock.invocationCallOrder[0]!;
     expect(orientationOrder).toBeGreaterThan(lastResetOrder);
@@ -428,7 +473,14 @@ describe('devJob — bootstrap install routing', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // probe json cmd
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // cat probe report
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }); // npm test
-    mockParseTestOutput.mockReturnValueOnce({ passed: 1, failed: 0, tests: [], authoredPassed: 0, authoredFailed: 0, parseError: null }); // probe
+    mockParseTestOutput.mockReturnValueOnce({
+      passed: 1,
+      failed: 0,
+      tests: [],
+      authoredPassed: 0,
+      authoredFailed: 0,
+      parseError: null,
+    }); // probe
   });
 
   async function makeUncoveredTask(): Promise<string> {
@@ -451,12 +503,19 @@ describe('devJob — bootstrap install routing', () => {
 
   it('runs bootstrap command when bootstrap field is set, not runHostInstall', async () => {
     mockYamlLoad.mockReturnValueOnce({
-      repos: [{
-        id: 'demo-server', side: 'server', active: true,
-        url: 'https://example.com/demo-server.git', default_branch: 'main',
-        description: 'Demo', install_timeout_ms: 10_000, exec_timeout_ms: 10_000,
-        bootstrap: 'echo | ./custom-install.sh',
-      }],
+      repos: [
+        {
+          id: 'demo-server',
+          side: 'server',
+          active: true,
+          url: 'https://example.com/demo-server.git',
+          default_branch: 'main',
+          description: 'Demo',
+          install_timeout_ms: 10_000,
+          exec_timeout_ms: 10_000,
+          bootstrap: 'echo | ./custom-install.sh',
+        },
+      ],
     });
     const taskId = await makeUncoveredTask();
     await runDevJob(featureId, taskId, 'job-bootstrap-1');
@@ -481,12 +540,19 @@ describe('devJob — bootstrap install routing', () => {
 
   it('bootstrap failure is fatal — runDevJob rejects', async () => {
     mockYamlLoad.mockReturnValueOnce({
-      repos: [{
-        id: 'demo-server', side: 'server', active: true,
-        url: 'https://example.com/demo-server.git', default_branch: 'main',
-        description: 'Demo', install_timeout_ms: 10_000, exec_timeout_ms: 10_000,
-        bootstrap: 'echo | ./custom-install.sh',
-      }],
+      repos: [
+        {
+          id: 'demo-server',
+          side: 'server',
+          active: true,
+          url: 'https://example.com/demo-server.git',
+          default_branch: 'main',
+          description: 'Demo',
+          install_timeout_ms: 10_000,
+          exec_timeout_ms: 10_000,
+          bootstrap: 'echo | ./custom-install.sh',
+        },
+      ],
     });
     vi.mocked(runBootstrapInstall).mockRejectedValueOnce(new Error('bootstrap script failed'));
 
@@ -526,7 +592,14 @@ describe('devJob — container lifecycle', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // probe json cmd
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // cat probe report
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }); // npm test
-    mockParseTestOutput.mockReturnValueOnce({ passed: 1, failed: 0, tests: [], authoredPassed: 0, authoredFailed: 0, parseError: null }); // probe
+    mockParseTestOutput.mockReturnValueOnce({
+      passed: 1,
+      failed: 0,
+      tests: [],
+      authoredPassed: 0,
+      authoredFailed: 0,
+      parseError: null,
+    }); // probe
 
     const taskId = await makeUncoveredTask();
     await runDevJob(featureId, taskId, 'job-lifecycle-ok');
@@ -538,7 +611,14 @@ describe('devJob — container lifecycle', () => {
     mockContainerExec
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // probe json cmd
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }); // cat probe report
-    mockParseTestOutput.mockReturnValueOnce({ passed: 1, failed: 0, tests: [], authoredPassed: 0, authoredFailed: 0, parseError: null }); // probe
+    mockParseTestOutput.mockReturnValueOnce({
+      passed: 1,
+      failed: 0,
+      tests: [],
+      authoredPassed: 0,
+      authoredFailed: 0,
+      parseError: null,
+    }); // probe
     mockRunDevAgent.mockRejectedValueOnce(new Error('agent internal error'));
 
     const taskId = await makeUncoveredTask();
@@ -583,7 +663,14 @@ describe('devJob — max_turns threading', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // acceptance json cmd
       .mockResolvedValueOnce({ exitCode: 0, stdout: '{}', stderr: '' }); // cat acceptance report
     mockParseTestOutput
-      .mockReturnValueOnce({ passed: 1, failed: 0, tests: [], authoredPassed: 0, authoredFailed: 0, parseError: null }) // probe
+      .mockReturnValueOnce({
+        passed: 1,
+        failed: 0,
+        tests: [],
+        authoredPassed: 0,
+        authoredFailed: 0,
+        parseError: null,
+      }) // probe
       .mockReturnValue({
         passed: 1,
         failed: 0,
@@ -596,17 +683,19 @@ describe('devJob — max_turns threading', () => {
 
   it('passes max_turns from manifest into agent context', async () => {
     mockYamlLoad.mockReturnValueOnce({
-      repos: [{
-        id: 'demo-server',
-        side: 'server',
-        active: true,
-        url: 'https://example.com/demo-server.git',
-        default_branch: 'main',
-        description: 'Demo server',
-        exec_timeout_ms: 10_000,
-        install_timeout_ms: 10_000,
-        max_turns: 5,
-      }],
+      repos: [
+        {
+          id: 'demo-server',
+          side: 'server',
+          active: true,
+          url: 'https://example.com/demo-server.git',
+          default_branch: 'main',
+          description: 'Demo server',
+          exec_timeout_ms: 10_000,
+          install_timeout_ms: 10_000,
+          max_turns: 5,
+        },
+      ],
     });
     const taskId = await makeCoveredTask(0);
     await runDevJob(featureId, taskId, 'job-maxturns-1');

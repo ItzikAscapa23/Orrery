@@ -88,7 +88,9 @@ describe('TaskTable', () => {
   it('shows TDD ⏳ with attempt count when test task ran but no tests written', async () => {
     vi.stubGlobal(
       'fetch',
-      makeFetch([{ ...baseRow, coveredByTestPlan: true, testsWritten: false, testTaskAttempts: 2 }]),
+      makeFetch([
+        { ...baseRow, coveredByTestPlan: true, testsWritten: false, testTaskAttempts: 2 },
+      ]),
     );
     render(<TaskTable featureId="f1" taskEventCount={0} />);
     await waitFor(() => expect(screen.getByText('⏳ 2')).toBeInTheDocument());
@@ -97,7 +99,9 @@ describe('TaskTable', () => {
   it('shows TDD ○ when covered but no test task has run', async () => {
     vi.stubGlobal(
       'fetch',
-      makeFetch([{ ...baseRow, coveredByTestPlan: true, testsWritten: false, testTaskAttempts: 0 }]),
+      makeFetch([
+        { ...baseRow, coveredByTestPlan: true, testsWritten: false, testTaskAttempts: 0 },
+      ]),
     );
     render(<TaskTable featureId="f1" taskEventCount={0} />);
     await waitFor(() => expect(screen.getByText('○')).toBeInTheDocument());

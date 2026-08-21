@@ -172,9 +172,7 @@ export function scopeContract(contractYaml: string, opts: ScopeContractOpts): st
       node = (node as Record<string, unknown>)[part];
     }
     if (node === undefined) {
-      opts.onFallback?.(
-        `dangling $ref: ${ref} — component not found; returning full document`,
-      );
+      opts.onFallback?.(`dangling $ref: ${ref} — component not found; returning full document`);
       return contractYaml;
     }
   }

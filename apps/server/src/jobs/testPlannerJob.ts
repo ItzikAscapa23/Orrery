@@ -102,7 +102,11 @@ export async function runTestPlannerJob(featureId: string, jobId?: string): Prom
         contractYaml,
         taskSummaries,
         async (usage) => {
-          await appendEvent(getPrisma(), featureId, usageEventPayload(usage, 'test-planner', { jobId }));
+          await appendEvent(
+            getPrisma(),
+            featureId,
+            usageEventPayload(usage, 'test-planner', { jobId }),
+          );
         },
       );
       coverage = result.coverage;

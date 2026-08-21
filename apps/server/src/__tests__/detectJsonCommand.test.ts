@@ -63,10 +63,7 @@ describe('detectJsonCommand — with probeCommand (manifest entry takes preceden
   it('vitest repo: replaces reporter flags in probe_command with canonical ones', () => {
     // demo-server manifest: probe_command already has --reporter=json
     expect(
-      detectJsonCommand(
-        'npx vitest run',
-        'npx vitest run --reporter=json --passWithNoTests',
-      ),
+      detectJsonCommand('npx vitest run', 'npx vitest run --reporter=json --passWithNoTests'),
     ).toBe(`npx vitest run --passWithNoTests --reporter=json --outputFile=${TEST_REPORT_FILE}`);
   });
 
@@ -79,9 +76,9 @@ describe('detectJsonCommand — with probeCommand (manifest entry takes preceden
   });
 
   it('vitest repo: deduplicates --outputFile if probe_command already contains it', () => {
-    expect(
-      detectJsonCommand('vitest', `npx vitest run --outputFile=${TEST_REPORT_FILE}`),
-    ).toBe(`npx vitest run --reporter=json --outputFile=${TEST_REPORT_FILE}`);
+    expect(detectJsonCommand('vitest', `npx vitest run --outputFile=${TEST_REPORT_FILE}`)).toBe(
+      `npx vitest run --reporter=json --outputFile=${TEST_REPORT_FILE}`,
+    );
   });
 });
 

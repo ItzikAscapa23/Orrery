@@ -15,10 +15,9 @@ export function SpendGateCard({ featureId, gate, onAction }: SpendGateCardProps)
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/features/${featureId}/tasks/${gate.taskId}/resume-spend-gate`,
-        { method: 'POST' },
-      );
+      const res = await fetch(`/api/features/${featureId}/tasks/${gate.taskId}/resume-spend-gate`, {
+        method: 'POST',
+      });
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
         throw new Error(body.error ?? `Resume failed: ${res.status}`);

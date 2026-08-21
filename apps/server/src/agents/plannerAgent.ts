@@ -58,14 +58,15 @@ const MANIFEST_PATH = path.resolve(
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
 
-export function buildSystemPrompt(selectedRepos: string[] = [], manifestPath = MANIFEST_PATH): string {
+export function buildSystemPrompt(
+  selectedRepos: string[] = [],
+  manifestPath = MANIFEST_PATH,
+): string {
   const allActive = loadActiveRepos(manifestPath);
   // When selectedRepos is non-empty, restrict to the operator's chosen set.
   // Empty = legacy row; fall back to all active repos.
   const repos =
-    selectedRepos.length > 0
-      ? allActive.filter((r) => selectedRepos.includes(r.id))
-      : allActive;
+    selectedRepos.length > 0 ? allActive.filter((r) => selectedRepos.includes(r.id)) : allActive;
   const manifestSection = repos
     .map((r) => `- id: ${r.id}\n  side: ${r.side}\n  description: ${r.description.trim()}`)
     .join('\n');

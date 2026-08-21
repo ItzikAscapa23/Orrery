@@ -77,7 +77,15 @@ describe('GET /features/:id/cost', () => {
   });
 
   it('computes correct cost to the cent for a fully-shaped event', async () => {
-    await seedRate('anthropic', 'claude-sonnet-4-6', new Date('2025-10-01T00:00:00Z'), 3, 15, 3.75, 0.3);
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-4-6',
+      new Date('2025-10-01T00:00:00Z'),
+      3,
+      15,
+      3.75,
+      0.3,
+    );
     await appendEvent(getPrisma(), featureId, {
       type: 'usage.recorded',
       agent: 'spec',
@@ -104,7 +112,15 @@ describe('GET /features/:id/cost', () => {
   });
 
   it('counts event as partial when cache tokens are absent, still contributes to total', async () => {
-    await seedRate('anthropic', 'claude-sonnet-4-6', new Date('2025-10-01T00:00:00Z'), 3, 15, 3.75, 0.3);
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-4-6',
+      new Date('2025-10-01T00:00:00Z'),
+      3,
+      15,
+      3.75,
+      0.3,
+    );
     await appendEvent(getPrisma(), featureId, {
       type: 'usage.recorded',
       agent: 'spec',
@@ -184,8 +200,24 @@ describe('GET /features/:id/cost', () => {
   });
 
   it('picks the 2026-09-01 rate ($3/$15) for an event on 2026-09-15', async () => {
-    await seedRate('anthropic', 'claude-sonnet-5', new Date('2025-10-01T00:00:00Z'), 2, 10, 2.5, 0.2);
-    await seedRate('anthropic', 'claude-sonnet-5', new Date('2026-09-01T00:00:00Z'), 3, 15, 3.75, 0.3);
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-5',
+      new Date('2025-10-01T00:00:00Z'),
+      2,
+      10,
+      2.5,
+      0.2,
+    );
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-5',
+      new Date('2026-09-01T00:00:00Z'),
+      3,
+      15,
+      3.75,
+      0.3,
+    );
 
     // appendEvent doesn't expose createdAt; insert directly.
     await getPrisma().$executeRaw`
@@ -217,8 +249,24 @@ describe('GET /features/:id/cost', () => {
   });
 
   it('picks the 2025-10-01 rate ($2/$10) for an event on 2026-08-15', async () => {
-    await seedRate('anthropic', 'claude-sonnet-5', new Date('2025-10-01T00:00:00Z'), 2, 10, 2.5, 0.2);
-    await seedRate('anthropic', 'claude-sonnet-5', new Date('2026-09-01T00:00:00Z'), 3, 15, 3.75, 0.3);
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-5',
+      new Date('2025-10-01T00:00:00Z'),
+      2,
+      10,
+      2.5,
+      0.2,
+    );
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-5',
+      new Date('2026-09-01T00:00:00Z'),
+      3,
+      15,
+      3.75,
+      0.3,
+    );
 
     await getPrisma().$executeRaw`
       INSERT INTO events (feature_id, seq, type, agent, payload, created_at)
@@ -249,7 +297,15 @@ describe('GET /features/:id/cost', () => {
   });
 
   it('returns rate_unknown for an event before the earliest rate row', async () => {
-    await seedRate('anthropic', 'claude-sonnet-4-6', new Date('2025-10-01T00:00:00Z'), 3, 15, 3.75, 0.3);
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-4-6',
+      new Date('2025-10-01T00:00:00Z'),
+      3,
+      15,
+      3.75,
+      0.3,
+    );
 
     await getPrisma().$executeRaw`
       INSERT INTO events (feature_id, seq, type, agent, payload, created_at)
@@ -278,7 +334,15 @@ describe('GET /features/:id/cost', () => {
   });
 
   it('by_agent rows have in_tokens/out_tokens/cost_usd/elapsed_ms and sum to total_usd', async () => {
-    await seedRate('anthropic', 'claude-sonnet-4-6', new Date('2025-10-01T00:00:00Z'), 3, 15, 3.75, 0.3);
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-4-6',
+      new Date('2025-10-01T00:00:00Z'),
+      3,
+      15,
+      3.75,
+      0.3,
+    );
     await appendEvent(getPrisma(), featureId, {
       type: 'usage.recorded',
       agent: 'spec',
@@ -317,7 +381,15 @@ describe('GET /features/:id/cost', () => {
   });
 
   it('single-event agent has elapsed_ms === 0, not null', async () => {
-    await seedRate('anthropic', 'claude-sonnet-4-6', new Date('2025-10-01T00:00:00Z'), 3, 15, 3.75, 0.3);
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-4-6',
+      new Date('2025-10-01T00:00:00Z'),
+      3,
+      15,
+      3.75,
+      0.3,
+    );
     await appendEvent(getPrisma(), featureId, {
       type: 'usage.recorded',
       agent: 'spec',
@@ -380,7 +452,15 @@ describe('GET /features/:id/cost', () => {
     // Scenario: feature ran job A (5 min), was parked overnight (8h), then ran job B (3 min).
     // Current (broken) code: elapsed = 08:00 to next-day 16:03 = 480+ min.
     // Correct (new) code: elapsed = 5 min + 3 min = 8 min = 480000 ms.
-    await seedRate('anthropic', 'claude-sonnet-4-6', new Date('2025-10-01T00:00:00Z'), 3, 15, 3.75, 0.3);
+    await seedRate(
+      'anthropic',
+      'claude-sonnet-4-6',
+      new Date('2025-10-01T00:00:00Z'),
+      3,
+      15,
+      3.75,
+      0.3,
+    );
 
     const jobA = 'job-span-A';
     const jobB = 'job-span-B';

@@ -16,7 +16,11 @@ const { mockRunTestPlannerAgent, mockCommitArtifact, mockReadArtifact, MockArtif
       mockRunTestPlannerAgent: vi.fn(),
       mockCommitArtifact: vi
         .fn()
-        .mockReturnValue({ path: 'features/t/test-plan.md', commit: 'def', message: 'test-plan: t test-plan.md' }),
+        .mockReturnValue({
+          path: 'features/t/test-plan.md',
+          commit: 'def',
+          message: 'test-plan: t test-plan.md',
+        }),
       mockReadArtifact: vi.fn().mockReturnValue('# Spec'),
       MockArtifactCommitError,
     };
@@ -54,7 +58,11 @@ beforeEach(async () => {
   mockRunTestPlannerAgent.mockResolvedValue({
     coverage: [
       { taskId: 'task-1', covered: true, behaviour: 'POST /items returns 201 with item' },
-      { taskId: 'task-2', covered: false, skipReason: 'Database migration only — no public surface' },
+      {
+        taskId: 'task-2',
+        covered: false,
+        skipReason: 'Database migration only — no public surface',
+      },
     ],
   });
 });
@@ -154,7 +162,11 @@ describe('runTestPlannerJob', () => {
       expect.any(String), // spec
       expect.any(String), // contract
       expect.arrayContaining([
-        expect.objectContaining({ id: 'task-1', title: 'Add items endpoint', specRefs: ['API endpoints'] }),
+        expect.objectContaining({
+          id: 'task-1',
+          title: 'Add items endpoint',
+          specRefs: ['API endpoints'],
+        }),
       ]),
       expect.any(Function), // usage callback
     );

@@ -354,9 +354,7 @@ describe('runReviewJob — pre-flight Bedrock unreachable → parks in CODE_REVI
     // phase.changed from createFeature (DRAFTING_SPEC) must NOT be counted —
     // only transitions out of CODE_REVIEW matter here
     const codeReviewExits = events.filter(
-      (e) =>
-        e.type === 'phase.changed' &&
-        (e.payload as { from: string }).from === 'CODE_REVIEW',
+      (e) => e.type === 'phase.changed' && (e.payload as { from: string }).from === 'CODE_REVIEW',
     );
     expect(codeReviewExits).toHaveLength(0);
 
@@ -376,7 +374,9 @@ describe('runReviewJob — pre-flight Bedrock unreachable → parks in CODE_REVI
 describe('runReviewJob — Bedrock 403 in catch → parks in CODE_REVIEW', () => {
   it('stays in CODE_REVIEW and emits no phase.changed or review.skipped', async () => {
     mockRunReviewAgent.mockRejectedValue(
-      new Error('Request failed with status code 403: security token included in the request is expired'),
+      new Error(
+        'Request failed with status code 403: security token included in the request is expired',
+      ),
     );
 
     await runReviewJob(featureId);
@@ -384,9 +384,7 @@ describe('runReviewJob — Bedrock 403 in catch → parks in CODE_REVIEW', () =>
     const events = await getEvents();
 
     const codeReviewExits = events.filter(
-      (e) =>
-        e.type === 'phase.changed' &&
-        (e.payload as { from: string }).from === 'CODE_REVIEW',
+      (e) => e.type === 'phase.changed' && (e.payload as { from: string }).from === 'CODE_REVIEW',
     );
     expect(codeReviewExits).toHaveLength(0);
 

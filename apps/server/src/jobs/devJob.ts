@@ -837,7 +837,9 @@ export async function runDevJob(
       severity: 'info',
       text: '◦ verifying tests before host-side commit',
     });
-    const testResult = await container.exec(detectJsonCommand(repoClaudeMd, repoEntry.probe_command));
+    const testResult = await container.exec(
+      detectJsonCommand(repoClaudeMd, repoEntry.probe_command),
+    );
     if (testResult.exitCode !== 0) {
       const verifyCatResult = await container.exec(`cat ${TEST_REPORT_FILE}`);
       const verifyParsed = parseTestOutput(verifyCatResult.stdout, testResult.stderr);
@@ -851,7 +853,9 @@ export async function runDevJob(
 
     const statusOut = git(worktreeInfo.worktreePath, 'status', '--porcelain').trim();
     if (statusOut === '') {
-      const noopTestResult = await container.exec(detectJsonCommand(repoClaudeMd, repoEntry.probe_command));
+      const noopTestResult = await container.exec(
+        detectJsonCommand(repoClaudeMd, repoEntry.probe_command),
+      );
       if (noopTestResult.exitCode === 0) {
         return completeTask(featureId, taskId, task, worktreeInfo, undefined);
       }

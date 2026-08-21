@@ -15,15 +15,15 @@ export function CreateFeatureForm({ onCreate, loadRepos }: CreateFeatureFormProp
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void loadRepos().then(setAvailableRepos).catch(() => {
-      // non-fatal: form still renders without the repo list
-    });
+    void loadRepos()
+      .then(setAvailableRepos)
+      .catch(() => {
+        // non-fatal: form still renders without the repo list
+      });
   }, [loadRepos]);
 
   function toggleRepo(id: string) {
-    setSelectedRepos((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id],
-    );
+    setSelectedRepos((prev) => (prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -55,7 +55,8 @@ export function CreateFeatureForm({ onCreate, loadRepos }: CreateFeatureFormProp
     fontFamily: 'var(--font-ui)',
   };
 
-  const isSubmitDisabled = loading || !name.trim() || !requirement.trim() || selectedRepos.length === 0;
+  const isSubmitDisabled =
+    loading || !name.trim() || !requirement.trim() || selectedRepos.length === 0;
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)} style={{ padding: '16px' }}>

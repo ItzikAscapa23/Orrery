@@ -26,7 +26,7 @@ export async function checkSpendGuard(
       AND payload->>'task_id' = ${taskId}
   `;
 
-  const turns    = Number(result[0]?.turns    ?? 0);
+  const turns = Number(result[0]?.turns ?? 0);
   const jobCount = Number(result[0]?.job_count ?? 0);
 
   if (turns < threshold) return { parked: false, remainingBudget: threshold - turns };

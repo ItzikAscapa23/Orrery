@@ -209,16 +209,12 @@ describe('container — distinct error messages', () => {
 
   it('allows 2>&1 on npx jest invocation', async () => {
     const c = startContainer('/tmp/fake');
-    await expect(
-      c.exec('npx jest test/foo.test.js --no-coverage 2>&1'),
-    ).resolves.not.toThrow();
+    await expect(c.exec('npx jest test/foo.test.js --no-coverage 2>&1')).resolves.not.toThrow();
   });
 
   it('allows 2>&1 on npm test with testPathPattern', async () => {
     const c = startContainer('/tmp/fake');
-    await expect(
-      c.exec('npm test -- --testPathPattern="src" 2>&1'),
-    ).resolves.not.toThrow();
+    await expect(c.exec('npm test -- --testPathPattern="src" 2>&1')).resolves.not.toThrow();
   });
 
   it('rejects residual > after stripping 2>&1: "a 2>&1 > b"', async () => {
@@ -409,7 +405,9 @@ describe('runBootstrapInstall', () => {
   it('throws when the command exits non-zero', async () => {
     mockExecAsync.mockRejectedValueOnce(new Error('bootstrap script failed'));
 
-    await expect(runBootstrapInstall(tmpDir, './fail.sh', '')).rejects.toThrow('bootstrap script failed');
+    await expect(runBootstrapInstall(tmpDir, './fail.sh', '')).rejects.toThrow(
+      'bootstrap script failed',
+    );
   });
 });
 

@@ -111,7 +111,15 @@ describe('runSpecAgentTurn', () => {
     const onToken = vi.fn();
     const onSpecProposed = vi.fn().mockResolvedValue(undefined);
 
-    await runSpecAgentTurn('feat-2', 'My Feature', 'Some requirement', 'test-slug', [], onToken, onSpecProposed);
+    await runSpecAgentTurn(
+      'feat-2',
+      'My Feature',
+      'Some requirement',
+      'test-slug',
+      [],
+      onToken,
+      onSpecProposed,
+    );
 
     expect(onSpecProposed).toHaveBeenCalledWith(specMarkdown);
   });

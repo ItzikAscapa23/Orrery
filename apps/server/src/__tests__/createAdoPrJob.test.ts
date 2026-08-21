@@ -36,7 +36,6 @@ vi.mock('../lib/artifacts.js', () => ({
   ArtifactCommitError: class ArtifactCommitError extends Error {},
 }));
 
-
 import { getPrisma, disconnectPrisma } from '../lib/prisma.js';
 import { createFeature } from '../lib/features.js';
 import { appendEvent } from '../lib/events.js';

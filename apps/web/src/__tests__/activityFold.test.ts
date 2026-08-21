@@ -222,8 +222,8 @@ describe('foldActivityEvents', () => {
 
     const result = foldActivityEvents(events, [BASE_TASK]);
     const task = result[0]?.kind === 'task' ? result[0].task : undefined;
-    expect(task?.turns).toBe(2);       // dev turns only
-    expect(task?.testTurns).toBe(3);   // test-agent turns
+    expect(task?.turns).toBe(2); // dev turns only
+    expect(task?.testTurns).toBe(3); // test-agent turns
     // Each job carries its own turn count and agent name
     const testJob = task?.jobs.find((j) => j.jobId === 'job-test-1');
     const devJob = task?.jobs.find((j) => j.jobId === 'job-dev-1');
@@ -418,7 +418,9 @@ describe('foldActivityEvents — feature-level agent sections', () => {
     ];
     const result = foldActivityEvents(events, []);
     // Must produce exactly ONE section for 'aws', not two.
-    const awsSections = result.filter((s) => s.kind === 'feature-agent' && s.section.agent === 'aws');
+    const awsSections = result.filter(
+      (s) => s.kind === 'feature-agent' && s.section.agent === 'aws',
+    );
     expect(awsSections).toHaveLength(1);
     if (awsSections[0]?.kind === 'feature-agent') {
       expect(awsSections[0].section.turns).toBe(1);

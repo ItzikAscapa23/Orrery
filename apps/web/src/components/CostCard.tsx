@@ -135,19 +135,38 @@ export function CostCard({ featureId, usageEventCount }: Props) {
                     <th style={{ ...thStyle, textAlign: 'right', minWidth: 52 }}>CACHE W</th>
                     <th style={{ ...thStyle, textAlign: 'right', minWidth: 44 }}>OUT</th>
                     <th style={{ ...thStyle, textAlign: 'right', minWidth: 64 }}>EST. COST</th>
-                    <th style={{ ...thStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>ELAPSED*</th>
+                    <th style={{ ...thStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      ELAPSED*
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.by_agent.map((row) => (
                     <tr key={row.agent} style={{ color: 'var(--text-primary)' }}>
                       <td style={tdStyle}>{row.agent}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>{row.in_tokens.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>{row.cache_read_tokens.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>{row.cache_write_tokens.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>{row.out_tokens.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>${row.cost_usd.toFixed(6)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
+                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {row.in_tokens.toLocaleString()}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {row.cache_read_tokens.toLocaleString()}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {row.cache_write_tokens.toLocaleString()}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {row.out_tokens.toLocaleString()}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        ${row.cost_usd.toFixed(6)}
+                      </td>
+                      <td
+                        style={{
+                          ...tdStyle,
+                          textAlign: 'right',
+                          whiteSpace: 'nowrap',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
                         {formatElapsed(row.elapsed_ms)}
                       </td>
                     </tr>
@@ -155,23 +174,88 @@ export function CostCard({ featureId, usageEventCount }: Props) {
                 </tbody>
                 <tfoot>
                   <tr style={{ color: 'var(--text-primary)' }}>
-                    <td style={{ ...tdStyle, fontWeight: 700, borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>Total</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        fontWeight: 700,
+                        borderTop: '1px solid var(--border-subtle)',
+                        paddingTop: 6,
+                      }}
+                    >
+                      Total
+                    </td>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 700,
+                        borderTop: '1px solid var(--border-subtle)',
+                        paddingTop: 6,
+                      }}
+                    >
                       {data.by_agent.reduce((s, r) => s + r.in_tokens, 0).toLocaleString()}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 700,
+                        borderTop: '1px solid var(--border-subtle)',
+                        paddingTop: 6,
+                      }}
+                    >
                       {data.by_agent.reduce((s, r) => s + r.cache_read_tokens, 0).toLocaleString()}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 700,
+                        borderTop: '1px solid var(--border-subtle)',
+                        paddingTop: 6,
+                      }}
+                    >
                       {data.by_agent.reduce((s, r) => s + r.cache_write_tokens, 0).toLocaleString()}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 700,
+                        borderTop: '1px solid var(--border-subtle)',
+                        paddingTop: 6,
+                      }}
+                    >
                       {data.by_agent.reduce((s, r) => s + r.out_tokens, 0).toLocaleString()}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 700,
+                        borderTop: '1px solid var(--border-subtle)',
+                        paddingTop: 6,
+                      }}
+                    >
                       ${data.total_usd.toFixed(6)}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>—</td>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        whiteSpace: 'nowrap',
+                        color: 'var(--text-secondary)',
+                        borderTop: '1px solid var(--border-subtle)',
+                        paddingTop: 6,
+                      }}
+                    >
+                      —
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -216,7 +300,9 @@ function GapStatement({ data }: { data: CostResult }) {
 
   const unpriced = data.unpriceable_events + data.rate_unknown_events;
   if (unpriced > 0) {
-    lines.push(`${unpriced} event${unpriced === 1 ? '' : 's'} could not be priced and are excluded from the total.`);
+    lines.push(
+      `${unpriced} event${unpriced === 1 ? '' : 's'} could not be priced and are excluded from the total.`,
+    );
   }
 
   if (data.partial_events > 0) {

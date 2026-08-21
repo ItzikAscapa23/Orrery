@@ -102,5 +102,14 @@ export function useFeature(): UseFeatureResult {
     [refreshFeatures],
   );
 
-  return { features, selectedId, selectFeature, createFeature, loadRepos, refreshFeatures, loading, error };
+  return {
+    features,
+    selectedId,
+    selectFeature,
+    createFeature,
+    loadRepos,
+    refreshFeatures,
+    loading,
+    error,
+  };
 }

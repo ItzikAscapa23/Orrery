@@ -593,9 +593,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     text: `◦ prompt size: ${testSections.total} chars (claudeMd=${testSections.claudeMd}, contract=${testSections.contract}, spec=${testSections.spec}, orientation=${testSections.orientation}, rules=${testSections.rules})`,
   });
 
-  const installDesc = repoEntry.bootstrap
-    ? 'bootstrap'
-    : `${installStrategy}, linux/arm64/musl`;
+  const installDesc = repoEntry.bootstrap ? 'bootstrap' : `${installStrategy}, linux/arm64/musl`;
   await appendEvent(getPrisma(), featureId, {
     type: 'agent.log',
     agent: 'orchestrator',
@@ -753,7 +751,11 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
       // pending/todo tests being mapped to 'failed' in parseTestOutput.
       // Likely cause: jest workers OOM-killed under oversubscription → in-flight
       // tests reported as 'pending' rather than 'failed' in assertionResults.
-      if (parsed.failed !== null && parsed.failed !== undefined && findings.length !== parsed.failed) {
+      if (
+        parsed.failed !== null &&
+        parsed.failed !== undefined &&
+        findings.length !== parsed.failed
+      ) {
         await appendEvent(getPrisma(), featureId, {
           type: 'agent.log',
           agent: 'orchestrator',

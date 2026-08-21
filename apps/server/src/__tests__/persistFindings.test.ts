@@ -60,7 +60,9 @@ describe('persistFindings', () => {
 
     await persistFindings(FID, SPEC_REV, [f1], 'review');
 
-    const rows = await getPrisma().finding.findMany({ where: { featureId: FID, specRev: SPEC_REV } });
+    const rows = await getPrisma().finding.findMany({
+      where: { featureId: FID, specRev: SPEC_REV },
+    });
     expect(rows.map((r) => r.id)).toEqual(['f1']);
 
     // Gate check: no unresolved blockers at specRev 0 means approve passes
@@ -80,7 +82,9 @@ describe('persistFindings', () => {
 
     await persistFindings(FID, SPEC_REV, [], 'review');
 
-    const rows = await getPrisma().finding.findMany({ where: { featureId: FID, specRev: SPEC_REV } });
+    const rows = await getPrisma().finding.findMany({
+      where: { featureId: FID, specRev: SPEC_REV },
+    });
     expect(rows).toHaveLength(0);
   });
 
@@ -96,7 +100,11 @@ describe('persistFindings', () => {
 
     expect(mockAppendEvent).toHaveBeenCalledOnce();
     // appendEvent(prisma, featureId, payload) — payload is the third arg
-    const [, , payload] = mockAppendEvent.mock.calls[0] as [unknown, unknown, Record<string, unknown>];
+    const [, , payload] = mockAppendEvent.mock.calls[0] as [
+      unknown,
+      unknown,
+      Record<string, unknown>,
+    ];
     expect(payload.type).toBe('agent.log');
     expect(payload.severity).toBe('muted');
     expect(String(payload.text)).toContain('f1');

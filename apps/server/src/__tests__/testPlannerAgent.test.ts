@@ -31,9 +31,11 @@ const TASKS: TaskSummary[] = [
 describe('testPlannerAgent — prompt context', () => {
   function setupMockAndRun(tasks = TASKS) {
     mockCreateMessageStream.mockImplementationOnce(() =>
-      makeMockStream(JSON.stringify({
-        coverage: tasks.map((t) => ({ taskId: t.id, covered: true, behaviour: 'test' })),
-      })),
+      makeMockStream(
+        JSON.stringify({
+          coverage: tasks.map((t) => ({ taskId: t.id, covered: true, behaviour: 'test' })),
+        }),
+      ),
     );
     return runTestPlannerAgent('feat-1', '# Spec', 'openapi: 3.0.0', tasks);
   }
@@ -58,7 +60,9 @@ describe('testPlannerAgent — prompt context', () => {
 
   it('user content includes task IDs, titles, and specRefs', async () => {
     await setupMockAndRun();
-    const [streamArgs] = mockCreateMessageStream.mock.calls[0] as [{ messages: Array<{ content: string }> }];
+    const [streamArgs] = mockCreateMessageStream.mock.calls[0] as [
+      { messages: Array<{ content: string }> },
+    ];
     const userContent = streamArgs.messages[0]!.content as string;
     expect(userContent).toContain('task-1');
     expect(userContent).toContain('Add POST /items endpoint');
@@ -66,16 +70,32 @@ describe('testPlannerAgent — prompt context', () => {
   });
 
   it('user content does NOT include task descriptions', async () => {
-    const tasksWithDescriptions = TASKS.map((t) => ({ ...t, description: 'This is the description' }));
+    const tasksWithDescriptions = TASKS.map((t) => ({
+      ...t,
+      description: 'This is the description',
+    }));
     mockCreateMessageStream.mockImplementationOnce(() =>
-      makeMockStream(JSON.stringify({
-        coverage: tasksWithDescriptions.map((t) => ({ taskId: t.id, covered: true, behaviour: 'test' })),
-      })),
+      makeMockStream(
+        JSON.stringify({
+          coverage: tasksWithDescriptions.map((t) => ({
+            taskId: t.id,
+            covered: true,
+            behaviour: 'test',
+          })),
+        }),
+      ),
     );
     // runTestPlannerAgent receives TaskSummary[] — no description field on that type
-    await runTestPlannerAgent('feat-1', '# Spec', 'openapi: 3.0.0', tasksWithDescriptions as TaskSummary[]);
+    await runTestPlannerAgent(
+      'feat-1',
+      '# Spec',
+      'openapi: 3.0.0',
+      tasksWithDescriptions as TaskSummary[],
+    );
 
-    const [streamArgs] = mockCreateMessageStream.mock.calls[0] as [{ messages: Array<{ content: string }> }];
+    const [streamArgs] = mockCreateMessageStream.mock.calls[0] as [
+      { messages: Array<{ content: string }> },
+    ];
     const userContent = streamArgs.messages[0]!.content as string;
     expect(userContent).not.toContain('This is the description');
   });
@@ -127,19 +147,49 @@ describe('testPlannerAgent — prompt context', () => {
   it('a chain of tasks with one observable behaviour yields one covered task and named skip reasons', async () => {
     const chainTasks: TaskSummary[] = [
       { id: 'task-a', title: 'Implement parallel DCS call orchestration', specRefs: ['S1'] },
-      { id: 'task-b', title: 'Implement maxStrongIdentificationCreditLimit computation', specRefs: ['S2'] },
+      {
+        id: 'task-b',
+        title: 'Implement maxStrongIdentificationCreditLimit computation',
+        specRefs: ['S2'],
+      },
       { id: 'task-c', title: 'Implement club items merge logic', specRefs: ['S3'] },
-      { id: 'task-d', title: 'Integrate merge and computation into orderCardClubsList resolver', specRefs: ['S4'] },
+      {
+        id: 'task-d',
+        title: 'Integrate merge and computation into orderCardClubsList resolver',
+        specRefs: ['S4'],
+      },
     ];
     const mockOutput = {
       coverage: [
-        { taskId: 'task-a', covered: false, skipReason: 'Covered by acceptance test for task-d — Integrate merge and computation into orderCardClubsList resolver' },
-        { taskId: 'task-b', covered: false, skipReason: 'Covered by acceptance test for task-d — Integrate merge and computation into orderCardClubsList resolver' },
-        { taskId: 'task-c', covered: false, skipReason: 'Covered by acceptance test for task-d — Integrate merge and computation into orderCardClubsList resolver' },
-        { taskId: 'task-d', covered: true, behaviour: 'orderCardClubsList GraphQL resolver returns merged items with credit limit applied' },
+        {
+          taskId: 'task-a',
+          covered: false,
+          skipReason:
+            'Covered by acceptance test for task-d — Integrate merge and computation into orderCardClubsList resolver',
+        },
+        {
+          taskId: 'task-b',
+          covered: false,
+          skipReason:
+            'Covered by acceptance test for task-d — Integrate merge and computation into orderCardClubsList resolver',
+        },
+        {
+          taskId: 'task-c',
+          covered: false,
+          skipReason:
+            'Covered by acceptance test for task-d — Integrate merge and computation into orderCardClubsList resolver',
+        },
+        {
+          taskId: 'task-d',
+          covered: true,
+          behaviour:
+            'orderCardClubsList GraphQL resolver returns merged items with credit limit applied',
+        },
       ],
     };
-    mockCreateMessageStream.mockImplementationOnce(() => makeMockStream(JSON.stringify(mockOutput)));
+    mockCreateMessageStream.mockImplementationOnce(() =>
+      makeMockStream(JSON.stringify(mockOutput)),
+    );
     const result = await runTestPlannerAgent('feat-chain', '# Spec', 'openapi: 3.0.0', chainTasks);
 
     expect(result.coverage).toHaveLength(4);
@@ -161,10 +211,16 @@ describe('testPlannerAgent — prompt context', () => {
     const mockOutput = {
       coverage: [
         { taskId: 'task-e', covered: true, behaviour: 'GET /clubs returns list of clubs' },
-        { taskId: 'task-f', covered: true, behaviour: 'POST /clubs creates a new club and returns 201' },
+        {
+          taskId: 'task-f',
+          covered: true,
+          behaviour: 'POST /clubs creates a new club and returns 201',
+        },
       ],
     };
-    mockCreateMessageStream.mockImplementationOnce(() => makeMockStream(JSON.stringify(mockOutput)));
+    mockCreateMessageStream.mockImplementationOnce(() =>
+      makeMockStream(JSON.stringify(mockOutput)),
+    );
     const result = await runTestPlannerAgent('feat-two', '# Spec', 'openapi: 3.0.0', twoTasks);
 
     expect(result.coverage).toHaveLength(2);
@@ -182,7 +238,9 @@ describe('testPlannerAgent — prompt context', () => {
         { taskId: 'task-g', covered: true, behaviour: 'GET /health returns 200 with status ok' },
       ],
     };
-    mockCreateMessageStream.mockImplementationOnce(() => makeMockStream(JSON.stringify(mockOutput)));
+    mockCreateMessageStream.mockImplementationOnce(() =>
+      makeMockStream(JSON.stringify(mockOutput)),
+    );
     const result = await runTestPlannerAgent('feat-single', '# Spec', 'openapi: 3.0.0', singleTask);
 
     expect(result.coverage).toHaveLength(1);

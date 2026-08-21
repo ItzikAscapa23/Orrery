@@ -231,7 +231,13 @@ export function foldActivityEvents(events: EventRow[], tasks: TaskLike[]): Activ
   const currentSectionIdByAgent = new Map<string, string>();
   const sectionData = new Map<
     string,
-    { rows: ActivityRow[]; usages: UsageEntry[]; firstSeq: number; agent: string; jobId: string | null }
+    {
+      rows: ActivityRow[];
+      usages: UsageEntry[];
+      firstSeq: number;
+      agent: string;
+      jobId: string | null;
+    }
   >();
   const sectionOrder: string[] = [];
 
@@ -308,7 +314,8 @@ export function foldActivityEvents(events: EventRow[], tasks: TaskLike[]): Activ
     const d = sectionData.get(sectionId)!;
     const turns = d.usages.length;
     const costUsd = d.usages.reduce(
-      (acc, u) => acc + computeCostUsd(u.model, u.inputTokens, u.outputTokens, u.cacheCreate, u.cacheRead),
+      (acc, u) =>
+        acc + computeCostUsd(u.model, u.inputTokens, u.outputTokens, u.cacheCreate, u.cacheRead),
       0,
     );
     const lastUsageSeq = d.usages.length > 0 ? Math.max(...d.usages.map((u) => u.seq)) : -1;

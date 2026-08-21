@@ -76,7 +76,11 @@ vi.mock('../agents/devAgent.js', () => ({
 
 vi.mock('node:child_process', async (importActual) => {
   const actual = await importActual<typeof import('node:child_process')>();
-  return { ...actual, execFileSync: vi.fn().mockReturnValue(''), execSync: vi.fn().mockReturnValue('') };
+  return {
+    ...actual,
+    execFileSync: vi.fn().mockReturnValue(''),
+    execSync: vi.fn().mockReturnValue(''),
+  };
 });
 
 vi.mock('../lib/worktree.js', () => ({

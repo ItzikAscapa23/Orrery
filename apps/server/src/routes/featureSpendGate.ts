@@ -30,9 +30,7 @@ export async function featureSpendGateRoutes(app: FastifyInstance): Promise<void
         return reply.status(409).send({ error: 'Task is not parked' });
       }
       if (task.parkReason !== 'spend_limit') {
-        return reply
-          .status(409)
-          .send({ error: 'Task was not parked by the spend guard' });
+        return reply.status(409).send({ error: 'Task was not parked by the spend guard' });
       }
 
       await getPrisma().$transaction(async (tx) => {

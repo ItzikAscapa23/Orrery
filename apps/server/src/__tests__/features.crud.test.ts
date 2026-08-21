@@ -16,8 +16,22 @@ import { createApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
 const ACTIVE_REPOS = [
-  { id: 'demo-server', side: 'server', active: true, url: '', default_branch: 'main', description: 'Demo server' },
-  { id: 'demo-client', side: 'client', active: true, url: '', default_branch: 'main', description: 'Demo client' },
+  {
+    id: 'demo-server',
+    side: 'server',
+    active: true,
+    url: '',
+    default_branch: 'main',
+    description: 'Demo server',
+  },
+  {
+    id: 'demo-client',
+    side: 'client',
+    active: true,
+    url: '',
+    default_branch: 'main',
+    description: 'Demo client',
+  },
 ];
 
 let app: FastifyInstance;
@@ -38,7 +52,11 @@ describe('POST /features', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/features',
-      payload: { name: 'User Login', requirement: 'Allow users to log in with email', repos: ['demo-server'] },
+      payload: {
+        name: 'User Login',
+        requirement: 'Allow users to log in with email',
+        repos: ['demo-server'],
+      },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json<Record<string, unknown>>();

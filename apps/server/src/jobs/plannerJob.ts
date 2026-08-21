@@ -139,11 +139,7 @@ export async function runPlannerJob(featureId: string, jobId?: string): Promise<
         feature.name,
         feature.proposedSpec,
         async (usage) => {
-          await appendEvent(
-            getPrisma(),
-            featureId,
-            usageEventPayload(usage, 'planner', { jobId }),
-          );
+          await appendEvent(getPrisma(), featureId, usageEventPayload(usage, 'planner', { jobId }));
         },
         revisionContext,
         feature.repos,

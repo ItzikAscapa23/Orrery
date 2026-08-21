@@ -61,7 +61,8 @@ export async function featureRetryBounceRoutes(app: FastifyInstance): Promise<vo
 
     if (created.length === 0) {
       return reply.status(422).send({
-        error: 'No blocker findings found in the latest review.findings event — nothing to dispatch',
+        error:
+          'No blocker findings found in the latest review.findings event — nothing to dispatch',
       });
     }
 

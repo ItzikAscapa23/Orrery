@@ -80,12 +80,12 @@ export interface TaskAcceptanceGateState {
 
 /** Spend guard gate — opened when a task's cumulative turns exceed the threshold */
 export interface SpendGateState {
-  taskId:    string;
+  taskId: string;
   taskTitle: string;
-  turns:     number;
-  jobCount:  number;
+  turns: number;
+  jobCount: number;
   threshold: number;
-  summary:   string;
+  summary: string;
 }
 
 /** Amendment gate state derived from contract.amendment.proposed event */

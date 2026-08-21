@@ -88,18 +88,30 @@ beforeEach(async () => {
 
 describe('POST /features/:id/approve-test-plan', () => {
   it('returns 404 for nonexistent feature', async () => {
-    const res = await app.inject({ method: 'POST', url: '/features/nonexistent/approve-test-plan' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/features/nonexistent/approve-test-plan',
+    });
     expect(res.statusCode).toBe(404);
   });
 
   it('returns 409 when feature is not AWAITING_TEST_PLAN_APPROVAL', async () => {
-    await getPrisma().feature.update({ where: { id: featureId }, data: { status: 'IMPLEMENTING' } });
-    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve-test-plan` });
+    await getPrisma().feature.update({
+      where: { id: featureId },
+      data: { status: 'IMPLEMENTING' },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/features/${featureId}/approve-test-plan`,
+    });
     expect(res.statusCode).toBe(409);
   });
 
   it('transitions to IMPLEMENTING', async () => {
-    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve-test-plan` });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/features/${featureId}/approve-test-plan`,
+    });
     expect(res.statusCode).toBe(200);
     expect((res.json() as { status: string })['status']).toBe('IMPLEMENTING');
   });
@@ -117,7 +129,9 @@ describe('POST /features/:id/approve-test-plan', () => {
     const events = await getPrisma().event.findMany({ where: { featureId } });
     const resolved = events.find((e) => e.type === 'gate.resolved');
     expect(resolved).not.toBeUndefined();
-    expect((resolved!.payload as { gate: string; resolution: string }).gate).toBe('test_plan_approval');
+    expect((resolved!.payload as { gate: string; resolution: string }).gate).toBe(
+      'test_plan_approval',
+    );
     expect((resolved!.payload as { resolution: string }).resolution).toBe('approved');
     expect(events.some((e) => e.type === 'phase.changed')).toBe(true);
   });
@@ -129,7 +143,9 @@ describe('POST /features/:id/approve-test-plan', () => {
     await app.inject({ method: 'POST', url: `/features/${featureId}/approve-test-plan` });
     // enqueueJob should have been called for the covered task (server-test-task)
     const calls = mockEnqueueJob.mock.calls;
-    const testTaskCall = calls.find((c: unknown[]) => c[1] === 'server-test-task' || c[1] === 'server-dev');
+    const testTaskCall = calls.find(
+      (c: unknown[]) => c[1] === 'server-test-task' || c[1] === 'server-dev',
+    );
     expect(testTaskCall).not.toBeUndefined();
   });
 });
@@ -170,7 +186,10 @@ describe('POST /features/:id/request-test-plan-changes', () => {
 describe('POST /features/:id/tasks/:taskId/override-acceptance', () => {
   beforeEach(async () => {
     // Set feature to IMPLEMENTING and task to parked
-    await getPrisma().feature.update({ where: { id: featureId }, data: { status: 'IMPLEMENTING' } });
+    await getPrisma().feature.update({
+      where: { id: featureId },
+      data: { status: 'IMPLEMENTING' },
+    });
     await getPrisma().task.update({ where: { id: taskId1 }, data: { status: 'parked' } });
   });
 
@@ -199,7 +218,9 @@ describe('POST /features/:id/tasks/:taskId/override-acceptance', () => {
     });
     const events = await getPrisma().event.findMany({ where: { featureId } });
     const resolved = events.find(
-      (e) => e.type === 'gate.resolved' && (e.payload as { gate: string }).gate === 'task_acceptance_gate',
+      (e) =>
+        e.type === 'gate.resolved' &&
+        (e.payload as { gate: string }).gate === 'task_acceptance_gate',
     );
     expect(resolved).not.toBeUndefined();
     expect((resolved!.payload as { resolution: string }).resolution).toBe('override');
@@ -208,7 +229,10 @@ describe('POST /features/:id/tasks/:taskId/override-acceptance', () => {
 
 describe('POST /features/:id/tasks/:taskId/retry-acceptance', () => {
   beforeEach(async () => {
-    await getPrisma().feature.update({ where: { id: featureId }, data: { status: 'IMPLEMENTING' } });
+    await getPrisma().feature.update({
+      where: { id: featureId },
+      data: { status: 'IMPLEMENTING' },
+    });
     await getPrisma().task.update({
       where: { id: taskId1 },
       data: { status: 'parked', attemptCount: 2 },
@@ -232,7 +256,9 @@ describe('POST /features/:id/tasks/:taskId/retry-acceptance', () => {
     });
     const events = await getPrisma().event.findMany({ where: { featureId } });
     const resolved = events.find(
-      (e) => e.type === 'gate.resolved' && (e.payload as { gate: string }).gate === 'task_acceptance_gate',
+      (e) =>
+        e.type === 'gate.resolved' &&
+        (e.payload as { gate: string }).gate === 'task_acceptance_gate',
     );
     expect((resolved!.payload as { resolution: string }).resolution).toBe('retry');
   });

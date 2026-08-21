@@ -108,9 +108,7 @@ export function RequirementTab({
         >
           {featurePath}
         </span>
-        <span style={{ color: 'var(--text-muted)' }}>
-          {currentPhase ?? 'DRAFTING_SPEC'}
-        </span>
+        <span style={{ color: 'var(--text-muted)' }}>{currentPhase ?? 'DRAFTING_SPEC'}</span>
         <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>
           Created {new Date(createdAt).toLocaleDateString()}
         </span>

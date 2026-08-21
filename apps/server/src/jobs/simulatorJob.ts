@@ -93,7 +93,12 @@ async function emitPhaseActivity(featureId: string, phase: SimPhase): Promise<vo
       appendEvent(
         tx,
         featureId,
-        simulatedUsagePayload(agent, 'claude-sonnet-5', 800 + Math.floor(Math.random() * 400), 200 + Math.floor(Math.random() * 200)),
+        simulatedUsagePayload(
+          agent,
+          'claude-sonnet-5',
+          800 + Math.floor(Math.random() * 400),
+          200 + Math.floor(Math.random() * 200),
+        ),
       ),
     );
   }
@@ -196,8 +201,16 @@ export async function runSimulate(featureId: string): Promise<void> {
       update: {},
     });
 
-    await appendEvent(getPrisma(), featureId,
-      simulatedUsagePayload('aws', 'claude-sonnet-5', 600 + Math.floor(Math.random() * 300), 150 + Math.floor(Math.random() * 100)));
+    await appendEvent(
+      getPrisma(),
+      featureId,
+      simulatedUsagePayload(
+        'aws',
+        'claude-sonnet-5',
+        600 + Math.floor(Math.random() * 300),
+        150 + Math.floor(Math.random() * 100),
+      ),
+    );
     await appendEvent(getPrisma(), featureId, {
       type: 'review.findings',
       agent: 'aws',
@@ -456,8 +469,16 @@ export async function runSimulateResume(featureId: string): Promise<void> {
         appendEvent(tx, featureId, { type: 'agent.status', agent: 'review', status: 'done' }),
       );
       await getPrisma().$transaction((tx) =>
-        appendEvent(tx, featureId,
-          simulatedUsagePayload('review', 'claude-sonnet-5', 900 + Math.floor(Math.random() * 300), 250 + Math.floor(Math.random() * 150))),
+        appendEvent(
+          tx,
+          featureId,
+          simulatedUsagePayload(
+            'review',
+            'claude-sonnet-5',
+            900 + Math.floor(Math.random() * 300),
+            250 + Math.floor(Math.random() * 150),
+          ),
+        ),
       );
 
       // REVIEW_FAIL → IMPLEMENTING
@@ -559,8 +580,16 @@ export async function runSimulateResume(featureId: string): Promise<void> {
           appendEvent(tx, featureId, { type: 'agent.status', agent: 'review', status: 'done' }),
         );
         await getPrisma().$transaction((tx) =>
-          appendEvent(tx, featureId,
-            simulatedUsagePayload('review', 'claude-sonnet-5', 700 + Math.floor(Math.random() * 200), 150 + Math.floor(Math.random() * 100))),
+          appendEvent(
+            tx,
+            featureId,
+            simulatedUsagePayload(
+              'review',
+              'claude-sonnet-5',
+              700 + Math.floor(Math.random() * 200),
+              150 + Math.floor(Math.random() * 100),
+            ),
+          ),
         );
         const next = await advanceState(featureId, status, 'REVIEW_PASS');
         if (next) status = next;
@@ -599,8 +628,16 @@ export async function runSimulateResume(featureId: string): Promise<void> {
           appendEvent(tx, featureId, { type: 'agent.status', agent: 'review', status: 'waiting' }),
         );
         await getPrisma().$transaction((tx) =>
-          appendEvent(tx, featureId,
-            simulatedUsagePayload('review', 'claude-sonnet-5', 700 + Math.floor(Math.random() * 200), 150 + Math.floor(Math.random() * 100))),
+          appendEvent(
+            tx,
+            featureId,
+            simulatedUsagePayload(
+              'review',
+              'claude-sonnet-5',
+              700 + Math.floor(Math.random() * 200),
+              150 + Math.floor(Math.random() * 100),
+            ),
+          ),
         );
 
         // Persist the sim finding so the dismiss route can resolve it.
@@ -702,8 +739,16 @@ export async function runSimulateResume(featureId: string): Promise<void> {
         appendEvent(tx, featureId, { type: 'agent.status', agent: 'test', status: 'done' }),
       );
       await getPrisma().$transaction((tx) =>
-        appendEvent(tx, featureId,
-          simulatedUsagePayload('test', 'claude-sonnet-5', 600 + Math.floor(Math.random() * 200), 180 + Math.floor(Math.random() * 100))),
+        appendEvent(
+          tx,
+          featureId,
+          simulatedUsagePayload(
+            'test',
+            'claude-sonnet-5',
+            600 + Math.floor(Math.random() * 200),
+            180 + Math.floor(Math.random() * 100),
+          ),
+        ),
       );
 
       // TEST_FAIL → IMPLEMENTING
@@ -790,8 +835,16 @@ export async function runSimulateResume(featureId: string): Promise<void> {
           appendEvent(tx, featureId, { type: 'agent.status', agent: 'test', status: 'done' }),
         );
         await getPrisma().$transaction((tx) =>
-          appendEvent(tx, featureId,
-            simulatedUsagePayload('test', 'claude-sonnet-5', 500 + Math.floor(Math.random() * 150), 120 + Math.floor(Math.random() * 80))),
+          appendEvent(
+            tx,
+            featureId,
+            simulatedUsagePayload(
+              'test',
+              'claude-sonnet-5',
+              500 + Math.floor(Math.random() * 150),
+              120 + Math.floor(Math.random() * 80),
+            ),
+          ),
         );
         const next = await advanceState(featureId, status, 'TEST_PASS');
         if (next) status = next;
@@ -824,8 +877,16 @@ export async function runSimulateResume(featureId: string): Promise<void> {
           appendEvent(tx, featureId, { type: 'agent.status', agent: 'test', status: 'waiting' }),
         );
         await getPrisma().$transaction((tx) =>
-          appendEvent(tx, featureId,
-            simulatedUsagePayload('test', 'claude-sonnet-5', 500 + Math.floor(Math.random() * 150), 120 + Math.floor(Math.random() * 80))),
+          appendEvent(
+            tx,
+            featureId,
+            simulatedUsagePayload(
+              'test',
+              'claude-sonnet-5',
+              500 + Math.floor(Math.random() * 150),
+              120 + Math.floor(Math.random() * 80),
+            ),
+          ),
         );
 
         // Persist the sim finding so the dismiss route can resolve it.

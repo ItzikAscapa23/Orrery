@@ -12,9 +12,7 @@ export const TEST_COMMAND_PREFIXES: readonly string[] = [
 
 export function isTestCommand(command: string): boolean {
   const trimmed = command.trim();
-  return TEST_COMMAND_PREFIXES.some(
-    (p) => trimmed === p || trimmed.startsWith(p + ' '),
-  );
+  return TEST_COMMAND_PREFIXES.some((p) => trimmed === p || trimmed.startsWith(p + ' '));
 }
 
 // Strips the base command prefix and `--` separator from probe_command, then

@@ -417,7 +417,9 @@ export function ActivityTab({
       for (const job of sec.task.jobs) next.set(job.jobId, true);
       return next;
     });
-    document.getElementById(`task-${taskId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document
+      .getElementById(`task-${taskId}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return (

@@ -79,9 +79,13 @@ export function Inspector({
   const [expandedFailures, setExpandedFailures] = useState<Set<number>>(new Set());
 
   function toggleFailure(i: number) {
-    setExpandedFailures(prev => {
+    setExpandedFailures((prev) => {
       const next = new Set(prev);
-      if (next.has(i)) { next.delete(i); } else { next.add(i); }
+      if (next.has(i)) {
+        next.delete(i);
+      } else {
+        next.add(i);
+      }
       return next;
     });
   }
@@ -161,7 +165,16 @@ export function Inspector({
 
         {/* Task failures — all entries in event order, separators mark redispatch runs */}
         {taskFailures.length > 0 && (
-          <div data-testid="failure-list" style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, overflow: 'hidden' }}>
+          <div
+            data-testid="failure-list"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              minWidth: 0,
+              overflow: 'hidden',
+            }}
+          >
             <span
               style={{
                 fontFamily: 'var(--font-mono)',

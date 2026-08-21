@@ -5,7 +5,12 @@ import type { RepoEntry } from '../hooks/useFeature.js';
 import type { PrLink } from '../types/ui.js';
 
 const REPO_META: RepoEntry[] = [
-  { id: 'bff', side: 'server', description: 'BFF service', default_branch: 'version11/11.10.0/update-claude-md' },
+  {
+    id: 'bff',
+    side: 'server',
+    description: 'BFF service',
+    default_branch: 'version11/11.10.0/update-claude-md',
+  },
   { id: 'swaggers', side: 'server', description: 'OpenAPI specs', default_branch: 'main' },
 ];
 
@@ -49,7 +54,12 @@ describe('RequirementTab', () => {
 
   it('renders a PR link once a pr.created event exists for a repo', () => {
     const prLinks: PrLink[] = [
-      { repo: 'bff', prId: 42, prUrl: 'https://dev.azure.com/org/repo/pullrequest/42', title: 'feat: logout' },
+      {
+        repo: 'bff',
+        prId: 42,
+        prUrl: 'https://dev.azure.com/org/repo/pullrequest/42',
+        title: 'feat: logout',
+      },
     ];
     render(
       <RequirementTab

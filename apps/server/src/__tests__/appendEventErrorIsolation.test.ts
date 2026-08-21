@@ -101,9 +101,9 @@ describe('appendEvent — P2028 is surfaced, not swallowed', () => {
       .filter((v): v is Record<string, unknown> => v !== null);
 
     expect(loggedEvents.some((e) => e['event'] === 'append_event_tx_timeout')).toBe(true);
-    expect(
-      loggedEvents.find((e) => e['event'] === 'append_event_tx_timeout')?.['featureId'],
-    ).toBe(FAKE_FEATURE_ID);
+    expect(loggedEvents.find((e) => e['event'] === 'append_event_tx_timeout')?.['featureId']).toBe(
+      FAKE_FEATURE_ID,
+    );
   });
 
   it('a subsequent append succeeds after a P2028 (seq-lock chain is not poisoned)', async () => {

@@ -69,10 +69,7 @@ function buildUserContent(
   tasks: TaskSummary[],
 ): string {
   const taskList = tasks
-    .map(
-      (t) =>
-        `- id: ${t.id}\n  title: ${t.title}\n  specRefs: [${t.specRefs.join(', ')}]`,
-    )
+    .map((t) => `- id: ${t.id}\n  title: ${t.title}\n  specRefs: [${t.specRefs.join(', ')}]`)
     .join('\n');
   return [
     '## Spec',

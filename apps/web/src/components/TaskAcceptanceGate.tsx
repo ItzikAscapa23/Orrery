@@ -35,10 +35,9 @@ export function TaskAcceptanceGate({ featureId, gate, onAction }: TaskAcceptance
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/features/${featureId}/tasks/${gate.taskId}/retry-acceptance`,
-        { method: 'POST' },
-      );
+      const res = await fetch(`/api/features/${featureId}/tasks/${gate.taskId}/retry-acceptance`, {
+        method: 'POST',
+      });
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
         throw new Error(body.error ?? `Retry failed: ${res.status}`);

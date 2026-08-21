@@ -19,36 +19,21 @@ const baseProps = {
 
 describe('TopBar — RUNNING/PARKED indicators', () => {
   it('shows RUNNING 1 and PARKED 1 when one agent is working and one is waiting', () => {
-    render(
-      <TopBar
-        {...baseProps}
-        agentStatuses={{ a: 'working', b: 'waiting' }}
-      />,
-    );
+    render(<TopBar {...baseProps} agentStatuses={{ a: 'working', b: 'waiting' }} />);
     expect(screen.getByText('1 RUNNING')).toBeInTheDocument();
     expect(screen.getByText('1 PARKED')).toBeInTheDocument();
     expect(screen.queryByText(/IDLE/)).not.toBeInTheDocument();
   });
 
   it('shows IDLE when all agents are done', () => {
-    render(
-      <TopBar
-        {...baseProps}
-        agentStatuses={{ a: 'done', b: 'done', c: 'done' }}
-      />,
-    );
+    render(<TopBar {...baseProps} agentStatuses={{ a: 'done', b: 'done', c: 'done' }} />);
     expect(screen.getByText('IDLE')).toBeInTheDocument();
     expect(screen.queryByText(/RUNNING/)).not.toBeInTheDocument();
     expect(screen.queryByText(/PARKED/)).not.toBeInTheDocument();
   });
 
   it('shows IDLE when the only agent is queued (queued = unknown, not executing)', () => {
-    render(
-      <TopBar
-        {...baseProps}
-        agentStatuses={{ a: 'queued' }}
-      />,
-    );
+    render(<TopBar {...baseProps} agentStatuses={{ a: 'queued' }} />);
     expect(screen.getByText('IDLE')).toBeInTheDocument();
     expect(screen.queryByText(/RUNNING/)).not.toBeInTheDocument();
     expect(screen.queryByText(/PARKED/)).not.toBeInTheDocument();

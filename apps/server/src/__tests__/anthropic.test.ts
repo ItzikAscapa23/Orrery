@@ -269,7 +269,10 @@ describe('withLastMessageCached', () => {
 
   it('only touches the last message; earlier messages are the same references', () => {
     const first: Anthropic.MessageParam = { role: 'user', content: 'first' };
-    const last: Anthropic.MessageParam = { role: 'assistant', content: [{ type: 'text', text: 'last' }] };
+    const last: Anthropic.MessageParam = {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'last' }],
+    };
     const input = [first, last];
     const result = withLastMessageCached(input);
     expect(result[0]).toBe(first);

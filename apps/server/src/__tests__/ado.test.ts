@@ -40,18 +40,14 @@ describe('createAdoPullRequest — URL preference', () => {
       url: 'https://dev.azure.com/myorg/my-project/_apis/git/repositories/guid-1234/pullRequests/42',
     });
     const { prUrl } = await createAdoPullRequest(BASE_INPUT);
-    expect(prUrl).toBe(
-      'https://dev.azure.com/myorg/my-project/_git/demo-server/pullrequest/42',
-    );
+    expect(prUrl).toBe('https://dev.azure.com/myorg/my-project/_git/demo-server/pullrequest/42');
     expect(prUrl).not.toContain('_apis');
   });
 
   it('falls back to constructed _git URL when _links.web.href is absent', async () => {
     mockFetch({ pullRequestId: 99 });
     const { prUrl } = await createAdoPullRequest(BASE_INPUT);
-    expect(prUrl).toBe(
-      'https://dev.azure.com/myorg/my-project/_git/demo-server/pullrequest/99',
-    );
+    expect(prUrl).toBe('https://dev.azure.com/myorg/my-project/_git/demo-server/pullrequest/99');
     expect(prUrl).not.toContain('_apis');
   });
 
@@ -62,9 +58,7 @@ describe('createAdoPullRequest — URL preference', () => {
     });
     const { prUrl } = await createAdoPullRequest(BASE_INPUT);
     // _links absent, data.url present — must use constructed _git URL, not data.url
-    expect(prUrl).toBe(
-      'https://dev.azure.com/myorg/my-project/_git/demo-server/pullrequest/7',
-    );
+    expect(prUrl).toBe('https://dev.azure.com/myorg/my-project/_git/demo-server/pullrequest/7');
     expect(prUrl).not.toContain('_apis');
   });
 

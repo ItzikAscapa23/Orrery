@@ -954,7 +954,11 @@ describe('testAgent — orientationBlock in system prompt', () => {
     await runTestAgent('feat-orient', ctx, makeContainerO(), tmpRoot);
 
     expect(calls.length).toBeGreaterThanOrEqual(1);
-    const systemArray = calls[0]!.system as Array<{ type: string; text: string; cache_control?: unknown }>;
+    const systemArray = calls[0]!.system as Array<{
+      type: string;
+      text: string;
+      cache_control?: unknown;
+    }>;
     expect(systemArray).toHaveLength(1);
     const singleBlock = systemArray[0]!;
     expect(singleBlock.cache_control).toBeDefined();
@@ -1323,7 +1327,13 @@ describe('testAgent — turn cap respects maxTurns', () => {
     await expect(
       runTestAgent(
         'feat-cap',
-        { specMarkdown: '', contractYaml: '', repoClaudeMd: '', testDir: '__tests__', maxTurns: 2 } as Parameters<typeof runTestAgent>[1],
+        {
+          specMarkdown: '',
+          contractYaml: '',
+          repoClaudeMd: '',
+          testDir: '__tests__',
+          maxTurns: 2,
+        } as Parameters<typeof runTestAgent>[1],
         container,
         tmpRootCap,
       ),

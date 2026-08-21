@@ -145,8 +145,7 @@ describe('runReviewJob — job_id threading', () => {
     await runReviewJob('feat-1', 'bullmq-job-42');
 
     const usageCall = mockAppendEvent.mock.calls.find(
-      (args) =>
-        (args[2] as { type: string }).type === 'usage.recorded',
+      (args) => (args[2] as { type: string }).type === 'usage.recorded',
     );
     expect(usageCall).toBeDefined();
     expect((usageCall![2] as { job_id: string }).job_id).toBe('bullmq-job-42');
@@ -177,8 +176,7 @@ describe('runReviewJob — job_id threading', () => {
     await runReviewJob('feat-1');
 
     const usageCall = mockAppendEvent.mock.calls.find(
-      (args) =>
-        (args[2] as { type: string }).type === 'usage.recorded',
+      (args) => (args[2] as { type: string }).type === 'usage.recorded',
     );
     expect(usageCall).toBeDefined();
     expect((usageCall![2] as Record<string, unknown>)['job_id']).toBeUndefined();

@@ -907,14 +907,10 @@ describe('runTestJob — TEST_PASS gate: authored files in git log (round-1 dura
   });
 });
 
-
-
-
 // ── C-4 + C-5 integration: file-based report ─────────────────────────────────
 
 const AUTHORED_TEST_FILE = 'src/__tests__/feature.test.ts';
-const ABS_AUTHORED =
-  '/tmp/test-worktrees/test-job-feature-demo-server-work/' + AUTHORED_TEST_FILE;
+const ABS_AUTHORED = '/tmp/test-worktrees/test-job-feature-demo-server-work/' + AUTHORED_TEST_FILE;
 const PASSING_JSON = JSON.stringify({
   numPassedTests: 3,
   numFailedTests: 0,
@@ -1078,7 +1074,9 @@ describe('testJob — max_turns threading', () => {
       default_branch: 'main',
       max_turns: 7,
     };
-    vi.mocked(getRepoEntry).mockReturnValueOnce(repoWithMaxTurns).mockReturnValueOnce(repoWithMaxTurns);
+    vi.mocked(getRepoEntry)
+      .mockReturnValueOnce(repoWithMaxTurns)
+      .mockReturnValueOnce(repoWithMaxTurns);
     await runTestJob(featureId);
     expect(mockRunTestAgent).toHaveBeenCalled();
     const ctx = mockRunTestAgent.mock.calls[0]![1] as { maxTurns?: number };

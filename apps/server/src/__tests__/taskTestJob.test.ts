@@ -18,9 +18,11 @@ const {
   mockCreateWorktree,
 } = vi.hoisted(() => ({
   mockRunTestAgent: vi.fn().mockResolvedValue(undefined),
-  mockReadArtifact: vi.fn().mockImplementation((_slug: string, filename: string) =>
-    filename === 'test-harness-brief.md' ? null : '# Spec',
-  ),
+  mockReadArtifact: vi
+    .fn()
+    .mockImplementation((_slug: string, filename: string) =>
+      filename === 'test-harness-brief.md' ? null : '# Spec',
+    ),
   mockCommitArtifact: vi
     .fn()
     .mockReturnValue({ path: 'f/test-harness-brief.md', commit: 'abc', message: 'm' }),
@@ -160,9 +162,18 @@ vi.mock('node:fs', async (importActual) => {
   const actual = await importActual<typeof import('node:fs')>();
   const isWt = (p: unknown) => typeof p === 'string' && p.startsWith('/tmp/test-wt');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sm = { existsSync: (p: any) => isWt(p) ? (mockFsExistsSync(p) as boolean) : actual.existsSync(p),
-               readFileSync: (...a: any[]) => isWt(a[0]) ? mockFsReadFileSync(String(a[0])) : (actual.readFileSync as any)(...a),
-               unlinkSync: (p: any) => { if (isWt(p)) { mockFsUnlinkSync(p); } else { actual.unlinkSync(p); } } };
+  const sm = {
+    existsSync: (p: any) => (isWt(p) ? (mockFsExistsSync(p) as boolean) : actual.existsSync(p)),
+    readFileSync: (...a: any[]) =>
+      isWt(a[0]) ? mockFsReadFileSync(String(a[0])) : (actual.readFileSync as any)(...a),
+    unlinkSync: (p: any) => {
+      if (isWt(p)) {
+        mockFsUnlinkSync(p);
+      } else {
+        actual.unlinkSync(p);
+      }
+    },
+  };
   return { ...actual, default: { ...(actual as any), ...sm }, ...sm };
 });
 
@@ -514,7 +525,8 @@ describe('runTaskTestJob — harness brief', () => {
   });
 
   it('first task: prompt contains brief-writing instruction, brief committed, excluded from test commit', async () => {
-    const BRIEF_CONTENT = '<!-- orrery-sources: {} -->\n# Test Harness Brief\n## Mocks\naxios: stubs HTTP\n';
+    const BRIEF_CONTENT =
+      '<!-- orrery-sources: {} -->\n# Test Harness Brief\n## Mocks\naxios: stubs HTTP\n';
     // Agent writes the brief file → existsSync returns true for it; readFileSync returns its content
     mockFsExistsSync.mockImplementation((p: unknown) =>
       String(p).endsWith('__orrery_harness_brief.md'),

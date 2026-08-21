@@ -34,7 +34,10 @@ function makePassingJson(passed: number, failed = 0): string {
   });
 }
 
-function makeFailingJson(passed: number, failures: Array<{ name: string; message: string }>): string {
+function makeFailingJson(
+  passed: number,
+  failures: Array<{ name: string; message: string }>,
+): string {
   const assertions = [
     ...Array.from({ length: passed }, (_, i) => ({
       fullName: `passing test ${i}`,
@@ -157,8 +160,16 @@ describe('formatTestSummary', () => {
       failed: 2,
       tests: [
         { test_name: 'should return 200', status: 'passed' },
-        { test_name: 'rejects invalid token', status: 'failed', message: 'AssertionError: expected 200 got 401' },
-        { test_name: 'handles missing body', status: 'failed', message: 'TypeError: Cannot read property id' },
+        {
+          test_name: 'rejects invalid token',
+          status: 'failed',
+          message: 'AssertionError: expected 200 got 401',
+        },
+        {
+          test_name: 'handles missing body',
+          status: 'failed',
+          message: 'TypeError: Cannot read property id',
+        },
       ],
       authoredPassed: 0,
       authoredFailed: 0,
@@ -228,7 +239,8 @@ describe('summarizeBashTestRun', () => {
   it('returns compact passing summary for a clean run', async () => {
     const reportJson = makePassingJson(5);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('npx vitest run --reporter=json')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('npx vitest run --reporter=json'))
+        return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
@@ -238,11 +250,15 @@ describe('summarizeBashTestRun', () => {
 
   it('returns failures block for a failing run', async () => {
     const reportJson = makeFailingJson(3, [
-      { name: 'should return 200 for valid token', message: 'AssertionError: expected 200 got 401' },
+      {
+        name: 'should return 200 for valid token',
+        message: 'AssertionError: expected 200 got 401',
+      },
       { name: 'rejects missing body', message: 'TypeError: Cannot read property id' },
     ]);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('npx vitest run --reporter=json')) return { exitCode: 1, stdout: '', stderr: 'FAIL' };
+      if (cmd.startsWith('npx vitest run --reporter=json'))
+        return { exitCode: 1, stdout: '', stderr: 'FAIL' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
@@ -257,7 +273,8 @@ describe('summarizeBashTestRun', () => {
 
   it('falls back to raw output with label when JSON is unparseable', async () => {
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('npx vitest run --reporter=json')) return { exitCode: 1, stdout: 'FAIL 3 tests\n', stderr: 'some error' };
+      if (cmd.startsWith('npx vitest run --reporter=json'))
+        return { exitCode: 1, stdout: 'FAIL 3 tests\n', stderr: 'some error' };
       if (cmd.startsWith('cat ')) return { exitCode: 1, stdout: 'not json garbage', stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
@@ -273,7 +290,8 @@ describe('summarizeBashTestRun', () => {
       { name: 'fails B', message: 'TypeError: Cannot read property id' },
     ]);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('npx vitest run --reporter=json')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (cmd.startsWith('npx vitest run --reporter=json'))
+        return { exitCode: 1, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
@@ -300,7 +318,8 @@ describe('summarizeBashTestRun', () => {
   it('summarises npm test 2>&1 (2>&1 is not a metachar violation)', async () => {
     const reportJson = makePassingJson(3);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('npx vitest run --reporter=json')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('npx vitest run --reporter=json'))
+        return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });

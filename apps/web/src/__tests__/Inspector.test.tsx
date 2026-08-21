@@ -7,8 +7,7 @@ vi.mock('../components/EventLog.js', () => ({ EventLog: () => null }));
 vi.mock('../components/CostCard.js', () => ({ CostCard: () => null }));
 vi.mock('../components/StateMachineChips.js', () => ({ StateMachineChips: () => null }));
 
-const LONG_REASON =
-  'toolchain probe failed (exit 1): ' + 'PASS test/foo.test.js '.repeat(40);
+const LONG_REASON = 'toolchain probe failed (exit 1): ' + 'PASS test/foo.test.js '.repeat(40);
 
 const baseProps = {
   selected: null as null,

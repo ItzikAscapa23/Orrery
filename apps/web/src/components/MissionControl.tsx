@@ -379,12 +379,7 @@ export function MissionControl({
           />
         )}
         {spendGates.map((sg) => (
-          <SpendGateCard
-            key={sg.taskId}
-            featureId={featureId}
-            gate={sg}
-            onAction={onGateAction}
-          />
+          <SpendGateCard key={sg.taskId} featureId={featureId} gate={sg} onAction={onGateAction} />
         ))}
 
         {/* Test report summary chip — links to the TEST REPORT tab in the centre pane */}

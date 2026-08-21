@@ -200,8 +200,8 @@ export function startAgentWorker(): Worker<AgentJobPayload> {
     {
       connection,
       concurrency: 2,
-      lockDuration: 30 * 60 * 1000,  // 30 min — comfortably exceeds longest realistic job
-      maxStalledCount: 1,             // one auto-recovery from stall, then fail
+      lockDuration: 30 * 60 * 1000, // 30 min — comfortably exceeds longest realistic job
+      maxStalledCount: 1, // one auto-recovery from stall, then fail
     },
   );
 
