@@ -49,19 +49,21 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 ## Status
 
 - **Current phase:** 9 — Backlog sweep
-- **State:** `in-progress`
+- **State:** `complete`
 - **Last updated:** 2026-08-21
 
 ---
 
 ## Current phase progress
 
-- [x] Correct `docs/phase-6.md` — C-3 mitigated, C-4/C-5 resolved
-- [x] R-8 gate card header copy for non-spec_approval gates
-- [x] R-9 `discoverTestDir` fallback reaches event log
+*Phase 9 closed. Phase 10 has not started.*
+
+- [x] Correct `docs/phase-6.md` — C-3 mitigated, C-4/C-5 resolved, O-14 done
+- [x] R-8 gate card header copy for non-spec_approval gates (`ApprovalGate.tsx`)
+- [x] R-9 `discoverTestDir` fallback reaches event log (returns `{dir, method}`)
 - [x] R-10 stale docblock at `maybeAdvance.ts`
-- [x] O-13 `POST /simulate` status guard (409 for non-initial states)
-- [x] O-12 duplicate `pr.created` events — diagnosed (non-atomic ADO call + event append)
+- [x] O-13 `POST /simulate` status guard — 409 unless DRAFTING_SPEC or AWAITING_APPROVAL
+- [x] O-12 duplicate `pr.created` events — root cause diagnosed, not yet fixed
 - [x] C-6 nested test directories in `resolveReal` — confirmed macOS jail bug by analysis
 - [x] R-7 test.report blocker vocabulary — recorded as moot
 
@@ -71,7 +73,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — 1063 passed (1063) across 84 files, 2026-08-21 |
+| `npm test` (repo root) | passed — 1064 passed (1064) across 84 files, 2026-08-21 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-21 |
 | `npm run lint` | 362 problems (356 errors, 6 warnings) — unchanged from phase 7 baseline, 2026-08-21 |
 
@@ -79,11 +81,10 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
-- **Brief = task, not phase** — briefs are already task-sized and phases are
-  already session-sized. Running the handover ceremony for a three-file change
-  would cost more than the change.
-- **Phase `Verification:` = the standing four** — repo-root suite count,
-  typecheck, lint, commit SHA. Per-brief fail-first evidence stays in the brief.
+- **Brief = task, not phase** — briefs are already task-sized; the handover ceremony
+  per three-file change costs more than the change.
+- **Phase `Verification:` = the standing four** — repo-root suite count, typecheck,
+  lint, commit SHA. Per-brief fail-first evidence stays in the brief.
 - **`PRD.md` points into `docs/specs/` rather than duplicating it** — duplicating
   would be a further violation of C6.
 - **`checkSpendGuard` returns a discriminated union** — callers need `remainingBudget`
@@ -91,18 +92,18 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **Task-derived agent status applied after the event-sourced fold** — O-14 root
   cause: `agent.status` events can be stale on the gate-resolved path. Task rows
   are authoritative for dev/test agents; review/spec/planner remain event-sourced.
-- **Phase 8 is prompt-only** — both tasks (planner granularity, test-authoring exclusion)
-  are prompt changes. No code structure, schema, or API changes required.
-- **`buildSystemPrompt` exported from testPlannerAgent.ts** — enables direct
-  string-assertion test coverage without going through `runTestPlannerAgent`.
+- **`discoverTestDir` returns `{dir, method}`** — keeps the pure fs function decoupled
+  from the database; callers that have `featureId` emit `agent.log` when
+  `method === 'fallback'`. Three callers updated: testJob, taskTestJob, devJob.
+- **R-7 recorded as moot, not fixed** — `MissionControl.tsx:341` already excludes
+  `test_report` from `ApprovalGate`; `featureFindings` routes 409 when not in
+  AWAITING_APPROVAL or CODE_REVIEW. Counts vocabulary in the event payload is
+  cosmetic; it does not gate approval.
 
 ---
 
 ## Assumptions
 
-- Phase 8 DoD item "task count varies by ≤ 1 across three runs" is a behavioral
-  property of the model's response to the new prompt. The added cost hint steers
-  toward fewer tasks; a real feature run is needed to validate empirically.
 - `apps/web/.env.local` setting `VITE_PRODUCT_NAME=PepperOrchestrator` is a
   deliberate local brand override. The fallback `'Orrery'` stays.
 
@@ -110,12 +111,21 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Open questions / blockers
 
-- **`docs/phase-6.md` is inaccurate.** C-3, C-4 and C-5 are resolved in code but
-  still listed STANDING. Scheduled as Phase 9.
-- **Git history is a single squashed commit** before `4a1dc80`. SHAs cited in
-  `docs/phase-6.md` are unreachable; descriptions remain trustworthy.
+- **C-6 macOS jail bug — not fixed.** `resolveReal` (`testAgent.ts:209`) falls back
+  to the unresolved path when a nested parent dir doesn't exist. On macOS
+  `/var → /private/var`, this makes the jail check fail for new nested test dirs
+  (e.g. `__tests__/acceptance/`). Fix: use `path.resolve` instead of
+  `fs.realpathSync.native` in the inner catch. Carry to Phase 12+.
+- **O-12 duplicate `pr.created` — not fixed.** `createAdoPrJob.ts:146` builds
+  `alreadyCreated` once before the loop. If the job retries after the ADO API call
+  but before the event append, a second PR is created. Fix: re-query inside the
+  per-repo loop immediately before each ADO call. Carry to Phase 12+.
+- **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
+  features. Carry forward.
 - **`bff` skill is machine-local.** `.claude/skills/orchestrator-server.md` is
   gitignored. PRD Q3. Scheduled as Phase 10.
+- **Git history is a single squashed commit** before `4a1dc80`. SHAs cited in
+  `docs/phase-6.md` are unreachable; descriptions remain trustworthy.
 
 ---
 
@@ -135,6 +145,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | — | Tooling — phase and handover skills | `d13e9c2` | 2026-08-21 |
 | 7 | Agent spend and test redundancy | `4a16025` | 2026-08-21 |
 | 8 | Planner efficiency | `55a0c5b` | 2026-08-21 |
+| 9 | Backlog sweep | `b41310d` | 2026-08-21 |
 
 ---
 
