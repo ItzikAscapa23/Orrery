@@ -138,7 +138,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 7 | Agent spend and test redundancy | `4a16025` | 2026-08-21 |
 | 8 | Planner efficiency | `55a0c5b` | 2026-08-21 |
 | 9 | Backlog sweep | `2723ba0` | 2026-08-21 |
-| 10 | Spec reconciliation | `1b1c64a` | 2026-08-21 |
+| 10 | Spec reconciliation | `1097c3f` | 2026-08-21 |
 
 ---
 
