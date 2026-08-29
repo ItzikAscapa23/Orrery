@@ -509,3 +509,50 @@ npm test          # baseline 84 files / 1098 tests — must not decrease
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 20 — Violations cost what they should, and the UI says what is running
+**Goal:** No task dies on a no-op redirect, and no agent displays idle while it works.
+**PRD refs:** §3 R3, R6
+**Tasks:**
+- [ ] `78-exempt-null-redirect` — R-29. `2>/dev/null` is a no-op: `container.ts`
+      captures stdout and stderr together regardless, and `2>&1` is already
+      exempted for exactly that reason. Strip it and proceed rather than
+      rejecting. Evidence: feature `f78613cd` task `e4d27ea4` burned violations
+      1 and 2 on `find specs -type f -name "*.yaml" ... 2>/dev/null` and
+      `find dcs/openapis -type f -name "*.json" 2>/dev/null`, then parked at
+      turn 18 having written no code. Cost of that attempt was discarded and the
+      task re-ran from scratch
+- [ ] `79-one-violation-per-turn` — R-26. Both violations above were issued in
+      the same turn, so two slots were consumed before the agent saw feedback
+      from either. Count at most one violation per turn
+- [ ] `80-working-is-authoritative` — O-19. `eventFold.ts:421` reads
+      `if (agentStatuses[agent] === 'working' && derivedStatus === 'done') continue;`
+      — it guards one derived value where it should guard the state. An agent
+      that has emitted `working` with no later terminal event is working; no
+      derived status should overwrite it
+- [ ] `81-derive-knows-awaiting-tests` — O-20. Both chains in
+      `deriveAgentStatuses` (`eventFold.ts:55-65`, `68-77`) are `else`-chains
+      ending in `queued`, and neither knows `awaiting_tests`, added in Phase 16.
+      A covered task holding there means dev work is done and tests are running.
+      Evidence: on feature `f78613cd` the header read IDLE and Test Agent read
+      QUEUED while the test agent was at turn 41 with $0.57 spent, against an
+      `agent.status test working` event with no successor
+- [ ] Audit — list, not summary — every consumer of `task.status`, in both
+      workspaces, and confirm each handles `awaiting_tests`. Phase 16 checked
+      three server-side call sites; `deriveAgentStatuses` in `apps/web` was a
+      fourth and was missed
+**Definition of Done:**
+- A command whose only metachar is `2>/dev/null` executes and records no violation
+- Two violating commands in one turn consume one slot, not two
+- An agent with an unsuperseded `working` event never displays as `queued`,
+  `done`, or idle
+- A task in `awaiting_tests` derives `done` for its side and `working` for test
+- `awaiting_tests` consumer audit recorded in HANDOVER.md, both workspaces
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1093 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A feature run displays the correct agent as working throughout
