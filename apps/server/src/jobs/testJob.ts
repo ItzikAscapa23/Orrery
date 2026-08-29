@@ -619,6 +619,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
 
   const container = startContainer(
     worktreePath,
+    `${featureId}-test`,
     imageTag,
     () => {
       void appendEvent(getPrisma(), featureId, {

@@ -802,3 +802,69 @@ describe('devJob — baseline-diff gate (R9)', () => {
     await expect(runDevJob(featureId, taskId, 'job-baseline-2')).rejects.toThrow('Tests failed');
   });
 });
+
+// ── R-13: environmental failures do not advance attempt counter ───────────────
+
+import { checkBedrockConnectivity } from '../lib/connectivity.js';
+
+describe('devJob — Bedrock unreachable (R-13)', () => {
+  async function makeTask(attemptCount = 1): Promise<string> {
+    const task = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Bedrock test task',
+        description: 'task',
+        specRefs: [],
+        dependsOn: [],
+        status: 'pending',
+        coveredByTestPlan: false,
+        attemptCount,
+      },
+    });
+    return task.id;
+  }
+
+  beforeEach(() => {
+    vi.mocked(checkBedrockConnectivity).mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    vi.mocked(checkBedrockConnectivity).mockResolvedValue(true);
+  });
+
+  it('parks task with parkReason bedrock_unreachable, not failure', async () => {
+    const taskId = await makeTask(1);
+    await runDevJob(featureId, taskId, 'job-bedrock-1');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe('parked');
+    expect(task.parkReason).toBe('bedrock_unreachable');
+  });
+
+  it('does not advance the attempt counter (counter rolled back to pre-run value)', async () => {
+    const taskId = await makeTask(1); // DB starts at attemptCount=1
+    await runDevJob(featureId, taskId, 'job-bedrock-2');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.attemptCount).toBe(1); // must stay at 1, not advance to 2
+  });
+
+  it('emits task.failed with final:false (recoverable)', async () => {
+    const taskId = await makeTask(0);
+    await runDevJob(featureId, taskId, 'job-bedrock-3');
+    const events = await getPrisma().event.findMany({ where: { featureId } });
+    const failedEvt = events.find((e) => e.type === 'task.failed');
+    expect(failedEvt).not.toBeUndefined();
+    expect((failedEvt!.payload as { final: boolean }).final).toBe(false);
+  });
+
+  it('does not emit agent.status:failed (Bedrock is infra, not agent fault)', async () => {
+    const taskId = await makeTask(0);
+    await runDevJob(featureId, taskId, 'job-bedrock-4');
+    const events = await getPrisma().event.findMany({ where: { featureId } });
+    const agentFailed = events.find(
+      (e) => e.type === 'agent.status' && (e.payload as { status: string }).status === 'failed',
+    );
+    expect(agentFailed).toBeUndefined();
+  });
+});

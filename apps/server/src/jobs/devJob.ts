@@ -449,9 +449,17 @@ export async function runDevJob(
   });
 
   if (!(await checkBedrockConnectivity())) {
+    // Environmental failure — does not consume a retry slot.
+    // Roll back the attempt increment so the slot is preserved for the real agent run.
+    // Park with a distinct reason so the operator and UI can distinguish infra-down
+    // from an agent quality failure. final:false = recoverable (fix VPN and retry-bounce).
     await getPrisma().task.update({
       where: { id: taskId },
-      data: { status: 'parked', parkReason: 'failure', attemptCount: task.attemptCount },
+      data: {
+        status: 'parked',
+        parkReason: 'bedrock_unreachable',
+        attemptCount: task.attemptCount,
+      },
     });
     await appendEvent(getPrisma(), featureId, {
       type: 'task.failed',
@@ -459,13 +467,7 @@ export async function runDevJob(
       task_id: task.id,
       reason: 'Bedrock unreachable — check VPN / aws sso login',
       attempt,
-      final: true,
-    });
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.status',
-      agent: task.side,
-      repo: task.repo,
-      status: 'failed',
+      final: false,
     });
     return 'parked';
   }
@@ -584,6 +586,7 @@ export async function runDevJob(
 
   const container = startContainer(
     worktreeInfo.worktreePath,
+    task.id,
     imageTag,
     () => {
       void appendEvent(getPrisma(), featureId, {

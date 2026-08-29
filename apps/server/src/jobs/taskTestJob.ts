@@ -243,6 +243,7 @@ export async function runTaskTestJob(
 
   const container = startContainer(
     worktreePath,
+    taskId,
     imageTag,
     () => {
       void appendEvent(getPrisma(), featureId, {

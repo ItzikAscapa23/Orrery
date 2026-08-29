@@ -399,8 +399,23 @@ export async function runInstallContainer(
   }
 }
 
+/**
+ * Kill the container associated with a specific task label (if running).
+ * Safe to call even when no container exists — errors are swallowed.
+ * Used by callers that need targeted termination before re-dispatching.
+ */
+export async function killContainerForTask(taskLabel: string): Promise<void> {
+  const containerName = `${CONTAINER_PREFIX}-${taskLabel}`;
+  try {
+    await execAsync(`docker rm -f ${containerName}`);
+  } catch {
+    // Non-fatal: container may already be gone
+  }
+}
+
 export function startContainer(
   worktreePath: string,
+  label: string,
   imageTag = 'node:20-alpine',
   onUnsandboxedWarning?: () => void,
   execTimeoutMs = 120_000,
@@ -421,7 +436,19 @@ export function startContainer(
     return startHostExecutor(worktreePath, onUnsandboxedWarning);
   }
 
-  const containerName = `${CONTAINER_PREFIX}-${Date.now()}`;
+  const containerName = `${CONTAINER_PREFIX}-${label}`;
+
+  // Kill any incumbent container with the same name before starting. This
+  // ensures a re-dispatch (reconciler, BullMQ stall recovery, retry-bounce)
+  // never leaves two containers running for the same task.
+  try {
+    execSync(`docker rm -f ${containerName}`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch {
+    // Non-fatal: container does not exist yet
+  }
 
   // docker run -d is fast and one-time — execSync is acceptable here.
   execSync(

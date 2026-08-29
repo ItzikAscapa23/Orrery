@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 12 — Dispatch identity and gate baseline
+- **Current phase:** 13 — Recovery paths account for live work
 - **State:** `complete`
 - **Last updated:** 2026-08-29
 
@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 12 closed. No Phase 13 is defined in `plan.md` yet — next work requires a new phase entry.*
+*Phase 13 closed. No Phase 14 is defined in `plan.md` yet — next work requires a new phase entry.*
 
 ---
 
@@ -64,7 +64,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — 1070 passed across 84 files, 2026-08-29 |
+| `npm test` (repo root) | passed — 1079 passed across 84 files, 2026-08-29 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
 | `npm run lint` | **exit 0** — 0 problems, 2026-08-29 |
 
@@ -112,6 +112,38 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   entries are excluded with an early `continue`; TypeScript narrows the remaining
   `status` to `'passed' | 'failed'` via control flow, making the `as` cast
   unnecessary.
+- **Container name = `${CONTAINER_PREFIX}-${label}`** — `label` is the task ID for
+  dev and task-test containers, `${featureId}-test` for the feature-level test job.
+  `startContainer` calls `docker rm -f <name>` before `docker run -d`, so any
+  re-dispatch (reconciler, BullMQ stall recovery, retry-bounce) automatically kills
+  the incumbent. No timestamp suffix — deterministic naming is what makes targeted
+  kill possible. `sweepOrphanContainers` stays as the crash-recovery blanket path.
+- **Bedrock unreachable: `parkReason: 'bedrock_unreachable'`, `final: false`, no
+  `agent.status:failed`** — VPN/credential failure is environmental; it must not
+  consume a retry slot or permanently mark the agent as failed. The attempt counter
+  was already rolled back; this phase adds `final: false` and a distinct park reason
+  so operators can distinguish infra-down from agent quality failures.
+- **`pr.created` guard re-queried per repo inside the loop** — the pre-loop snapshot
+  missed events written after the snapshot (ADO call succeeded, appendEvent crashed,
+  job retried). Per-iteration `findFirst` closes the non-atomic window.
+
+---
+
+## Environmental failure audit (Phase 13)
+
+Every failure classification in the codebase — confirmed they share one definition:
+*an environmental failure is one caused by infrastructure, not agent behaviour*.
+
+| Site | Failure | Slot consumed? | Mechanism |
+|---|---|---|---|
+| `taskReconciler.ts` | Orphan (server crash) | No | `{ decrement: 1 }` on `attemptCount` or `testTaskAttempts` |
+| `devJob.ts` (Bedrock check) | Bedrock unreachable | No | `attemptCount: task.attemptCount` rollback; `final: false`; `parkReason: 'bedrock_unreachable'` |
+| `devJob.ts` (catch block) | InstallError | Yes (3 attempts max) | Classified as infra but slot-consuming by design — cold-cache ratcheting needs multiple tries |
+| `devJob.ts` (catch block) | PushError | Always final | Work is committed; retrying the full agent job cannot fix a push failure |
+| `devJob.ts` (catch block) | AgentNoopError, policy violations | Always final | Agent behavioural fault — no retries appropriate |
+
+`InstallError` is the only environmental failure that consumes slots, and that is
+intentional: the npm cache ratchets forward on each attempt, so retrying helps.
 
 ---
 
@@ -128,6 +160,8 @@ All paths that can enqueue for a running task:
 
 `queue.ts:56` (`getQueue().add()`) is the only production call site. BullMQ's internal
 stall-recovery path is external to application code and cannot be changed via R8.
+All four paths now terminate the incumbent container via the deterministic naming
+scheme before the new container starts.
 
 ---
 
@@ -144,11 +178,7 @@ stall-recovery path is external to application code and cannot be changed via R8
   to the unresolved path when a nested parent dir doesn't exist. On macOS
   `/var → /private/var`, this makes the jail check fail for new nested test dirs
   (e.g. `__tests__/acceptance/`). Fix: use `path.resolve` instead of
-  `fs.realpathSync.native` in the inner catch. Carry to Phase 13+.
-- **O-12 duplicate `pr.created` — not fixed.** `createAdoPrJob.ts:146` builds
-  `alreadyCreated` once before the loop. If the job retries after the ADO API call
-  but before the event append, a second PR is created. Fix: re-query inside the
-  per-repo loop immediately before each ADO call. Carry to Phase 13+.
+  `fs.realpathSync.native` in the inner catch. Carry to Phase 14+.
 - **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
   features. Carry forward.
 
@@ -174,6 +204,7 @@ stall-recovery path is external to application code and cannot be changed via R8
 | 10 | Spec reconciliation | `1097c3f` | 2026-08-21 |
 | 11 | Lint debt | `f0769a5` | 2026-08-21 |
 | 12 | Dispatch identity and gate baseline | `6d8ef86` | 2026-08-29 |
+| 13 | Recovery paths account for live work | pending | 2026-08-29 |
 
 ---
 
@@ -185,4 +216,4 @@ stall-recovery path is external to application code and cannot be changed via R8
   BullMQ jobs and parks their tasks. Never edit the orchestrator while a feature
   is running.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
-- (from plan.md Phase 12): A restart mid-dispatch produces exactly one container.
+- A restart mid-dispatch produces exactly one container.

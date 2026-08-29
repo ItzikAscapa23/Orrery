@@ -141,16 +141,15 @@ export async function runCreateAdoPrJob(
 
   const specMd = readArtifact(feature.slug, 'spec.md') ?? readArtifact(feature.slug, 'spec.txt');
 
-  // Guard against duplicate PR creation on retry: if a pr.created event already
-  // exists for a repo (successful partial run before failure), skip it.
-  const existingPrEvents = await getPrisma().event.findMany({
-    where: { featureId, type: 'pr.created' },
-  });
-  const alreadyCreated = new Set(existingPrEvents.map((e) => (e.payload as { repo: string }).repo));
-
   // Iterate the currentBranches map — one PR per (repo, branch) pair.
   for (const [repoId, branchName] of Object.entries(currentBranches)) {
-    if (alreadyCreated.has(repoId)) {
+    // Re-query inside the loop immediately before the ADO call so a retry after
+    // the API call but before appendEvent doesn't create a second PR. A pre-loop
+    // snapshot can miss events written between the snapshot and the ADO call.
+    const existingPr = await getPrisma().event.findFirst({
+      where: { featureId, type: 'pr.created', payload: { path: ['repo'], equals: repoId } },
+    });
+    if (existingPr) {
       continue;
     }
 
