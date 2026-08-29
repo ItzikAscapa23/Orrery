@@ -226,6 +226,7 @@ Every failure classification — confirmed they share one definition:
 | 13 | Recovery paths account for live work | `ccbab22` | 2026-08-29 |
 | 14 | Agents see what actually happened | `da52c8d` | 2026-08-29 |
 | 15 | The gate counts what actually ran | `4c8f1c6` | 2026-08-29 |
+| 16 | Environmental failures leave a recoverable task | `58bb2f7` | 2026-08-29 |
 
 ---
 
