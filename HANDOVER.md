@@ -32,7 +32,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
 - `packages/shared/` — event payload schemas
-- `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 10)
+- `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 16)
 - `docs/agents/repo-manifest.yaml` — operator config, gitignored, example committed
 
 **Conventions:**
@@ -56,11 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] T-73 — One Bedrock park definition (`lib/bedrockPark.ts`, 4 job sites updated)
-- [x] T-74 — Bedrock reprobe before park (`checkBedrockWithRetry` in `lib/connectivity.ts`)
-- [x] T-75 — `awaiting_tests` status: covered tasks blocked until `testsWritten: true`
-- [x] State-write audit compiled (see Phase 16 audit section below)
-- [x] Tests, typecheck, lint all green (1097 passed / 84 files)
+*Phase 16 closed. Pull Phase 17 tasks from `docs/specs/` before starting.*
 
 ---
 
@@ -70,13 +66,13 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 |---|---|
 | `npm test` (repo root) | passed — **1097 passed across 84 files** (+12 new tests), 2026-08-29 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
-| `npm run lint` | **exit 0** — 0 problems, 2026-08-29 |
+| `npm run lint` | exit 0 — 0 problems, 2026-08-29 |
 
 ---
 
 ## Phase 16 audit — task state-write sites
 
-Every site that writes `completed`, `parked`, `pending`, or `awaiting_tests` to a Task row after a failure or terminal event:
+Every site that writes a terminal or near-terminal state to a Task row:
 
 | File:line | State written | `bullJobId` | `parkReason` | Notes |
 |---|---|---|---|---|
@@ -84,103 +80,44 @@ Every site that writes `completed`, `parked`, `pending`, or `awaiting_tests` to 
 | `jobs/devJob.ts:780` | `parked` | not touched | `failure` | Agent failure after max attempts (final) |
 | `jobs/devJob.ts:874` | `awaiting_tests` | not touched | — | Noop-success path: code unchanged, tests not yet written |
 | `jobs/devJob.ts:983` | `parked` | not touched | `failure` | Per-attempt failure during acceptance check |
-| `jobs/devJob.ts:1011` | `awaiting_tests` | not touched | — | Normal-success path: commit done, test task not yet written |
+| `jobs/devJob.ts:1011` | `awaiting_tests` | not touched | — | Normal-success: commit done, test task not yet written |
 | `jobs/devJob.ts:1076` | `parked` | not touched | `failure` | PushError / CommitStepError (always final) |
-| `jobs/devJob.ts:1086` | `pending` | not touched | — | Retry after non-final agent failure (re-dispatch follows) |
-| `jobs/taskTestJob.ts:394` | `pending` | `null` (cleared) | — | Tests written, task ready for re-dispatch (path A) |
-| `jobs/taskTestJob.ts:434` | `pending` | `null` (cleared) | — | Tests written, task ready for re-dispatch (path B) |
-| `jobs/taskTestJob.ts:450` | `pending` | `null` (cleared) | — | Tests written, task ready for re-dispatch (path C) |
+| `jobs/devJob.ts:1086` | `pending` | not touched | — | Retry after non-final failure (re-dispatch follows) |
+| `jobs/taskTestJob.ts:394,434,450` | `pending` | `null` (cleared) | — | Tests written, task ready for re-dispatch |
 | `jobs/devJob.ts:290` | `completed` | not touched | — | `completeTask` helper — normal completion |
-
-**R-23 fix confirmed:** `taskTestJob.ts` Bedrock park now routes through `bedrockPark.ts` which writes `parked` + clears `bullJobId`. Old code wrote `pending` only, leaving stale `bullJobId` invisible to reconciler and dispatch.
-
-**R-25 fix confirmed:** `awaiting_tests` rows block `maybeAdvanceToReview` (counts tasks where `status !== 'completed'`) and are transparent to `dispatchUnblockedTasks` (only dispatches `pending`). The `allDone` guard in dispatch also includes `awaiting_tests` to suppress false `dispatch_no_tasks` warnings.
-
----
-
-## Phase 15 audit — gate resolution sites
-
-Every site that makes an acceptance-gate decision derived from a resolved path or file set:
-
-| Site | Resolution step | Failure mode (before fix) | Failure mode (after fix) |
-|---|---|---|---|
-| `discoverTestDir` candidate loop | `findTestFiles(abs, N)` | depth-1 missed BFF `test/scenarios/<domain>/` layout → fell to deep-scan | depth-3 catches 2-subdir-deep layouts; candidate returns `dir: 'test'` |
-| `discoverTestDir` deep-scan | `path.relative(worktree, path.dirname(found[0]))` | `''` when file sits at worktree root → `git log -- ''` throws | empty-string guard falls through to `fallback`; caller also guards `dir === ''` |
-| `getAuthoredTestFiles` call site | `git log --diff-filter=A -- testDir` | git error swallowed → `[]` → false "no authored tests" gate | error propagates; call site logs and routes to `_handleNoAuthoredTests` with `parseError: 'git-resolution-error'` |
-| Zero-tests guard (pre-`_advanceTestPass`) | `authoredParsed.passed` | zero total tests could reach `_advanceTestPass` → `✓ all acceptance tests pass (0 passed, 0 failed)` | guard on `(passed ?? 0) === 0 && !parseError` routes to `_handleNoAuthoredTests` |
-| `testJob.ts:984` pass log | `counts.passed` | reachable with zero when guard above was absent | unreachable now; guard fires first |
-
-**Task 72 (bounce-back inherits tests):** Fixed as a consequence of the testDir stability fix. With `discoverTestDir` consistently returning `'test'` across rounds, `getAuthoredTestFiles(worktree, 'test')` finds round-1 files in git history in round 2, and `authoredParsed.authoredPassed > 0` correctly passes the gate.
-
----
-
-## Environmental failure audit (Phase 13)
-
-Every failure classification — confirmed they share one definition:
-*an environmental failure is one caused by infrastructure, not agent behaviour*.
-
-| Site | Failure | Slot consumed? | Mechanism |
-|---|---|---|---|
-| `taskReconciler.ts` | Orphan (server crash) | No | `{ decrement: 1 }` on `attemptCount` or `testTaskAttempts` |
-| `devJob.ts` (Bedrock check) | Bedrock unreachable | No | `attemptCount` rollback; `final: false`; `parkReason: 'bedrock_unreachable'` |
-| `devJob.ts` (catch block) | InstallError | Yes (3 max) | Slot-consuming by design — cold-cache ratcheting needs multiple tries |
-| `devJob.ts` (catch block) | PushError | Always final | Work is committed; retrying can't fix a push failure |
-| `devJob.ts` (catch block) | AgentNoopError, policy violations | Always final | Agent behavioural fault |
 
 ---
 
 ## Decisions
 
-- **Brief = task, not phase** — briefs are already task-sized; the handover ceremony
-  per three-file change costs more than the change.
-- **Phase `Verification:` = the standing four** — repo-root suite count, typecheck,
-  lint, commit SHA. Per-brief fail-first evidence stays in the brief.
+- **`awaiting_tests` is a string status, not a Prisma enum** — `status` column is
+  `String`; new values never require a migration. Only the schema comment and the
+  `ActivityTask['status']` TypeScript union must be updated.
+- **Bedrock park is always `parked` + `bullJobId: null`, never `pending`** —
+  `pending` with a stale `bullJobId` is invisible to the reconciler (scans `running`)
+  and gate logic (scans `parked`). `parked` + cleared ID is the only safe treatment.
+- **`checkBedrockWithRetry` must reset cache between retries** — the 30 s cache TTL
+  means all retry probes read the same stale `false` unless `resetConnectivityCache()`
+  is called before each attempt.
 - **`checkSpendGuard` returns a discriminated union** — callers need `remainingBudget`
   to compute `effectiveCap`. A boolean return forced callers to re-query or over-run.
-- **Task-derived agent status applied after the event-sourced fold** — O-14 root
-  cause: `agent.status` events can be stale on the gate-resolved path. Task rows
-  are authoritative for dev/test agents; review/spec/planner remain event-sourced.
+- **Task-derived agent status applied after the event-sourced fold** — `agent.status`
+  events can be stale on the gate-resolved path. Task rows are authoritative for
+  dev/test agents; review/spec/planner remain event-sourced.
 - **`discoverTestDir` candidate depth = 3** — `findTestFiles(abs, N)` consumes depth
-  entering each directory, not on reaching a file. Files 2 subdirs inside the
-  candidate (BFF layout: `test/scenarios/<domain>/`) need `maxDepth=3`. Using 1
-  missed them and triggered deep-scan producing inconsistent testDir across rounds.
-- **`getAuthoredTestFiles` lets git errors propagate** — the silent `catch { return [] }`
-  was indistinguishable from "truly zero authored files". Surfacing the error lets
-  the call site route to `_handleNoAuthoredTests` with a `parseError` marker,
-  preventing a false gate pass.
-- **Spec 02 amended in place (not a new 06 file)** — keeps the canonical orchestrator
-  reference in one file; an agent reading spec 02 gets the full current picture.
-- **`bff` skill and architecture doc committed as `.example` files** — same pattern
-  as `repo-manifest.example.yaml`; the operator copies and customises.
-- **ESLint test-file scoped override, not per-line suppressions** — `no-unsafe-*`,
-  `no-explicit-any`, `no-unnecessary-type-assertion`, `require-await` all turned off
-  for `**/__tests__/**` in `eslint.config.mjs`.
-- **R8: `enqueueJob` returns job ID; persisted at dispatch time** — closes the window
-  where a running task had a null ID. Reconciler treats null `bullJobId` as "not yet
+  entering directories. BFF layout (`test/scenarios/<domain>/`) needs `maxDepth=3`;
+  depth=1 triggered deep-scan with inconsistent results across rounds.
+- **`getAuthoredTestFiles` lets git errors propagate** — silent `catch { return [] }`
+  was indistinguishable from zero authored files. Error propagation routes to
+  `_handleNoAuthoredTests` with a `parseError` marker, preventing a false gate pass.
+- **`enqueueJob` returns job ID; persisted at dispatch time** — closes the window
+  where a running task had a null `bullJobId`. Reconciler treats null as "not yet
   dispatched" (skip), not orphaned.
-- **R8: attempt counter reset uses Prisma atomic decrement** — `{ decrement: 1 }`
-  instead of JS read-modify-write prevents a race on concurrent reconciler runs.
-- **R9: baseline-diff gate** — `devJob.ts` captures a `parseTestOutput` result
-  immediately after the probe passes. Verification only throws on failures absent
-  from the baseline set, so pre-existing broken tests do not block the agent.
+- **Baseline-diff gate** — `devJob.ts` captures probe test output immediately after
+  the probe passes. Verification only throws on failures absent from baseline, so
+  pre-existing broken tests do not block the agent.
 - **Container name = `${CONTAINER_PREFIX}-${label}`** — deterministic naming makes
-  targeted kill possible. `startContainer` calls `docker rm -f <name>` before
-  `docker run -d`; any re-dispatch automatically kills the incumbent.
-- **Bedrock unreachable: `parkReason: 'bedrock_unreachable'`, `final: false`** —
-  VPN/credential failure is environmental; must not consume a retry slot or
-  permanently mark the agent as failed.
-- **Phase 14: zero-total treated as failed intercept** — `summarizeBashTestRun`
-  returns `[raw output — zero tests reported]` when `passed + failed === 0`.
-- **Phase 14: `resultFirstLine` in `ToolCallInfo`** — first line of every tool result
-  appended to the `agent.log` event. Consumers: `devJob.ts` and `testJob.ts`.
-- **Phase 16: `awaiting_tests` is a string status, not a Prisma enum** — the `status`
-  column is `String` in schema.prisma; new values never require a migration. Only the
-  comment and the TypeScript union (`ActivityTask['status']`) must be updated.
-- **Phase 16: `checkBedrockWithRetry` must call `resetConnectivityCache()` between retries** — the cache TTL is 30 s; without resetting it, all retry probes read the same stale `false` and park immediately.
-- **Phase 16: Bedrock park is always `parked`, never `pending`** — `pending` after a
-  Bedrock failure leaves a stale `bullJobId` on the row; reconciler scans `running` and
-  gate logic scans `parked`. The row becomes invisible to both. `parked` + `bullJobId: null`
-  is the only safe treatment.
+  targeted kill possible; re-dispatch automatically kills the incumbent.
 
 ---
 
@@ -193,11 +130,10 @@ Every failure classification — confirmed they share one definition:
 
 ## Open questions / blockers
 
-- **C-6 macOS jail bug — not fixed.** `resolveReal` (`testAgent.ts:209`) falls back
-  to the unresolved path when a nested parent dir doesn't exist. On macOS
-  `/var → /private/var`, this makes the jail check fail for new nested test dirs
-  (e.g. `__tests__/acceptance/`). Fix: use `path.resolve` instead of
-  `fs.realpathSync.native` in the inner catch. Carry to Phase 16+.
+- **C-6 macOS jail bug — carry forward.** `resolveReal` (`testAgent.ts:209`) falls
+  back to the unresolved path when a nested parent dir doesn't exist. On macOS
+  `/var → /private/var` makes the jail check fail for new nested test dirs. Fix:
+  use `path.resolve` instead of `fs.realpathSync.native` in the inner catch.
 - **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
   features. Carry forward.
 
@@ -213,10 +149,7 @@ Every failure classification — confirmed they share one definition:
 
 | Phase | Title | Commit | Date |
 |---|---|---|---|
-| 0–5 | Spec agent through review/test agents | squashed into `54bdf20` | pre-2026-08 |
-| 6 | Cost instrumentation and blocking backlog | squashed into `54bdf20` | 2026-08 |
-| — | Brief 59 — product name single source | `4a1dc80` | 2026-08-21 |
-| — | Tooling — phase and handover skills | `d13e9c2` | 2026-08-21 |
+| 0–6 | Spec agent through cost instrumentation | squashed into `54bdf20` | pre-2026-08 |
 | 7 | Agent spend and test redundancy | `4a16025` | 2026-08-21 |
 | 8 | Planner efficiency | `55a0c5b` | 2026-08-21 |
 | 9 | Backlog sweep | `2723ba0` | 2026-08-21 |
