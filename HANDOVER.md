@@ -197,7 +197,7 @@ Every failure classification — confirmed they share one definition:
 | 11 | Lint debt | `f0769a5` | 2026-08-21 |
 | 12 | Dispatch identity and gate baseline | `6d8ef86` | 2026-08-29 |
 | 13 | Recovery paths account for live work | `ccbab22` | 2026-08-29 |
-| 14 | Agents see what actually happened | pending | 2026-08-29 |
+| 14 | Agents see what actually happened | `da52c8d` | 2026-08-29 |
 
 ---
 
