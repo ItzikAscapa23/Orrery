@@ -319,3 +319,51 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - Feature `0be2aa39` passes its test gate on retry-test
+---
+## Phase 15 — The gate counts what actually ran
+**Goal:** No gate passes or rejects on a test set it failed to resolve.
+**PRD refs:** §3 R7, R9
+**Tasks:**
+- [ ] `70-testdir-depth` — C-6/R-19. `discoverTestDir` candidate loop uses
+      `findTestFiles(abs, 1)`; BFF tests live at `test/scenarios/<domain>/`,
+      depth 2, so every candidate misses. Deep-scan then returns
+      `path.relative(worktreePath, path.dirname(found[0]))` which is `''` when
+      the found file's directory equals the worktree root. Evidence: three
+      `▸ test agent running — writing acceptance tests to /` events on feature
+      `0be2aa39`, and `git log -- ''` throwing `fatal: '/' is outside repository`
+- [ ] `71-degenerate-results` — R-20 and R-17 share one shape. `getAuthoredTestFiles`
+      (`testJob.ts:96`) catches all exceptions and returns `[]`, so a git pathspec
+      error is indistinguishable from "nothing authored". `testJob.ts:984` reports
+      `✓ all acceptance tests pass (0 passed, 0 failed)` — a false pass at the
+      acceptance gate. Both must distinguish "resolved to zero" from "failed to
+      resolve". Fix once, apply at both sites
+- [ ] R-21 — `discoverTestDir` returns `method`; `testJob.ts:565` guards only
+      `'fallback'`. An empty `dir` from `'deep-scan'` passes unchecked. Reject
+      an empty dir regardless of method
+- [ ] `72-bounce-back-inherits-tests` — R-22. Round 2 on feature `0be2aa39`
+      inherited a worktree already containing the round-1 test file, correctly
+      concluded no new file was needed, and staged only
+      `test/__orrery_harness_brief.md`. The gate demanded a new authored file the
+      agent had no reason to write. Bounce-back must account for tests authored
+      in prior rounds
+- [ ] R-18 — test agent's turn 1 calls `read_file spec.md` and `contract.yaml`
+      against the worktree; both are prompt-inlined (`testJob.ts:446-447`) and
+      absent from disk. State this in the prompt. Two wasted turns per run at
+      88% test-agent cost share
+- [ ] Audit — list, not summary — every gate decision derived from a resolved
+      path or file set, and confirm each fails loudly when resolution fails
+**Definition of Done:**
+- `discoverTestDir` never returns an empty dir; a repo with tests at depth 2
+  resolves to `test`
+- A git failure in `getAuthoredTestFiles` surfaces as an error, not `[]`
+- Zero executed tests never renders as a pass at the acceptance gate
+- A bounce-back round is satisfiable when prior rounds authored the tests
+- Resolution-failure audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1080 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A feature whose test agent authors one file passes its acceptance gate

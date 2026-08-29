@@ -183,6 +183,50 @@ Resolved or diagnosed all Phase 7 carry-forwards. Remaining open items:
   "attempt": 2}` parked a task permanently. `taskReconciler.ts:73` already states
   the opposite principle for orphans. Fifth occurrence of one rule in two places.
 
+Items closed in Phase 14 (`da52c8d`): R-14 tool results logged as char count only; R-15 zero-total parse now falls through to raw output; R-16 empty `stagedFiles` on the intercept path (no change needed — see HANDOVER Phase 14 audit).
+
+- **R-17** False pass at the acceptance gate. `testJob.ts:984` renders
+  `✓ all acceptance tests pass (0 passed, 0 failed)` — a run that executed zero
+  tests is reported as success. Found by the Phase 14 render-site audit and
+  deferred there as out of scope. Same shape as R-15 (empty report read as clean
+  run) but one layer up, at the gate that decides DONE.
+- **R-18** Test agent's turn 1 issues `read_file spec.md` and `read_file
+  contract.yaml` against the worktree. Both are read from the artifact store and
+  inlined into the prompt (`testJob.ts:446-447`); neither exists on disk. Every
+  run wastes two turns on ENOENT. Pre-R-14 these were logged as `(152 chars)` /
+  `(158 chars)` with no error visible — the char counts were the ENOENT strings,
+  not file contents, in every run since at least 21 Aug.
+- **R-19 / C-6** `discoverTestDir` returns an empty dir. The candidate loop calls
+  `findTestFiles(abs, 1)` — depth 1 — but the BFF target's tests live at
+  `test/scenarios/<domain>/`, depth 2. `test/` passes `existsSync` and fails the
+  file check, so every candidate misses and deep-scan runs; deep-scan returns
+  `path.relative(worktreePath, path.dirname(found[0]))`, which is `''` when the
+  found file's directory equals the worktree root. Evidence: three
+  `▸ test agent running — writing acceptance tests to /` events on feature
+  `0be2aa39`, and `git log --grep='^X-Orrery-Agent: test' ... -- ''` throwing
+  `fatal: '/' is outside repository`. This is the C-6 hypothesis (nested test
+  directories) reproducing for the first time.
+- **R-20** `getAuthoredTestFiles` (`testJob.ts:96`) wraps its `git log` in
+  `try { } catch { return [] }`. A thrown pathspec error is indistinguishable
+  from "no authored files". On feature `0be2aa39` this turned R-19 into a silent
+  false rejection of four correctly-trailered committed test files, against a
+  784,957-byte valid report. Third instance this session of a degenerate result
+  rendering as a valid one (see R-15, R-17).
+- **R-21** `discoverTestDir` returns a `method` field so the caller can react;
+  `testJob.ts:565` guards only `method === 'fallback'`. A `'deep-scan'` result
+  carrying an empty `dir` passes unchallenged. The guard should reject an empty
+  dir regardless of method.
+- **R-22** Bounce-back demands a new authored test file from an agent whose
+  worktree already contains one. On feature `0be2aa39` round 2, the agent read
+  `orderCardClubsListSchemaAC7.test.js` at turn 5, verified the suite at 2186
+  passing, and staged only `test/__orrery_harness_brief.md` — correct behaviour.
+  The round was unwinnable by construction. Bounce-back must account for tests
+  authored in prior rounds.
+- **O-17** WATCH LIST — mesh shows Test Agent `DONE` while the feature-level test
+  job is running. Phase 12 made task rows authoritative for dev/test agent
+  status; the feature-level test job appears not to be covered by that
+  derivation.
+
 Items closed in Phase 9: C-4, C-5, R-7 (moot), R-8, R-9, R-10, O-13.
 
 **Intermittent test failure (6b/2a, resolved 2026-08-02)** — featureFindings timeout; root cause was git subprocess at dispatch.ts module load; fixed by stubbing `_headCommit` in featureFindings.test.ts (6-U17-flake).
