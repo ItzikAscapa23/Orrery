@@ -35,8 +35,8 @@ export async function dispatchJob(
   featureId: string,
   task: AgentJobPayload['task'],
   extra?: { taskId?: string },
-): Promise<void> {
-  await enqueueJob(featureId, task, extra);
+): Promise<string> {
+  const jobId = await enqueueJob(featureId, task, extra);
 
   try {
     const workers = await getQueue().getWorkers();
@@ -78,6 +78,8 @@ export async function dispatchJob(
   } catch {
     // Non-fatal: drift detection must never block dispatch.
   }
+
+  return jobId;
 }
 
 /**
@@ -158,7 +160,10 @@ export async function dispatchUnblockedTasks(
         ? ('server-test-task' as const)
         : ('client-test-task' as const)
       : jobType;
-    await dispatchJob(featureId, resolvedJobType, { taskId: task.id });
+    const jobId = await dispatchJob(featureId, resolvedJobType, { taskId: task.id });
+    if (jobId) {
+      await getPrisma().task.update({ where: { id: task.id }, data: { bullJobId: jobId } });
+    }
   }
 
   if (dispatchable.length === 0) {

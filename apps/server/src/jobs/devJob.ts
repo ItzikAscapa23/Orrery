@@ -386,7 +386,7 @@ export async function runDevJob(
 
   await getPrisma().task.update({
     where: { id: taskId },
-    data: { status: 'running', attemptCount: attempt, bullJobId },
+    data: { status: 'running', attemptCount: attempt },
   });
 
   const rawSpec = feature.proposedSpec ?? '';
@@ -642,6 +642,13 @@ export async function runDevJob(
       throw new Error(reason);
     }
 
+    // Baseline: names of tests already failing before the agent touched anything (R9).
+    // Verification later filters to only NEW failures — pre-existing ones are not the agent's fault.
+    const baselineParsed = parseTestOutput(probeCatResult.stdout, '');
+    const baselineFailedNames = new Set(
+      baselineParsed.tests.filter((t) => t.status === 'failed').map((t) => t.test_name),
+    );
+
     await appendEvent(getPrisma(), featureId, {
       type: 'agent.status',
       agent: task.side,
@@ -842,10 +849,19 @@ export async function runDevJob(
     if (testResult.exitCode !== 0) {
       const verifyCatResult = await container.exec(`cat ${TEST_REPORT_FILE}`);
       const verifyParsed = parseTestOutput(verifyCatResult.stdout, testResult.stderr);
-      const detail = verifyParsed.parseError
-        ? `${testResult.stdout}\n${testResult.stderr}`.slice(0, 800)
-        : formatTestSummary(verifyParsed);
-      throw new Error(`Tests failed:\n${detail}`);
+      if (verifyParsed.parseError) {
+        throw new Error(
+          `Tests failed:\n${`${testResult.stdout}\n${testResult.stderr}`.slice(0, 800)}`,
+        );
+      }
+      const newFailures = verifyParsed.tests.filter(
+        (t) => t.status === 'failed' && !baselineFailedNames.has(t.test_name),
+      );
+      if (newFailures.length > 0) {
+        throw new Error(
+          `Tests failed:\n${formatTestSummary({ ...verifyParsed, tests: newFailures, failed: newFailures.length })}`,
+        );
+      }
     }
 
     checkManifestGuardrail(worktreeInfo.worktreePath);

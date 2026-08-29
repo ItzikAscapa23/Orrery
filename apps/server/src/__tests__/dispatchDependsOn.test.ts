@@ -631,3 +631,28 @@ describe('completeTask — dispatch from normal and noop-success paths', () => {
     expect(mockEnqueueJob).toHaveBeenCalledWith(featureId, 'server-dev', { taskId: testsId });
   });
 });
+
+// ── R8: dispatch persists bullJobId before task is observable as running ────────
+
+describe('dispatchUnblockedTasks — persists bullJobId at dispatch time (R8)', () => {
+  it('writes bullJobId to the task row immediately when a job is enqueued', async () => {
+    mockEnqueueJob.mockResolvedValueOnce('bull-job-xyz');
+    const task = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'R8 test task',
+        description: 'R8 test task',
+        specRefs: [],
+        dependsOn: [],
+        status: 'pending',
+      },
+    });
+
+    await dispatchUnblockedTasks(featureId, 'server');
+
+    const row = await getPrisma().task.findUniqueOrThrow({ where: { id: task.id } });
+    expect(row.bullJobId).toBe('bull-job-xyz');
+  });
+});

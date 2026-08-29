@@ -65,8 +65,9 @@ export async function reconcileOrphanedTasks(): Promise<void> {
   const toDispatch = new Map<string, { featureId: string; side: string }>();
 
   for (const task of runningTasks) {
-    // If the task's bullJobId is in the live set it is genuinely running — leave it.
-    if (task.bullJobId && liveJobIds.has(task.bullJobId)) continue;
+    // A null bullJobId means dispatch persisted the job before the handler ran — not orphaned.
+    // Only treat as orphaned when a non-null ID is absent from the live BullMQ set.
+    if (!task.bullJobId || liveJobIds.has(task.bullJobId)) continue;
 
     // No live BullMQ job — orphaned by a prior restart or mid-backoff gap.
     // The job incremented its counter (testTaskAttempts or attemptCount) at startup
@@ -76,7 +77,7 @@ export async function reconcileOrphanedTasks(): Promise<void> {
     const attemptForEvent = Math.max(1, wasInTestJob ? task.testTaskAttempts : task.attemptCount);
     const attemptDecrement = wasInTestJob
       ? ({ testTaskAttempts: { decrement: 1 } } as const)
-      : ({ attemptCount: Math.max(0, task.attemptCount - 1) } as const);
+      : ({ attemptCount: { decrement: 1 } } as const);
 
     if (task.orphanCount < ORPHAN_MAX_RECOVERIES) {
       // Under cap: reset to pending so the next dispatch cycle picks it up.

@@ -303,9 +303,10 @@ export function parseTestOutput(
       stagedFiles.some((f) => suiteName.endsWith('/' + f) || suiteName === f);
 
     for (const t of suite.assertionResults) {
+      if (t.status !== 'passed' && t.status !== 'failed') continue;
       const row: TestRow = {
         test_name: (t.fullName ?? '(unnamed)').trim(),
-        status: t.status === 'passed' ? 'passed' : 'failed',
+        status: t.status,
         ...(typeof t.duration === 'number' && t.duration >= 0
           ? { duration_ms: Math.round(t.duration) }
           : {}),

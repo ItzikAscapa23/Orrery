@@ -47,13 +47,14 @@ export async function enqueueJob(
   featureId: string,
   task: AgentJobPayload['task'],
   extra?: { taskId?: string; repoId?: string },
-): Promise<void> {
+): Promise<string> {
   const opts =
     task === 'aws-review' || task === 'server-dev' || task === 'client-dev' || task === 'light-dev'
       ? { attempts: 3, backoff: { type: 'exponential' as const, delay: 3000 } }
       : {};
   const payload: AgentJobPayload = { featureId, task, ...extra };
-  await getQueue().add(task, payload, opts);
+  const job = await getQueue().add(task, payload, opts);
+  return job.id ?? '';
 }
 
 export async function closeQueue(): Promise<void> {

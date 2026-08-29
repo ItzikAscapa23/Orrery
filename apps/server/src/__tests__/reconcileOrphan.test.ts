@@ -218,6 +218,32 @@ describe('reconcileOrphanedTasks — orphan auto-recovery', () => {
     expect(updated.parkReason).toBeNull();
   });
 
+  it('running task with null bullJobId is NOT treated as orphaned (not yet dispatched window)', async () => {
+    await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Just dispatched task',
+        description: 'Just dispatched task',
+        specRefs: [],
+        dependsOn: [],
+        status: 'running',
+        attemptCount: 1,
+        bullJobId: null,
+      },
+    });
+
+    // All BullMQ lists are empty — but null bullJobId means "not yet dispatched", not orphaned.
+    await reconcileOrphanedTasks();
+
+    const row = await getPrisma().task.findFirstOrThrow({
+      where: { featureId, title: 'Just dispatched task' },
+    });
+    expect(row.status).toBe('running');
+    expect(dispatchUnblockedTasks).not.toHaveBeenCalled();
+  });
+
   it('third orphan (cap reached): task parked with orphan_cap, dispatchUnblockedTasks not called', async () => {
     vi.clearAllMocks();
     const task = await getPrisma().task.create({

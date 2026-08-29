@@ -764,6 +764,36 @@ describe('parseTestOutput — structured JSON parser', () => {
     expect(result.passed).toBeNull();
     expect(result.parseError).toMatch(/numPassedTests/);
   });
+
+  // ── R11: failure list and failure count must agree (skipped/pending/todo excluded) ──
+
+  const WITH_SKIPPED_FIXTURE = JSON.stringify({
+    numPassedTests: 1,
+    numFailedTests: 0,
+    testResults: [
+      {
+        assertionResults: [
+          { fullName: 'passing test', status: 'passed', duration: 10 },
+          { fullName: 'a skipped test', status: 'skipped' },
+          { fullName: 'a pending test', status: 'pending' },
+          { fullName: 'a todo test', status: 'todo' },
+        ],
+      },
+    ],
+  });
+
+  it('skipped/pending/todo tests are excluded from the tests array', () => {
+    const result = parseTestOutput(WITH_SKIPPED_FIXTURE, '');
+    expect(result.tests).toHaveLength(1);
+    expect(result.tests[0]!.test_name).toBe('passing test');
+    expect(result.tests[0]!.status).toBe('passed');
+  });
+
+  it('failure list length equals numFailedTests when suite has skipped tests', () => {
+    const result = parseTestOutput(WITH_SKIPPED_FIXTURE, '');
+    const failedInList = result.tests.filter((t) => t.status === 'failed').length;
+    expect(failedInList).toBe(result.failed ?? 0); // both must be 0
+  });
 });
 
 describe('runTestJob — TEST_PASS gate: no authored tests → does NOT advance to DONE', () => {

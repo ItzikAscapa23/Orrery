@@ -588,14 +588,17 @@ describe('devJob — container lifecycle', () => {
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // probe json cmd
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // cat probe report
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }); // npm test
-    mockParseTestOutput.mockReturnValueOnce({
+    const probeResult = {
       passed: 1,
       failed: 0,
       tests: [],
       authoredPassed: 0,
       authoredFailed: 0,
       parseError: null,
-    }); // probe
+    };
+    mockParseTestOutput
+      .mockReturnValueOnce(probeResult) // assessProbeResult
+      .mockReturnValueOnce(probeResult); // baseline capture
 
     const taskId = await makeUncoveredTask();
     await runDevJob(featureId, taskId, 'job-lifecycle-ok');
@@ -607,14 +610,17 @@ describe('devJob — container lifecycle', () => {
     mockContainerExec
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // probe json cmd
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }); // cat probe report
-    mockParseTestOutput.mockReturnValueOnce({
+    const probeResult2 = {
       passed: 1,
       failed: 0,
       tests: [],
       authoredPassed: 0,
       authoredFailed: 0,
       parseError: null,
-    }); // probe
+    };
+    mockParseTestOutput
+      .mockReturnValueOnce(probeResult2) // assessProbeResult
+      .mockReturnValueOnce(probeResult2); // baseline capture
     mockRunDevAgent.mockRejectedValueOnce(new Error('agent internal error'));
 
     const taskId = await makeUncoveredTask();
@@ -707,5 +713,92 @@ describe('devJob — max_turns threading', () => {
     const ctx = mockRunDevAgent.mock.calls[0]![2] as { maxTurns?: number };
     // effectiveCap = Math.max(1, Math.min(40, 150)) = 40
     expect(ctx.maxTurns).toBe(40);
+  });
+});
+
+// ── R9: gate baseline-diff — fail only on new failures ────────────────────────
+
+describe('devJob — baseline-diff gate (R9)', () => {
+  async function makeUncoveredTask(): Promise<string> {
+    const task = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Baseline test task',
+        description: 'R9 baseline test',
+        specRefs: [],
+        dependsOn: [],
+        status: 'pending',
+        coveredByTestPlan: false,
+      },
+    });
+    return task.id;
+  }
+
+  it('completes when verify fails but all failures are pre-existing (R9 gate delta)', async () => {
+    const preExisting = {
+      test_name: 'legacy broken test',
+      status: 'failed' as const,
+      authored: false,
+    };
+
+    // probe cmd, cat probe, verify cmd (fails!), cat verify
+    mockContainerExec
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '{}', stderr: '' });
+
+    // All parse calls return the same pre-existing failure — baseline = verify = same failure
+    mockParseTestOutput.mockReturnValue({
+      passed: 0,
+      failed: 1,
+      tests: [preExisting],
+      authoredPassed: 0,
+      authoredFailed: 0,
+    });
+
+    const taskId = await makeUncoveredTask();
+    await runDevJob(featureId, taskId, 'job-baseline-1');
+
+    const updated = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(updated.status).toBe('completed');
+  });
+
+  it('throws when verify finds a failure not present in the baseline', async () => {
+    // probe cmd, cat probe, verify cmd (fails), cat verify
+    mockContainerExec
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '{}', stderr: '' });
+
+    // Probe: all pass. Baseline capture: all pass. Verify: new failure.
+    mockParseTestOutput
+      .mockReturnValueOnce({
+        passed: 1,
+        failed: 0,
+        tests: [],
+        authoredPassed: 0,
+        authoredFailed: 0,
+      })
+      .mockReturnValueOnce({
+        passed: 1,
+        failed: 0,
+        tests: [],
+        authoredPassed: 0,
+        authoredFailed: 0,
+      })
+      .mockReturnValueOnce({
+        passed: 0,
+        failed: 1,
+        tests: [{ test_name: 'newly broken test', status: 'failed' as const, authored: false }],
+        authoredPassed: 0,
+        authoredFailed: 0,
+      });
+
+    const taskId = await makeUncoveredTask();
+    await expect(runDevJob(featureId, taskId, 'job-baseline-2')).rejects.toThrow('Tests failed');
   });
 });
