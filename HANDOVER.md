@@ -50,7 +50,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 ## Status
 
 - **Current phase:** 18 — Close the backlog honestly
-- **State:** `in-progress`
+- **State:** `complete`
 - **Last updated:** 2026-08-29
 
 ---
@@ -59,8 +59,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 - [x] Diagnose O-15 (review agent 29k/14 tokens)
 - [x] Close O-15 — no fix warranted (recorded in Decisions)
-- [ ] Trim `docs/phase-6.md` to open items only
-- [ ] Record deletion convention in HANDOVER Conventions section
+- [x] Trim `docs/phase-6.md` to open items only (C-3 and O-12 remain)
+- [x] Record deletion convention in HANDOVER Conventions section
 
 ---
 
@@ -68,7 +68,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1098 passed across 84 files** (+1 new test), 2026-08-29 |
+| `npm test` (repo root) | passed — **1098 passed across 84 files** (no code changes), 2026-08-29 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
 | `npm run lint` | exit 0 — 0 problems, 2026-08-29 |
 
@@ -121,6 +121,16 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ---
 
+## Conventions
+
+- **Backlog entries in `docs/phase-6.md` are deleted on close, not annotated.**
+  The phase commit is the evidence for each closed item, reachable via the phase
+  log table below. Do not add `✅ DONE` or `Items closed in Phase N` lines —
+  delete the entry outright once its fix is committed and the phase passes
+  verification.
+
+---
+
 ## Open questions / blockers
 
 - **O-12 Duplicate `pr.created` events.** Root cause diagnosed (non-atomic ADO call
@@ -154,6 +164,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 15 | The gate counts what actually ran | `4c8f1c6` | 2026-08-29 |
 | 16 | Environmental failures leave a recoverable task | `58bb2f7` | 2026-08-29 |
 | 17 | The UI states what the data says | `d00751f` | 2026-08-29 |
+| 18 | Close the backlog honestly | TBD | 2026-08-29 |
 
 ---
 
