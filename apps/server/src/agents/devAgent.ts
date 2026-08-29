@@ -378,6 +378,7 @@ export interface ToolCallInfo {
   turn: number;
   toolName: string;
   resultSize: number;
+  resultFirstLine?: string;
   path?: string;
   range?: string;
   command?: string;
@@ -509,6 +510,7 @@ export async function runDevAgent(
                 turn,
                 toolName: 'bash',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 command: command.slice(0, 120),
               });
             continue;
@@ -529,6 +531,7 @@ export async function runDevAgent(
                 turn,
                 toolName: 'write_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 contentLength: content.length,
               });
@@ -558,6 +561,7 @@ export async function runDevAgent(
                   turn,
                   toolName: 'edit_file',
                   resultSize: errContent.length,
+                  resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
                   path: filePath,
                   oldStrLength: old_str.length,
                   newStrLength: new_str.length,
@@ -577,6 +581,7 @@ export async function runDevAgent(
                   turn,
                   toolName: 'edit_file',
                   resultSize: errContent.length,
+                  resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
                   path: filePath,
                   oldStrLength: old_str.length,
                   newStrLength: new_str.length,
@@ -591,6 +596,7 @@ export async function runDevAgent(
                 turn,
                 toolName: 'edit_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 oldStrLength: old_str.length,
                 newStrLength: new_str.length,
@@ -638,6 +644,7 @@ export async function runDevAgent(
                 turn,
                 toolName: 'read_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 range,
               });
@@ -662,6 +669,7 @@ export async function runDevAgent(
                 turn,
                 toolName: 'propose_amendment',
                 resultSize: amendContent.length,
+                resultFirstLine: (amendContent.split('\n')[0] ?? '').slice(0, 120),
               });
             messages.push({ role: 'user', content: toolResults });
             return {
@@ -674,7 +682,12 @@ export async function runDevAgent(
             result = `Unknown tool: ${block.name}`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
-              await onToolCall({ turn, toolName: block.name, resultSize: result.length });
+              await onToolCall({
+                turn,
+                toolName: block.name,
+                resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
+              });
             continue;
           }
         } catch (err) {
@@ -706,6 +719,7 @@ export async function runDevAgent(
                   turn,
                   toolName: 'bash',
                   resultSize: errContent.length,
+                  resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
                   command: metaCmd.slice(0, 120),
                 });
               continue;
@@ -741,6 +755,7 @@ export async function runDevAgent(
                   turn,
                   toolName: 'bash',
                   resultSize: errContent.length,
+                  resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
                   command: cmd.slice(0, 120),
                 });
               continue;
@@ -759,6 +774,7 @@ export async function runDevAgent(
             turn,
             toolName: block.name,
             resultSize: result.length,
+            resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
             ...(callPath !== undefined && { path: callPath }),
             ...(callRange !== undefined && { range: callRange }),
             ...(callCommand !== undefined && { command: callCommand }),
@@ -883,6 +899,7 @@ export async function runLightDevAgent(
                 turn,
                 toolName: 'write_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 contentLength: content.length,
               });
@@ -909,6 +926,7 @@ export async function runLightDevAgent(
                   turn,
                   toolName: 'edit_file',
                   resultSize: result.length,
+                  resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                   path: filePath,
                   oldStrLength: old_str.length,
                   newStrLength: new_str.length,
@@ -928,6 +946,7 @@ export async function runLightDevAgent(
                   turn,
                   toolName: 'edit_file',
                   resultSize: result.length,
+                  resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                   path: filePath,
                   oldStrLength: old_str.length,
                   newStrLength: new_str.length,
@@ -942,6 +961,7 @@ export async function runLightDevAgent(
                 turn,
                 toolName: 'edit_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 oldStrLength: old_str.length,
                 newStrLength: new_str.length,
@@ -981,6 +1001,7 @@ export async function runLightDevAgent(
                 turn,
                 toolName: 'read_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 range,
               });
@@ -989,7 +1010,12 @@ export async function runLightDevAgent(
             result = `Unknown tool: ${block.name}`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
-              await onToolCall({ turn, toolName: block.name, resultSize: result.length });
+              await onToolCall({
+                turn,
+                toolName: block.name,
+                resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
+              });
             continue;
           }
         } catch (err) {

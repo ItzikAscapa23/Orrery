@@ -343,6 +343,21 @@ describe('summarizeBashTestRun', () => {
     expect(execCmds[0]).toContain('npx jest --json');
   });
 
+  it("returns raw output labeled 'zero tests reported' when JSON reports zero total", async () => {
+    const reportJson = makePassingJson(0);
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('npx vitest run --reporter=json'))
+        return { exitCode: 0, stdout: 'some runner output', stderr: '' };
+      if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    const result = await summarizeBashTestRun('npm test', container);
+    expect(result).not.toBeNull();
+    expect(result).toContain('[raw output — zero tests reported]');
+    expect(result).toContain('some runner output');
+    expect(result).not.toContain('TESTS:');
+  });
+
   it('returns null for a command with a real pipe (| is still blocked)', async () => {
     const container = makeContainer(() => {
       throw new Error('should not be called');

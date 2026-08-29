@@ -640,6 +640,7 @@ export async function runTestAgent(
                 turn,
                 toolName: 'bash',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 command: command.slice(0, 120),
               });
             continue;
@@ -660,6 +661,7 @@ export async function runTestAgent(
                 turn,
                 toolName: 'write_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 contentLength: content.length,
               });
@@ -689,6 +691,7 @@ export async function runTestAgent(
                   turn,
                   toolName: 'edit_file',
                   resultSize: errContent.length,
+                  resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
                   path: filePath,
                   oldStrLength: old_str.length,
                   newStrLength: new_str.length,
@@ -708,6 +711,7 @@ export async function runTestAgent(
                   turn,
                   toolName: 'edit_file',
                   resultSize: errContent.length,
+                  resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
                   path: filePath,
                   oldStrLength: old_str.length,
                   newStrLength: new_str.length,
@@ -722,6 +726,7 @@ export async function runTestAgent(
                 turn,
                 toolName: 'edit_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 oldStrLength: old_str.length,
                 newStrLength: new_str.length,
@@ -768,6 +773,7 @@ export async function runTestAgent(
                 turn,
                 toolName: 'read_file',
                 resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 path: filePath,
                 range,
               });
@@ -777,13 +783,23 @@ export async function runTestAgent(
             result = checkListFilesTarget(worktreePath, dir || ctx.testDir, ctx.testDir);
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
-              await onToolCall({ turn, toolName: 'list_files', resultSize: result.length });
+              await onToolCall({
+                turn,
+                toolName: 'list_files',
+                resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
+              });
             continue;
           } else {
             result = `Unknown tool: ${block.name}`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
-              await onToolCall({ turn, toolName: block.name, resultSize: result.length });
+              await onToolCall({
+                turn,
+                toolName: block.name,
+                resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
+              });
             continue;
           }
         } catch (err) {
@@ -815,6 +831,7 @@ export async function runTestAgent(
                   turn,
                   toolName: 'bash',
                   resultSize: errContent.length,
+                  resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
                   command: metaCmd.slice(0, 120),
                 });
               continue;
@@ -844,6 +861,7 @@ export async function runTestAgent(
                   turn,
                   toolName: 'bash',
                   resultSize: errContent.length,
+                  resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
                   command: allowCmd.slice(0, 120),
                 });
               continue;
@@ -862,6 +880,7 @@ export async function runTestAgent(
             turn,
             toolName: block.name,
             resultSize: result.length,
+            resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
             ...(callPath !== undefined && { path: callPath }),
             ...(callRange !== undefined && { range: callRange }),
             ...(callCommand !== undefined && { command: callCommand }),

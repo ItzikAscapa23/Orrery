@@ -119,5 +119,10 @@ export async function summarizeBashTestRun(
     return `[raw output — JSON summary unavailable]\n${raw.slice(-8192)}`;
   }
 
+  if ((parsed.passed ?? 0) + (parsed.failed ?? 0) === 0) {
+    const raw = rawCombined || '(no output)';
+    return `[raw output — zero tests reported]\n${raw.slice(-8192)}`;
+  }
+
   return formatTestSummary(parsed);
 }

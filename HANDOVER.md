@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 13 — Recovery paths account for live work
+- **Current phase:** 14 — Agents see what actually happened
 - **State:** `complete`
 - **Last updated:** 2026-08-29
 
@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 13 closed. No Phase 14 is defined in `plan.md` yet — next work requires a new phase entry.*
+*Phase 14 closed. No Phase 15 defined in `plan.md` yet — next work requires a new phase entry.*
 
 ---
 
@@ -64,9 +64,46 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — 1079 passed across 84 files, 2026-08-29 |
+| `npm test` (repo root) | passed — 1080 passed across 84 files, 2026-08-29 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
 | `npm run lint` | **exit 0** — 0 problems, 2026-08-29 |
+
+---
+
+## Phase 14 audit — test-output render sites
+
+Every site that renders a parsed test result, per scenario:
+
+| Site | Ran / zero tests | Parse failed | Ran / N>0 |
+|---|---|---|---|
+| `summarizeBashTestRun` (Phase 14) | `[raw output — zero tests reported]` ✓ | `[raw output — JSON summary unavailable]` ✓ | `TESTS: X passed, Y failed` ✓ |
+| `testJob.ts:786` (agent.log failure) | not reached (guard: `failed>0`) ✓ | `· N failure(s) … (JSON report unavailable)` ✓ | `TESTS: X passed, Y failed\nFAILURES:…` ✓ |
+| `testJob.ts:984` (agent.log pass) | `✓ all acceptance tests pass (0 passed, 0 failed)` ← **indistinct** | not reached | `✓ all acceptance tests pass (N passed, 0 failed)` ✓ |
+| `devJob.ts:865` (AgentNoopError) | not reached (guard: `newFailures.length>0`) ✓ | not reached | `TESTS: X passed, Y failed` ✓ |
+| `TestReportCard` / `TestReportSummaryChip` (UI) | no zero-tests variant (carry) | `parse-error` variant ✓ | `pass` / `fail` variants ✓ |
+
+Known remaining gap: `testJob.ts:984` and the UI do not distinguish "zero tests ran"
+from "tests passed". Out of scope for Phase 14; carry to Phase 15+.
+
+**`authored` on intercept path:** `parseTestOutput(catResult.stdout, '')` passes
+empty `stagedFiles` — correct and intentional. `authoredPassed`/`authoredFailed` are
+only meaningful in the test job's authored-gate check; the dev-agent intercept only
+reads the summary string. No change needed.
+
+---
+
+## Environmental failure audit (Phase 13)
+
+Every failure classification — confirmed they share one definition:
+*an environmental failure is one caused by infrastructure, not agent behaviour*.
+
+| Site | Failure | Slot consumed? | Mechanism |
+|---|---|---|---|
+| `taskReconciler.ts` | Orphan (server crash) | No | `{ decrement: 1 }` on `attemptCount` or `testTaskAttempts` |
+| `devJob.ts` (Bedrock check) | Bedrock unreachable | No | `attemptCount` rollback; `final: false`; `parkReason: 'bedrock_unreachable'` |
+| `devJob.ts` (catch block) | InstallError | Yes (3 max) | Slot-consuming by design — cold-cache ratcheting needs multiple tries |
+| `devJob.ts` (catch block) | PushError | Always final | Work is committed; retrying can't fix a push failure |
+| `devJob.ts` (catch block) | AgentNoopError, policy violations | Always final | Agent behavioural fault |
 
 ---
 
@@ -88,80 +125,33 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **ESLint test-file scoped override, not per-line suppressions** — `no-unsafe-*`,
   `no-explicit-any`, `no-unnecessary-type-assertion`, `require-await` all turned off
   for `**/__tests__/**` in `eslint.config.mjs`.
-- **`apps/server/prisma/` excluded from ESLint** — `seed.ts` sits outside any
-  tsconfig `include`; excluding the directory is the minimal fix.
 - **prettier needs two passes for stable output** — some method-chain patterns
   change indentation on pass 1, which changes line-length decisions on pass 2.
-- **R8: `enqueueJob` returns job ID; persisted at dispatch time** — `queue.ts:enqueueJob`
-  now returns the BullMQ job ID. `dispatchUnblockedTasks` writes `bullJobId` to the
-  task row immediately after `queue.add()`, closing the window where a running task
-  had a null ID. Reconciler treats null `bullJobId` as "not yet dispatched" (skip),
-  not orphaned. Redundant second write in `devJob.ts:389` removed.
+- **R8: `enqueueJob` returns job ID; persisted at dispatch time** — closes the window
+  where a running task had a null ID. Reconciler treats null `bullJobId` as "not yet
+  dispatched" (skip), not orphaned.
 - **R8: attempt counter reset uses Prisma atomic decrement** — `{ decrement: 1 }`
-  instead of JS read-modify-write `Math.max(0, n - 1)` prevents a race on concurrent
-  reconciler runs.
-- **`parkReason: 'orphan'` path is dead** — `startupResume.ts:31,40` filters on it,
-  but no production code writes it (reconciler writes only `'orphan_cap'`). Left
-  as-is; the filter is a no-op but harmless.
-- **spendGuard dedup not implemented** — `checkSpendGuard` uses raw `COUNT(*)` which
-  can overcount retried jobs. Spec said report only; implementation deferred.
+  instead of JS read-modify-write prevents a race on concurrent reconciler runs.
 - **R9: baseline-diff gate** — `devJob.ts` captures a `parseTestOutput` result
-  immediately after the probe passes. The verification step only throws on failures
-  absent from the baseline set, so pre-existing broken tests do not block the agent.
-- **`parseTestOutput` skips non-terminal statuses** — `pending`, `skipped`, `todo`
-  entries are excluded with an early `continue`; TypeScript narrows the remaining
-  `status` to `'passed' | 'failed'` via control flow, making the `as` cast
-  unnecessary.
-- **Container name = `${CONTAINER_PREFIX}-${label}`** — `label` is the task ID for
-  dev and task-test containers, `${featureId}-test` for the feature-level test job.
-  `startContainer` calls `docker rm -f <name>` before `docker run -d`, so any
-  re-dispatch (reconciler, BullMQ stall recovery, retry-bounce) automatically kills
-  the incumbent. No timestamp suffix — deterministic naming is what makes targeted
-  kill possible. `sweepOrphanContainers` stays as the crash-recovery blanket path.
-- **Bedrock unreachable: `parkReason: 'bedrock_unreachable'`, `final: false`, no
-  `agent.status:failed`** — VPN/credential failure is environmental; it must not
-  consume a retry slot or permanently mark the agent as failed. The attempt counter
-  was already rolled back; this phase adds `final: false` and a distinct park reason
-  so operators can distinguish infra-down from agent quality failures.
-- **`pr.created` guard re-queried per repo inside the loop** — the pre-loop snapshot
+  immediately after the probe passes. Verification only throws on failures absent
+  from the baseline set, so pre-existing broken tests do not block the agent.
+- **Container name = `${CONTAINER_PREFIX}-${label}`** — deterministic naming makes
+  targeted kill possible. `startContainer` calls `docker rm -f <name>` before
+  `docker run -d`; any re-dispatch automatically kills the incumbent.
+- **Bedrock unreachable: `parkReason: 'bedrock_unreachable'`, `final: false`** —
+  VPN/credential failure is environmental; must not consume a retry slot or
+  permanently mark the agent as failed.
+- **`pr.created` guard re-queried per repo inside the loop** — pre-loop snapshot
   missed events written after the snapshot (ADO call succeeded, appendEvent crashed,
   job retried). Per-iteration `findFirst` closes the non-atomic window.
-
----
-
-## Environmental failure audit (Phase 13)
-
-Every failure classification in the codebase — confirmed they share one definition:
-*an environmental failure is one caused by infrastructure, not agent behaviour*.
-
-| Site | Failure | Slot consumed? | Mechanism |
-|---|---|---|---|
-| `taskReconciler.ts` | Orphan (server crash) | No | `{ decrement: 1 }` on `attemptCount` or `testTaskAttempts` |
-| `devJob.ts` (Bedrock check) | Bedrock unreachable | No | `attemptCount: task.attemptCount` rollback; `final: false`; `parkReason: 'bedrock_unreachable'` |
-| `devJob.ts` (catch block) | InstallError | Yes (3 attempts max) | Classified as infra but slot-consuming by design — cold-cache ratcheting needs multiple tries |
-| `devJob.ts` (catch block) | PushError | Always final | Work is committed; retrying the full agent job cannot fix a push failure |
-| `devJob.ts` (catch block) | AgentNoopError, policy violations | Always final | Agent behavioural fault — no retries appropriate |
-
-`InstallError` is the only environmental failure that consumes slots, and that is
-intentional: the npm cache ratchets forward on each attempt, so retrying helps.
-
----
-
-## Enqueue path inventory (Phase 12 R8 audit)
-
-All paths that can enqueue for a running task:
-
-| Call site | Trigger |
-|---|---|
-| `taskReconciler.ts:185` | Orphan recovery — immediate call then 60 s interval |
-| `featureRedispatch.ts:113` | `POST /features/:id/retry-bounce` manual redispatch |
-| `startupResume.ts:14` | Server start — resumes any task that was running at shutdown |
-| BullMQ `maxStalledCount: 1` (`agentWorker.ts:204`) | BullMQ-internal stall recovery; bypasses `queue.ts` |
-
-`queue.ts:56` (`getQueue().add()`) is the only production call site. BullMQ's internal
-stall-recovery path is external to application code and cannot be changed via R8.
-All four paths now terminate the incumbent container via the deterministic naming
-scheme before the new container starts.
+- **Phase 14: zero-total treated as failed intercept** — `summarizeBashTestRun`
+  returns `[raw output — zero tests reported]` when `passed + failed === 0`.
+  Keeps it distinct from `[raw output — JSON summary unavailable]` (parse failure)
+  so the operator can tell whether the runner crashed vs. found nothing.
+- **Phase 14: `resultFirstLine` in `ToolCallInfo`** — first line of every tool result
+  appended to the `agent.log` event (` → first line`). Populates from `result`,
+  `errContent`, or `amendContent` depending on the branch. Consumers: `devJob.ts`
+  and `testJob.ts`. Coalesced with `?? ''` to satisfy `noUncheckedIndexedAccess`.
 
 ---
 
@@ -178,9 +168,11 @@ scheme before the new container starts.
   to the unresolved path when a nested parent dir doesn't exist. On macOS
   `/var → /private/var`, this makes the jail check fail for new nested test dirs
   (e.g. `__tests__/acceptance/`). Fix: use `path.resolve` instead of
-  `fs.realpathSync.native` in the inner catch. Carry to Phase 14+.
+  `fs.realpathSync.native` in the inner catch. Carry to Phase 15+.
 - **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
   features. Carry forward.
+- **Phase 14 carry: UI + testJob:984 don't distinguish zero-tests-ran from
+  tests-passed.** Out of scope; carry to Phase 15+.
 
 ---
 
@@ -205,6 +197,7 @@ scheme before the new container starts.
 | 11 | Lint debt | `f0769a5` | 2026-08-21 |
 | 12 | Dispatch identity and gate baseline | `6d8ef86` | 2026-08-29 |
 | 13 | Recovery paths account for live work | `ccbab22` | 2026-08-29 |
+| 14 | Agents see what actually happened | pending | 2026-08-29 |
 
 ---
 

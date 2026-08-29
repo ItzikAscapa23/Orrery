@@ -740,6 +740,7 @@ export async function runDevJob(
         } else {
           text = `◦ turn ${info.turn} · ${info.toolName} (${info.resultSize} chars)`;
         }
+        if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         await appendEvent(getPrisma(), featureId, {
           type: 'agent.log',
           agent: task.side,
