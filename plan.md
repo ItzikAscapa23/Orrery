@@ -440,3 +440,34 @@ npm test
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 18 — Close the backlog honestly
+**Goal:** The backlog file lists only open items, and the last one is diagnosed.
+**PRD refs:** §2 C6
+**Tasks:**
+- [ ] O-15 — the ADO PR creation call spends ~29k input tokens for 8–14 output
+      tokens, reproducing across every run (`$0.089820` on feature `14ec88b4`,
+      `review` agent, 29,870 in / 14 out). Diagnose before fixing: establish
+      whether the call is truncating, whether the PR body is being built from a
+      response that carries almost nothing, and whether the input is the full
+      spec where a summary would do. Report the finding; do not fix in the same
+      task
+- [ ] Fix O-15 if the diagnosis supports a change; if it does not, record why
+      and close it
+- [ ] `docs/phase-6.md` holds open items only. Delete every closed entry and the
+      four accumulated `Items closed in Phase N` lines. Verify first that the
+      evidence survives in the phase commits and HANDOVER audit tables — if it
+      does not, keep the entry and mark it `✅ DONE` inline as O-14 already is
+- [ ] Record the convention in HANDOVER: entries are deleted on close, not
+      annotated; the phase commit carries the evidence
+**Definition of Done:**
+- O-15 is either fixed or closed with a recorded reason
+- `docs/phase-6.md` contains no closed items and no closure lines
+- Every deleted item's evidence is reachable from a phase commit or HANDOVER
+- The deletion convention is written in HANDOVER's Conventions section
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1098 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
