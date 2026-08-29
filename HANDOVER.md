@@ -145,7 +145,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 14 | Agents see what actually happened | `da52c8d` | 2026-08-29 |
 | 15 | The gate counts what actually ran | `4c8f1c6` | 2026-08-29 |
 | 16 | Environmental failures leave a recoverable task | `58bb2f7` | 2026-08-29 |
-| 17 | The UI states what the data says | pending | 2026-08-29 |
+| 17 | The UI states what the data says | `d00751f` | 2026-08-29 |
 
 ---
 
