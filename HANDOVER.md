@@ -204,7 +204,7 @@ scheme before the new container starts.
 | 10 | Spec reconciliation | `1097c3f` | 2026-08-21 |
 | 11 | Lint debt | `f0769a5` | 2026-08-21 |
 | 12 | Dispatch identity and gate baseline | `6d8ef86` | 2026-08-29 |
-| 13 | Recovery paths account for live work | pending | 2026-08-29 |
+| 13 | Recovery paths account for live work | `ccbab22` | 2026-08-29 |
 
 ---
 
