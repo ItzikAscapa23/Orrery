@@ -1348,6 +1348,43 @@ const BASE_CTX = {
   testDir: '__tests__',
 };
 
+describe('runTestAgent — initial user-turn message', () => {
+  it('does not tell the agent to read spec.md or contract.yaml (already inlined)', async () => {
+    const calls: Array<{ messages: Anthropic.MessageParam[] }> = [];
+    mockCreateMessageStream.mockImplementation((params: { messages: Anthropic.MessageParam[] }) => {
+      calls.push({ messages: params.messages.slice() });
+      return Promise.resolve({
+        finalMessage: () =>
+          Promise.resolve({
+            id: 'end',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-sonnet-5',
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 5, output_tokens: 5 },
+            content: [{ type: 'text', text: 'Done.' }],
+          } as unknown as Anthropic.Message),
+      });
+    });
+    await runTestAgent(
+      'feat-prompt',
+      { ...BASE_CTX },
+      {
+        name: 'c',
+        exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+        stop: async () => {},
+      },
+      '/tmp',
+    );
+    const firstCall = calls[0]!;
+    const userTurn = firstCall.messages.find((m) => m.role === 'user');
+    const content = typeof userTurn?.content === 'string' ? userTurn.content : '';
+    expect(content).not.toMatch(/Read spec\.md.*contract\.yaml/);
+    expect(content).toContain('already in your system prompt');
+  });
+});
+
 describe('buildSystemPrompt — existingTestFiles injection', () => {
   it('omits existing-coverage section when existingTestFiles is absent', () => {
     const prompt = buildSystemPrompt(BASE_CTX);

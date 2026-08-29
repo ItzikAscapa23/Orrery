@@ -147,6 +147,7 @@ import {
   TEST_REPORT_FILE,
   extractDescribeBlocks,
   getExistingTestFilesWithDescribes,
+  getAuthoredTestFiles,
 } from '../jobs/testJob.js';
 import { getRepoEntry } from '../jobs/devJob.js';
 import type { FastifyInstance } from 'fastify';
@@ -1257,6 +1258,22 @@ describe('extractDescribeBlocks', () => {
   it('handles backtick and double-quote delimiters', () => {
     mockReadFileSync.mockReturnValueOnce('describe(`suite A`, () => {});\n');
     expect(extractDescribeBlocks('/wt', '__tests__/t.test.ts')).toEqual(['suite A']);
+  });
+});
+
+describe('getAuthoredTestFiles', () => {
+  it('propagates git errors instead of returning empty array', async () => {
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockImplementationOnce(() => {
+      throw new Error("fatal: '/' is outside repository");
+    });
+    expect(() => getAuthoredTestFiles('/wt', '')).toThrow('outside repository');
+  });
+
+  it('returns matching test file paths on success', async () => {
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValueOnce('test/foo.test.ts\nREADME.md\n');
+    expect(getAuthoredTestFiles('/wt', 'test')).toEqual(['test/foo.test.ts']);
   });
 });
 

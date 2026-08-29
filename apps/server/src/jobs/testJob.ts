@@ -94,24 +94,20 @@ export function getAuthoredTestFilesForTask(
 }
 
 export function getAuthoredTestFiles(worktreePath: string, testDir: string): string[] {
-  try {
-    const out = git(
-      worktreePath,
-      'log',
-      '--grep=^X-Orrery-Agent: test',
-      '--diff-filter=A',
-      '--name-only',
-      '--pretty=format:',
-      '--',
-      testDir,
-    );
-    return out
-      .trim()
-      .split('\n')
-      .filter((f) => f && TEST_FILE_RE.test(f));
-  } catch {
-    return [];
-  }
+  const out = git(
+    worktreePath,
+    'log',
+    '--grep=^X-Orrery-Agent: test',
+    '--diff-filter=A',
+    '--name-only',
+    '--pretty=format:',
+    '--',
+    testDir,
+  );
+  return out
+    .trim()
+    .split('\n')
+    .filter((f) => f && TEST_FILE_RE.test(f));
 }
 
 export function extractDescribeBlocks(worktreePath: string, relPath: string): string[] {
@@ -181,14 +177,18 @@ export function discoverTestDir(worktreePath: string): DiscoverTestDirResult {
   ];
   for (const candidate of candidates) {
     const abs = path.join(worktreePath, candidate);
-    if (fs.existsSync(abs) && findTestFiles(abs, 1).length > 0) {
+    if (fs.existsSync(abs) && findTestFiles(abs, 3).length > 0) {
       return { dir: candidate, method: 'candidate' };
     }
   }
   // No candidate matched — deep scan up to 3 levels.
   const found = findTestFiles(worktreePath, 3);
   if (found.length > 0) {
-    return { dir: path.relative(worktreePath, path.dirname(found[0]!)), method: 'deep-scan' };
+    const dir = path.relative(worktreePath, path.dirname(found[0]!));
+    // Empty string means the file sits at the worktree root — git log -- '' throws
+    // "fatal: '/' is outside repository". Fall through to the conventional fallback.
+    if (dir === '') return { dir: '__tests__', method: 'fallback' };
+    return { dir, method: 'deep-scan' };
   }
   // Nothing found anywhere — return the conventional fallback; caller emits agent.log.
   return { dir: '__tests__', method: 'fallback' };
@@ -562,7 +562,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
   }
 
   const { dir: testDir, method: testDirMethod } = discoverTestDir(worktreePath);
-  if (testDirMethod === 'fallback') {
+  if (testDirMethod === 'fallback' || testDir === '') {
     await appendEvent(getPrisma(), featureId, {
       type: 'agent.log',
       agent: 'orchestrator',
@@ -893,7 +893,34 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     // Compute the durable authored set from git log (files added by the orchestrator
     // identity in testDir across all rounds). This survives a clean worktree in round 1+
     // where stagedLines is empty but the tests were committed in a prior round.
-    const authoredFiles = getAuthoredTestFiles(worktreePath, testDir);
+    let authoredFiles: string[];
+    try {
+      authoredFiles = getAuthoredTestFiles(worktreePath, testDir);
+    } catch (gitErr) {
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'orchestrator',
+        severity: 'error',
+        text: `getAuthoredTestFiles failed — git resolution error: ${gitErr instanceof Error ? gitErr.message : String(gitErr)}`,
+      });
+      await _handleNoAuthoredTests(
+        featureId,
+        specRev,
+        {
+          passed: null,
+          failed: null,
+          tests: [],
+          authoredPassed: 0,
+          authoredFailed: 0,
+          parseError: 'git-resolution-error',
+        },
+        priorTestRounds,
+        repos,
+        repoId,
+        feature,
+      );
+      return;
+    }
     // Use reportSource (file contents) so authoredParsed uses the same clean
     // JSON as parsed — never testResult.stdout which may be interleaved (C-5).
     const authoredParsed = parseTestOutput(reportSource, '', authoredFiles);
@@ -903,6 +930,27 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     // report means "unknown" not "zero"; surfacing a false blocker here
     // was backlog C-5.
     if (authoredParsed.authoredPassed === 0 && !authoredParsed.parseError) {
+      await _handleNoAuthoredTests(
+        featureId,
+        specRev,
+        authoredParsed,
+        priorTestRounds,
+        repos,
+        repoId,
+        feature,
+      );
+      return;
+    }
+
+    // Zero total tests ran — degenerate result, not a clean pass. Guard here so
+    // _advanceTestPass never emits "✓ all acceptance tests pass (0 passed, 0 failed)".
+    if ((authoredParsed.passed ?? 0) === 0 && !authoredParsed.parseError) {
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'orchestrator',
+        severity: 'error',
+        text: '· zero tests executed — cannot confirm acceptance gate',
+      });
       await _handleNoAuthoredTests(
         featureId,
         specRev,

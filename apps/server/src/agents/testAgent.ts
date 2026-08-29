@@ -531,8 +531,9 @@ export async function runTestAgent(
     {
       role: 'user',
       content:
-        'Write acceptance tests for this feature. Read spec.md and contract.yaml, ' +
-        `write tests to ${ctx.testDir}/, run them, fix any failures, then call end_turn.`,
+        'Write acceptance tests for this feature. The spec and contract are already in ' +
+        'your system prompt above — do not call read_file for spec.md or contract.yaml. ' +
+        `Write tests to ${ctx.testDir}/, run them, fix any failures, then call end_turn.`,
     },
   ];
 

@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 14 — Agents see what actually happened
+- **Current phase:** 15 — The gate counts what actually ran
 - **State:** `complete`
 - **Last updated:** 2026-08-29
 
@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 14 closed. No Phase 15 defined in `plan.md` yet — next work requires a new phase entry.*
+*Phase 15 closed. Next work requires a new phase entry in `plan.md`.*
 
 ---
 
@@ -64,31 +64,25 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — 1080 passed across 84 files, 2026-08-29 |
+| `npm test` (repo root) | passed — 1085 passed across 84 files, 2026-08-29 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
 | `npm run lint` | **exit 0** — 0 problems, 2026-08-29 |
 
 ---
 
-## Phase 14 audit — test-output render sites
+## Phase 15 audit — gate resolution sites
 
-Every site that renders a parsed test result, per scenario:
+Every site that makes an acceptance-gate decision derived from a resolved path or file set:
 
-| Site | Ran / zero tests | Parse failed | Ran / N>0 |
+| Site | Resolution step | Failure mode (before fix) | Failure mode (after fix) |
 |---|---|---|---|
-| `summarizeBashTestRun` (Phase 14) | `[raw output — zero tests reported]` ✓ | `[raw output — JSON summary unavailable]` ✓ | `TESTS: X passed, Y failed` ✓ |
-| `testJob.ts:786` (agent.log failure) | not reached (guard: `failed>0`) ✓ | `· N failure(s) … (JSON report unavailable)` ✓ | `TESTS: X passed, Y failed\nFAILURES:…` ✓ |
-| `testJob.ts:984` (agent.log pass) | `✓ all acceptance tests pass (0 passed, 0 failed)` ← **indistinct** | not reached | `✓ all acceptance tests pass (N passed, 0 failed)` ✓ |
-| `devJob.ts:865` (AgentNoopError) | not reached (guard: `newFailures.length>0`) ✓ | not reached | `TESTS: X passed, Y failed` ✓ |
-| `TestReportCard` / `TestReportSummaryChip` (UI) | no zero-tests variant (carry) | `parse-error` variant ✓ | `pass` / `fail` variants ✓ |
+| `discoverTestDir` candidate loop | `findTestFiles(abs, N)` | depth-1 missed BFF `test/scenarios/<domain>/` layout → fell to deep-scan | depth-3 catches 2-subdir-deep layouts; candidate returns `dir: 'test'` |
+| `discoverTestDir` deep-scan | `path.relative(worktree, path.dirname(found[0]))` | `''` when file sits at worktree root → `git log -- ''` throws | empty-string guard falls through to `fallback`; caller also guards `dir === ''` |
+| `getAuthoredTestFiles` call site | `git log --diff-filter=A -- testDir` | git error swallowed → `[]` → false "no authored tests" gate | error propagates; call site logs and routes to `_handleNoAuthoredTests` with `parseError: 'git-resolution-error'` |
+| Zero-tests guard (pre-`_advanceTestPass`) | `authoredParsed.passed` | zero total tests could reach `_advanceTestPass` → `✓ all acceptance tests pass (0 passed, 0 failed)` | guard on `(passed ?? 0) === 0 && !parseError` routes to `_handleNoAuthoredTests` |
+| `testJob.ts:984` pass log | `counts.passed` | reachable with zero when guard above was absent | unreachable now; guard fires first |
 
-Known remaining gap: `testJob.ts:984` and the UI do not distinguish "zero tests ran"
-from "tests passed". Out of scope for Phase 14; carry to Phase 15+.
-
-**`authored` on intercept path:** `parseTestOutput(catResult.stdout, '')` passes
-empty `stagedFiles` — correct and intentional. `authoredPassed`/`authoredFailed` are
-only meaningful in the test job's authored-gate check; the dev-agent intercept only
-reads the summary string. No change needed.
+**Task 72 (bounce-back inherits tests):** Fixed as a consequence of the testDir stability fix. With `discoverTestDir` consistently returning `'test'` across rounds, `getAuthoredTestFiles(worktree, 'test')` finds round-1 files in git history in round 2, and `authoredParsed.authoredPassed > 0` correctly passes the gate.
 
 ---
 
@@ -118,6 +112,14 @@ Every failure classification — confirmed they share one definition:
 - **Task-derived agent status applied after the event-sourced fold** — O-14 root
   cause: `agent.status` events can be stale on the gate-resolved path. Task rows
   are authoritative for dev/test agents; review/spec/planner remain event-sourced.
+- **`discoverTestDir` candidate depth = 3** — `findTestFiles(abs, N)` consumes depth
+  entering each directory, not on reaching a file. Files 2 subdirs inside the
+  candidate (BFF layout: `test/scenarios/<domain>/`) need `maxDepth=3`. Using 1
+  missed them and triggered deep-scan producing inconsistent testDir across rounds.
+- **`getAuthoredTestFiles` lets git errors propagate** — the silent `catch { return [] }`
+  was indistinguishable from "truly zero authored files". Surfacing the error lets
+  the call site route to `_handleNoAuthoredTests` with a `parseError` marker,
+  preventing a false gate pass.
 - **Spec 02 amended in place (not a new 06 file)** — keeps the canonical orchestrator
   reference in one file; an agent reading spec 02 gets the full current picture.
 - **`bff` skill and architecture doc committed as `.example` files** — same pattern
@@ -125,8 +127,6 @@ Every failure classification — confirmed they share one definition:
 - **ESLint test-file scoped override, not per-line suppressions** — `no-unsafe-*`,
   `no-explicit-any`, `no-unnecessary-type-assertion`, `require-await` all turned off
   for `**/__tests__/**` in `eslint.config.mjs`.
-- **prettier needs two passes for stable output** — some method-chain patterns
-  change indentation on pass 1, which changes line-length decisions on pass 2.
 - **R8: `enqueueJob` returns job ID; persisted at dispatch time** — closes the window
   where a running task had a null ID. Reconciler treats null `bullJobId` as "not yet
   dispatched" (skip), not orphaned.
@@ -141,17 +141,10 @@ Every failure classification — confirmed they share one definition:
 - **Bedrock unreachable: `parkReason: 'bedrock_unreachable'`, `final: false`** —
   VPN/credential failure is environmental; must not consume a retry slot or
   permanently mark the agent as failed.
-- **`pr.created` guard re-queried per repo inside the loop** — pre-loop snapshot
-  missed events written after the snapshot (ADO call succeeded, appendEvent crashed,
-  job retried). Per-iteration `findFirst` closes the non-atomic window.
 - **Phase 14: zero-total treated as failed intercept** — `summarizeBashTestRun`
   returns `[raw output — zero tests reported]` when `passed + failed === 0`.
-  Keeps it distinct from `[raw output — JSON summary unavailable]` (parse failure)
-  so the operator can tell whether the runner crashed vs. found nothing.
 - **Phase 14: `resultFirstLine` in `ToolCallInfo`** — first line of every tool result
-  appended to the `agent.log` event (` → first line`). Populates from `result`,
-  `errContent`, or `amendContent` depending on the branch. Consumers: `devJob.ts`
-  and `testJob.ts`. Coalesced with `?? ''` to satisfy `noUncheckedIndexedAccess`.
+  appended to the `agent.log` event. Consumers: `devJob.ts` and `testJob.ts`.
 
 ---
 
@@ -168,11 +161,9 @@ Every failure classification — confirmed they share one definition:
   to the unresolved path when a nested parent dir doesn't exist. On macOS
   `/var → /private/var`, this makes the jail check fail for new nested test dirs
   (e.g. `__tests__/acceptance/`). Fix: use `path.resolve` instead of
-  `fs.realpathSync.native` in the inner catch. Carry to Phase 15+.
+  `fs.realpathSync.native` in the inner catch. Carry to Phase 16+.
 - **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
   features. Carry forward.
-- **Phase 14 carry: UI + testJob:984 don't distinguish zero-tests-ran from
-  tests-passed.** Out of scope; carry to Phase 15+.
 
 ---
 
@@ -198,6 +189,7 @@ Every failure classification — confirmed they share one definition:
 | 12 | Dispatch identity and gate baseline | `6d8ef86` | 2026-08-29 |
 | 13 | Recovery paths account for live work | `ccbab22` | 2026-08-29 |
 | 14 | Agents see what actually happened | `da52c8d` | 2026-08-29 |
+| 15 | The gate counts what actually ran | pending | 2026-08-29 |
 
 ---
 
