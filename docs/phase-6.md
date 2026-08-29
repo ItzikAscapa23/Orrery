@@ -186,6 +186,10 @@ Items closed in Phase 14 (`da52c8d`): R-14 tool results logged as char count onl
 
 Items closed in Phase 15 (`4c8f1c6`): R-17 zero-tests guard before `_advanceTestPass`; R-18 prompt states spec/contract are inlined; R-19/C-6 candidate depth 1→3 plus empty-dir guard; R-20 git errors propagate as `parseError: 'git-resolution-error'`; R-21 caller guards `dir === ''` regardless of method; R-22 not an independent defect — resolved by the testDir stability fix (see HANDOVER Phase 15 audit).
 
+Items closed in Phase 16 (`58bb2f7`): R-23 unified Bedrock park in `lib/bedrockPark.ts`, all four sites call it; R-24 `checkBedrockWithRetry(2, 15_000)` before parking; R-25 `awaiting_tests` status blocks premature completion.
+Items closed in Phase 17 (`d00751f`): O-17 event-sourced `working` no longer overwritten by task-derived `done`; O-18 `activityFold` classifies from `severity`; C-6 confirmed unreachable, no code change.
+
+
 - **R-23** The Bedrock-unreachable park is implemented in four places with three
   different row treatments. `devJob.ts:460` sets
   `parkReason: 'bedrock_unreachable'`; `taskTestJob.ts:129` writes
