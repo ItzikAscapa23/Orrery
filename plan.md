@@ -281,3 +281,41 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A restart mid-dispatch produces exactly one container
+---
+## Phase 14 — Agents see what actually happened
+**Goal:** A degenerate tool result is never presented to an agent as a valid one.
+**PRD refs:** §3 R9
+**Tasks:**
+- [ ] `68-empty-report-falls-through` — `summarizeBashTestRun`
+      (`testOutputSummary.ts:116`) treats a zero-total parse as a failed
+      intercept, not a clean run. Evidence: an empty report file yields
+      `parsed.passed ?? 0` and `parsed.failed ?? 0`, so `formatTestSummary`
+      returns `TESTS: 0 passed, 0 failed` — exactly the 25-char result the test
+      agent received on turns 21, 22, 26 and 27 of feature `0be2aa39`, five
+      times, while burning its violation budget trying to make tests appear.
+      `parseError` never fires because empty input parses to nothing
+- [ ] `69-tool-result-forensics` — `devJob.ts:735-741` logs
+      `(${info.resultSize} chars)` and discards the body. Preserve the first
+      line of every tool result in the event log. Five identical failures left
+      nothing diagnosable after the run
+- [ ] `parseTestOutput(catResult.stdout, '')` at `testOutputSummary.ts:115`
+      passes empty `stagedFiles`, so no row is ever marked `authored` on the
+      intercept path. Determine whether the intercept needs the staged list or
+      whether `authored` is meaningless here — report before changing
+- [ ] Audit — list, not summary — every site that renders a parsed test result
+      into agent-visible or operator-visible text, and confirm each distinguishes
+      "ran, zero tests" from "did not run"
+**Definition of Done:**
+- An empty or missing report file yields raw output, not `TESTS: 0 passed, 0 failed`
+- A test command that executes zero tests is distinguishable from one that failed
+  to execute
+- Event log carries the first line of each tool result
+- Render-site audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1079 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- Feature `0be2aa39` passes its test gate on retry-test
