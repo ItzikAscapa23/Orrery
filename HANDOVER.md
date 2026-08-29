@@ -189,7 +189,7 @@ Every failure classification — confirmed they share one definition:
 | 12 | Dispatch identity and gate baseline | `6d8ef86` | 2026-08-29 |
 | 13 | Recovery paths account for live work | `ccbab22` | 2026-08-29 |
 | 14 | Agents see what actually happened | `da52c8d` | 2026-08-29 |
-| 15 | The gate counts what actually ran | pending | 2026-08-29 |
+| 15 | The gate counts what actually ran | `4c8f1c6` | 2026-08-29 |
 
 ---
 
