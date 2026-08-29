@@ -48,15 +48,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 11 — Lint debt
+- **Current phase:** 12 — Dispatch identity and gate baseline
 - **State:** `complete`
-- **Last updated:** 2026-08-21
+- **Last updated:** 2026-08-29
 
 ---
 
 ## Current phase progress
 
-*Phase 11 closed. No Phase 12 is defined in `plan.md` yet — next work requires a new phase entry.*
+*Phase 12 closed. No Phase 13 is defined in `plan.md` yet — next work requires a new phase entry.*
 
 ---
 
@@ -64,9 +64,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — 1064 passed across 84 files, 2026-08-21 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-08-21 |
-| `npm run lint` | **exit 0** — 0 problems, 2026-08-21 |
+| `npm test` (repo root) | passed — 1070 passed across 84 files, 2026-08-29 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
+| `npm run lint` | **exit 0** — 0 problems, 2026-08-29 |
 
 ---
 
@@ -83,20 +83,51 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   are authoritative for dev/test agents; review/spec/planner remain event-sourced.
 - **Spec 02 amended in place (not a new 06 file)** — keeps the canonical orchestrator
   reference in one file; an agent reading spec 02 gets the full current picture.
-  The addendum section is clearly marked so the Phase 2 design is preserved.
 - **`bff` skill and architecture doc committed as `.example` files** — same pattern
-  as `repo-manifest.example.yaml`; the operator copies and customises, the repo
-  ships a working template.
+  as `repo-manifest.example.yaml`; the operator copies and customises.
 - **ESLint test-file scoped override, not per-line suppressions** — `no-unsafe-*`,
   `no-explicit-any`, `no-unnecessary-type-assertion`, `require-await` all turned off
-  for `**/__tests__/**` in `eslint.config.mjs`. `vi.mocked()` and `as unknown as T`
-  casts are correct in test code; per-line comments would number in the hundreds.
+  for `**/__tests__/**` in `eslint.config.mjs`.
 - **`apps/server/prisma/` excluded from ESLint** — `seed.ts` sits outside any
-  tsconfig `include`, causing a `parserOptions.project` parse error. Excluding the
-  prisma directory rather than adding it to a tsconfig is the minimal fix.
+  tsconfig `include`; excluding the directory is the minimal fix.
 - **prettier needs two passes for stable output** — some method-chain patterns
   change indentation on pass 1, which changes line-length decisions on pass 2.
-  Always run `npx prettier --check` after `--write` on large sweeps.
+- **R8: `enqueueJob` returns job ID; persisted at dispatch time** — `queue.ts:enqueueJob`
+  now returns the BullMQ job ID. `dispatchUnblockedTasks` writes `bullJobId` to the
+  task row immediately after `queue.add()`, closing the window where a running task
+  had a null ID. Reconciler treats null `bullJobId` as "not yet dispatched" (skip),
+  not orphaned. Redundant second write in `devJob.ts:389` removed.
+- **R8: attempt counter reset uses Prisma atomic decrement** — `{ decrement: 1 }`
+  instead of JS read-modify-write `Math.max(0, n - 1)` prevents a race on concurrent
+  reconciler runs.
+- **`parkReason: 'orphan'` path is dead** — `startupResume.ts:31,40` filters on it,
+  but no production code writes it (reconciler writes only `'orphan_cap'`). Left
+  as-is; the filter is a no-op but harmless.
+- **spendGuard dedup not implemented** — `checkSpendGuard` uses raw `COUNT(*)` which
+  can overcount retried jobs. Spec said report only; implementation deferred.
+- **R9: baseline-diff gate** — `devJob.ts` captures a `parseTestOutput` result
+  immediately after the probe passes. The verification step only throws on failures
+  absent from the baseline set, so pre-existing broken tests do not block the agent.
+- **`parseTestOutput` skips non-terminal statuses** — `pending`, `skipped`, `todo`
+  entries are excluded with an early `continue`; TypeScript narrows the remaining
+  `status` to `'passed' | 'failed'` via control flow, making the `as` cast
+  unnecessary.
+
+---
+
+## Enqueue path inventory (Phase 12 R8 audit)
+
+All paths that can enqueue for a running task:
+
+| Call site | Trigger |
+|---|---|
+| `taskReconciler.ts:185` | Orphan recovery — immediate call then 60 s interval |
+| `featureRedispatch.ts:113` | `POST /features/:id/retry-bounce` manual redispatch |
+| `startupResume.ts:14` | Server start — resumes any task that was running at shutdown |
+| BullMQ `maxStalledCount: 1` (`agentWorker.ts:204`) | BullMQ-internal stall recovery; bypasses `queue.ts` |
+
+`queue.ts:56` (`getQueue().add()`) is the only production call site. BullMQ's internal
+stall-recovery path is external to application code and cannot be changed via R8.
 
 ---
 
@@ -113,11 +144,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   to the unresolved path when a nested parent dir doesn't exist. On macOS
   `/var → /private/var`, this makes the jail check fail for new nested test dirs
   (e.g. `__tests__/acceptance/`). Fix: use `path.resolve` instead of
-  `fs.realpathSync.native` in the inner catch. Carry to Phase 12+.
+  `fs.realpathSync.native` in the inner catch. Carry to Phase 13+.
 - **O-12 duplicate `pr.created` — not fixed.** `createAdoPrJob.ts:146` builds
   `alreadyCreated` once before the loop. If the job retries after the ADO API call
   but before the event append, a second PR is created. Fix: re-query inside the
-  per-repo loop immediately before each ADO call. Carry to Phase 12+.
+  per-repo loop immediately before each ADO call. Carry to Phase 13+.
 - **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
   features. Carry forward.
 
@@ -142,14 +173,16 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 9 | Backlog sweep | `2723ba0` | 2026-08-21 |
 | 10 | Spec reconciliation | `1097c3f` | 2026-08-21 |
 | 11 | Lint debt | `f0769a5` | 2026-08-21 |
+| 12 | Dispatch identity and gate baseline | `6d8ef86` | 2026-08-29 |
 
 ---
 
 ## Next phase entry conditions
 
 - Full suite green from the repo root, with the count recorded.
-- `npm run lint` exits 0 (Phase 11 delivered this; the gate is now zero, not a ceiling).
+- `npm run lint` exits 0.
 - No feature mid-run: `tsx watch` reloads on file save, which stalls in-flight
   BullMQ jobs and parks their tasks. Never edit the orchestrator while a feature
   is running.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
+- (from plan.md Phase 12): A restart mid-dispatch produces exactly one container.
