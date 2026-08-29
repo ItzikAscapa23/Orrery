@@ -471,3 +471,41 @@ npm test          # baseline 84 files / 1098 tests — must not decrease
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 19 — Declared config replaces the last inference
+**Goal:** No repo's test runner is inferred from prose.
+**PRD refs:** §2 C6, §3 R1
+**Tasks:**
+- [ ] Determine whether the light path (`path: light`) ever reaches
+      `detectJsonCommand`. `bff-configurations` and `swaggers` are both
+      `active: true` with no `probe_command`; if either can reach the test job,
+      the CLAUDE.md prose fallback (`lower.includes('jest')`,
+      `testJob.ts:360-379`) decides its runner. Report before changing
+- [ ] Set `probe_command` for every active repo that can reach
+      `detectJsonCommand`. Neither `bff-configurations` (env vars) nor
+      `swaggers` (OpenAPI YMLs) carries a conventional suite, so
+      `--passWithNoTests` is the likely value — confirm against each repo rather
+      than assuming
+- [ ] Remove the CLAUDE.md inference fallback from `detectJsonCommand` once
+      every active repo declares `probe_command`. A repo without one must fail
+      loudly at dispatch, not silently guess. Closes C-3
+- [ ] Resolve the six `# confirm` markers on `default_branch` in
+      `repo-manifest.yaml`. `bff` currently declares
+      `version11/11.10.0/update-claude-md` — confirm that is the intended base
+      for PRs, since features `0be2aa39` and `14ec88b4` both branched from it
+- [ ] Audit — list, not summary — every field in `RepoEntry` that has a code-side
+      default or inferred value, and state for each whether the default is
+      intentional policy or an undeclared guess
+**Definition of Done:**
+- Every `active: true` repo that can reach the test job declares `probe_command`
+- `detectJsonCommand` has no prose-inference path; a missing `probe_command`
+  fails at dispatch with a clear error
+- No `# confirm` marker remains in `repo-manifest.yaml`
+- `docs/phase-6.md` is empty of open items, or states what remains
+- RepoEntry default audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1098 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
