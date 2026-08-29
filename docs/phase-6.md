@@ -185,6 +185,9 @@ Resolved or diagnosed all Phase 7 carry-forwards. Remaining open items:
 
 Items closed in Phase 14 (`da52c8d`): R-14 tool results logged as char count only; R-15 zero-total parse now falls through to raw output; R-16 empty `stagedFiles` on the intercept path (no change needed — see HANDOVER Phase 14 audit).
 
+Items closed in Phase 15 (`4c8f1c6`): R-17 zero-tests guard before `_advanceTestPass`; R-18 prompt states spec/contract are inlined; R-19/C-6 candidate depth 1→3 plus empty-dir guard; R-20 git errors propagate as `parseError: 'git-resolution-error'`; R-21 caller guards `dir === ''` regardless of method; R-22 not an independent defect — resolved by the testDir stability fix (see HANDOVER Phase 15 audit).
+
+
 - **R-17** False pass at the acceptance gate. `testJob.ts:984` renders
   `✓ all acceptance tests pass (0 passed, 0 failed)` — a run that executed zero
   tests is reported as success. Found by the Phase 14 render-site audit and
