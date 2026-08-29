@@ -417,6 +417,7 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
   if (tasks && tasks.length > 0) {
     const derived = deriveAgentStatusesFromTasks(tasks);
     for (const [agent, derivedStatus] of Object.entries(derived)) {
+      if (derivedStatus === undefined) continue;
       if (agentStatuses[agent] === 'working' && derivedStatus === 'done') continue;
       agentStatuses[agent] = derivedStatus;
     }

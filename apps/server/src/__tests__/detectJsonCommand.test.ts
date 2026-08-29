@@ -5,43 +5,14 @@ process.env['ANTHROPIC_API_KEY'] = 'test-key';
 process.env['ARTIFACTS_REPO_PATH'] = '/tmp/test-artifacts';
 process.env['WORKTREES_ROOT'] = '/tmp/test-worktrees';
 
-describe('detectJsonCommand — no probeCommand (fallback inference)', () => {
-  it('returns vitest command by default', () => {
-    expect(detectJsonCommand('# CLAUDE.md\nnpm test\n')).toBe(
-      `npx vitest run --reporter=json --outputFile=${TEST_REPORT_FILE}`,
-    );
+describe('detectJsonCommand — no probeCommand (throws)', () => {
+  it('throws when probe_command is absent', () => {
+    expect(() => detectJsonCommand('# CLAUDE.md\nnpm test\n')).toThrow('probe_command is required');
   });
 
-  it('returns jest command when jest appears but not vitest', () => {
-    expect(detectJsonCommand('test: npx jest --coverage')).toBe(
-      `npx jest --json --outputFile=${TEST_REPORT_FILE}`,
-    );
-  });
-
-  it('returns vitest command when both appear', () => {
-    // vitest takes priority over jest when both keywords present
-    expect(detectJsonCommand('vitest and jest both listed')).toBe(
-      `npx vitest run --reporter=json --outputFile=${TEST_REPORT_FILE}`,
-    );
-  });
-
-  it('vitest command includes --outputFile flag', () => {
-    expect(detectJsonCommand('npm test')).toContain('--outputFile=');
-  });
-
-  it('jest command includes --outputFile flag', () => {
-    expect(detectJsonCommand('npx jest --coverage')).toContain('--outputFile=');
-  });
-
-  it('undefined probeCommand falls back to jest inference', () => {
-    expect(detectJsonCommand('npx jest --coverage', undefined)).toBe(
-      `npx jest --json --outputFile=${TEST_REPORT_FILE}`,
-    );
-  });
-
-  it('undefined probeCommand falls back to vitest inference', () => {
-    expect(detectJsonCommand('npx vitest run', undefined)).toBe(
-      `npx vitest run --reporter=json --outputFile=${TEST_REPORT_FILE}`,
+  it('throws when probe_command is undefined', () => {
+    expect(() => detectJsonCommand('npx jest --coverage', undefined)).toThrow(
+      'probe_command is required',
     );
   });
 });

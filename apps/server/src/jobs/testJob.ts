@@ -362,25 +362,22 @@ export function findingsFromTests(tests: TestRow[]): TestFinding[] {
 export const TEST_REPORT_FILE = '/tmp/test-report.json';
 
 export function detectJsonCommand(repoClaudeMd: string, probeCommand?: string): string {
+  if (!probeCommand) {
+    throw new Error(
+      'probe_command is required in repo-manifest.yaml — set it for this repo to enable test runner detection',
+    );
+  }
+
   const lower = repoClaudeMd.toLowerCase();
   const isJest = lower.includes('jest') && !lower.includes('vitest');
 
-  if (probeCommand) {
-    if (isJest) {
-      const base = probeCommand.replace(/\s+--json\b/g, '');
-      return `${base} --json --outputFile=${TEST_REPORT_FILE}`;
-    } else {
-      const base = probeCommand
-        .replace(/\s+--reporter=\S+/g, '')
-        .replace(/\s+--outputFile=\S+/g, '');
-      return `${base} --reporter=json --outputFile=${TEST_REPORT_FILE}`;
-    }
-  }
-
   if (isJest) {
-    return `npx jest --json --outputFile=${TEST_REPORT_FILE}`;
+    const base = probeCommand.replace(/\s+--json\b/g, '');
+    return `${base} --json --outputFile=${TEST_REPORT_FILE}`;
+  } else {
+    const base = probeCommand.replace(/\s+--reporter=\S+/g, '').replace(/\s+--outputFile=\S+/g, '');
+    return `${base} --reporter=json --outputFile=${TEST_REPORT_FILE}`;
   }
-  return `npx vitest run --reporter=json --outputFile=${TEST_REPORT_FILE}`;
 }
 
 export function plainTestCommand(probeCommand?: string): string {

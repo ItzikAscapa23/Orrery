@@ -54,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 18 — Close the backlog honestly
+- **Current phase:** 19 — Declared config replaces the last inference
 - **State:** `complete`
 - **Last updated:** 2026-08-29
 
@@ -62,7 +62,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 18 closed. No further phases are defined in `plan.md`.*
+- [x] Task 1 — Determine whether `path: light` ever reaches `detectJsonCommand`
+- [x] Task 2 — Set `probe_command` for every active repo that can reach `detectJsonCommand`
+- [x] Task 3 — Remove CLAUDE.md inference fallback from `detectJsonCommand`
+- [x] Task 4 — Resolve the six `# confirm` markers on `default_branch`
+- [x] Task 5 — Audit every `RepoEntry` field with a code-side default or inferred value
 
 ---
 
@@ -70,8 +74,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1098 passed across 84 files** (no code changes), 2026-08-29 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
+| `npm test` (repo root) | passed — **1093 passed across 84 files** (−5 removed inference tests replaced by 2 error tests), 2026-08-29 |
+| `npm run typecheck` | passed — clean across all three workspaces (including pre-existing `eventFold.ts` TS2322 now fixed), 2026-08-29 |
 | `npm run lint` | exit 0 — 0 problems, 2026-08-29 |
 
 ---
@@ -113,6 +117,26 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **Task-derived agent status applied after the event-sourced fold** — except for the
   `working → done` guard above. Task rows are authoritative for dev/test agents; review,
   spec, and planner remain event-sourced.
+- **`path: light` repos never reach `detectJsonCommand`** — light-path repos dispatch
+  via `LIGHT_IMPLEMENTING` → `lightDevJob.ts`, which is a completely separate code path
+  that does not run a test suite at all. `bff-configurations` and `swaggers` have no
+  `probe_command` and need none.
+- **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — the
+  CLAUDE.md prose-inference fallback (lower.includes('jest')) is removed. Any active
+  full-path repo without `probe_command` will fail at the first `detectJsonCommand` call
+  with a clear error. Closes C-3.
+- **`RepoEntry` default audit (Phase 19)** — fields with code-side defaults:
+  | Field | Default | Where |
+  |---|---|---|
+  | `path` | `'full'` (absent = full pipeline) | `devJob.ts:103` comment |
+  | `exec_timeout_ms` | `120_000` ms | `devJob.ts:478` |
+  | `install_timeout_ms` | `300_000` ms | `devJob.ts:477` |
+  | `max_turns` | `40` (mirrors `devAgent.ts MAX_TURNS`) | `devJob.ts:479–482` |
+  | `probe_command` | none — **throws if absent** (after Phase 19) | `testJob.ts:365` |
+  | `binary_sentinel` | none — skip check if absent | `devJob.ts` sentinel guard |
+  | `bootstrap` | none — npm ci path if absent | `devJob.ts:138` |
+  All other fields (`id`, `side`, `active`, `url`, `default_branch`, `description`) are
+  declared values with no inferred fallback.
 
 ---
 
@@ -128,9 +152,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **O-12 Duplicate `pr.created` events.** Root cause diagnosed (non-atomic ADO call
   + event append). Not implemented. Fix: re-query existing `pr.created` events inside
   the per-repo loop immediately before the ADO API call.
-- **C-3 `detectJsonCommand` CLAUDE.md inference.** Mitigated — `probe_command` in
-  `repo-manifest.yaml` is primary. Fallback inference only triggers when `probe_command`
-  is unset. Ensure `probe_command` is set for every repo in the manifest.
 
 ---
 
@@ -157,6 +178,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 16 | Environmental failures leave a recoverable task | `58bb2f7` | 2026-08-29 |
 | 17 | The UI states what the data says | `d00751f` | 2026-08-29 |
 | 18 | Close the backlog honestly | `78ff9ee` | 2026-08-29 |
+| 19 | Declared config replaces the last inference | TBD | 2026-08-29 |
 
 ---
 

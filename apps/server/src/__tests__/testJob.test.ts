@@ -73,6 +73,7 @@ vi.mock('../jobs/devJob.js', async (importOriginal) => {
       active: true,
       url: 'https://example.com/repo.git',
       default_branch: 'main',
+      probe_command: 'npx vitest run --reporter=json --passWithNoTests',
     }),
     readClaudeMdFromDefaultBranch: mockReadClaudeMdTestJob,
   };
@@ -1106,6 +1107,7 @@ describe('testJob — max_turns threading', () => {
       active: true,
       url: 'https://example.com/repo.git',
       default_branch: 'main',
+      probe_command: 'npx vitest run --reporter=json --passWithNoTests',
       max_turns: 7,
     };
     vi.mocked(getRepoEntry)
@@ -1184,6 +1186,7 @@ describe('testJob — bootstrap install routing', () => {
       active: true,
       url: 'https://example.com/repo.git',
       default_branch: 'main',
+      probe_command: 'npx vitest run --reporter=json --passWithNoTests',
       install_timeout_ms: 10_000,
       exec_timeout_ms: 10_000,
       bootstrap: 'echo | ./run_all_npm_install.sh',
@@ -1216,6 +1219,7 @@ describe('testJob — bootstrap install routing', () => {
       active: true,
       url: 'https://example.com/repo.git',
       default_branch: 'main',
+      probe_command: 'npx vitest run --reporter=json --passWithNoTests',
       install_timeout_ms: 10_000,
       exec_timeout_ms: 10_000,
       bootstrap: 'echo | ./run_all_npm_install.sh',
