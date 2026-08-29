@@ -218,6 +218,21 @@ describe('container — distinct error messages', () => {
     await expect(c.exec('npm test -- --testPathPattern="src" 2>&1')).resolves.not.toThrow();
   });
 
+  it('allows 2>/dev/null on npm test (both streams captured by container.exec — no-op)', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('npm test 2>/dev/null')).resolves.not.toThrow();
+  });
+
+  it('allows 2>/dev/null on find invocation', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('find specs -type f -name "*.yaml" 2>/dev/null')).resolves.not.toThrow();
+  });
+
+  it('rejects residual > after stripping 2>/dev/null: "a 2>/dev/null > b"', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('a 2>/dev/null > b')).rejects.toThrow(MetacharViolationError);
+  });
+
   it('rejects residual > after stripping 2>&1: "a 2>&1 > b"', async () => {
     const c = startContainer('/tmp/fake', 'test-task');
     await expect(c.exec('a 2>&1 > b')).rejects.toThrow(MetacharViolationError);

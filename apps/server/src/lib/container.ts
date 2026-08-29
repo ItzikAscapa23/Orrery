@@ -61,9 +61,9 @@ export const ALLOWED_COMMANDS_HINT: string = [
 // Bare | (pipe) can chain to another command; \| cannot — it is only valid
 // inside a grep pattern string. This lookahead allows \| while blocking |.
 //
-// 2>&1 is stripped before this check — it merges stderr into stdout and
-// cannot chain commands or redirect to a file. Both streams are already
-// captured by container.exec, so it is a no-op at runtime.
+// 2>&1 and 2>/dev/null are stripped before this check — both are no-ops:
+// container.exec captures stdout and stderr together regardless, so neither
+// can redirect output anywhere. Both are removed before metachar testing.
 //
 // \ alone is not in the dangerous set; backslash cannot chain or redirect.
 export const SHELL_METACHAR_RE = /[;&$`\n><]|(?<!\\)\|/;
@@ -100,9 +100,12 @@ export interface ContainerHandle {
   stop(): Promise<void>;
 }
 
-/** Strips fd-merge redirects, then throws MetacharViolationError on any shell metachar. */
+/** Strips no-op fd redirects, then throws MetacharViolationError on any shell metachar. */
 export function checkMetachar(command: string): void {
-  const sanitized = command.trim().replace(/2>&1/g, '');
+  const sanitized = command
+    .trim()
+    .replace(/2>&1/g, '')
+    .replace(/2>\/dev\/null/g, '');
   const metaMatch = SHELL_METACHAR_RE.exec(sanitized);
   if (metaMatch) {
     throw new MetacharViolationError(command, metaMatch[0]);
@@ -119,9 +122,9 @@ export function metaCharGuidance(char: string): string {
     return (
       `Shell metacharacter '>' not permitted. ` +
       `File redirection is not permitted (>, 2> file, < file). ` +
-      `Note: 2>&1 is the one permitted redirect — it only merges stderr into ` +
-      `the already-captured stdout. ` +
-      `Omit > outfile, 2>/dev/null, and similar. ` +
+      `Permitted: 2>&1 and 2>/dev/null — both are no-ops since both streams are ` +
+      `captured automatically. ` +
+      `Omit > outfile and similar file redirects. ` +
       `For inline scripts use write_file then run node <file>, not node -e. ` +
       `One command per call.`
     );
@@ -137,7 +140,7 @@ export function metaCharGuidance(char: string): string {
       `without a regex).\n` +
       `  grep/regex alternation: use \\| instead — it is already permitted. ` +
       `Example: grep "pat1\\|pat2" file\n` +
-      `  stderr merge: 2>&1 is permitted (merges stderr into stdout only).\n` +
+      `  stderr merge: 2>&1 and 2>/dev/null are permitted (both are no-ops).\n` +
       `One command per call.`
     );
   }

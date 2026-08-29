@@ -58,7 +58,7 @@ function deriveAgentStatusesFromTasks(
       derived[agentKey] = 'working';
     } else if (relevant.some((t) => t.status === 'parked' || t.status === 'amendment_paused')) {
       derived[agentKey] = 'waiting';
-    } else if (relevant.every((t) => t.status === 'completed')) {
+    } else if (relevant.every((t) => t.status === 'completed' || t.status === 'awaiting_tests')) {
       derived[agentKey] = 'done';
     } else {
       derived[agentKey] = 'queued';
@@ -67,6 +67,9 @@ function deriveAgentStatusesFromTasks(
   const testTasks = tasks.filter((t) => t.coveredByTestPlan);
   if (testTasks.length > 0) {
     if (testTasks.some((t) => t.status === 'running')) {
+      derived['test'] = 'working';
+    } else if (tasks.some((t) => t.status === 'awaiting_tests')) {
+      // A dev task holding in awaiting_tests means the test agent is needed next.
       derived['test'] = 'working';
     } else if (testTasks.some((t) => t.status === 'parked' || t.status === 'amendment_paused')) {
       derived['test'] = 'waiting';
@@ -411,14 +414,15 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
 
   // Override dev/test agent statuses from task rows — more reliable than the
   // last agent.status event, which can be left stale on the gate-resolved path (O-14).
-  // Exception: don't override an event-sourced 'working' with a task-derived 'done'.
-  // The feature-level test job emits agent.status(working) directly and runs after all
-  // covered tasks complete — task rows can't see it, so event wins.
+  // Exception: an event-sourced 'working' is authoritative — task rows cannot overwrite
+  // it. If the event log says working with no later terminal event, the agent is working;
+  // task rows cannot see in-flight jobs (e.g. feature-level test job runs after all
+  // covered tasks complete).
   if (tasks && tasks.length > 0) {
     const derived = deriveAgentStatusesFromTasks(tasks);
     for (const [agent, derivedStatus] of Object.entries(derived)) {
       if (derivedStatus === undefined) continue;
-      if (agentStatuses[agent] === 'working' && derivedStatus === 'done') continue;
+      if (agentStatuses[agent] === 'working') continue;
       agentStatuses[agent] = derivedStatus;
     }
     // Re-apply terminal override to any newly merged task-derived statuses.

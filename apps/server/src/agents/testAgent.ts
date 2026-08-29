@@ -545,6 +545,7 @@ export async function runTestAgent(
 
   while (turn < maxTurns) {
     turn++;
+    let violationsThisTurn = 0;
 
     if (turn === budgetWarningTurn) {
       messages.push({
@@ -806,7 +807,8 @@ export async function runTestAgent(
         } catch (err) {
           if (block.name === 'bash') {
             if (err instanceof TestMetacharViolationError) {
-              violationCount++;
+              if (violationsThisTurn === 0) violationCount++;
+              violationsThisTurn++;
               if (onViolation) {
                 const metaCmd = (block.input as { command?: string }).command ?? '';
                 await onViolation({
@@ -838,7 +840,8 @@ export async function runTestAgent(
               continue;
             }
             if (err instanceof TestAllowlistViolationError) {
-              violationCount++;
+              if (violationsThisTurn === 0) violationCount++;
+              violationsThisTurn++;
               const allowCmd = (block.input as { command?: string }).command ?? '';
               if (onViolation)
                 await onViolation({

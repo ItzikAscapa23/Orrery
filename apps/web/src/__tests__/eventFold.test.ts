@@ -950,4 +950,61 @@ describe('foldEvents — task-based agent status derivation', () => {
     );
     expect(state.agentStatuses['test']).toBe('working');
   });
+
+  // Task 80 — event-sourced working is authoritative against any task-derived status
+  it('event-sourced working is not overwritten by task-derived queued', () => {
+    const state = foldEvents(
+      [makeRow(1, { type: 'agent.status', agent: 'server', status: 'working' })],
+      [{ ...baseTask, status: 'pending' }],
+    );
+    expect(state.agentStatuses['server']).toBe('working');
+  });
+
+  it('event-sourced working is not overwritten by task-derived waiting', () => {
+    const state = foldEvents(
+      [makeRow(1, { type: 'agent.status', agent: 'server', status: 'working' })],
+      [{ ...baseTask, status: 'parked' }],
+    );
+    expect(state.agentStatuses['server']).toBe('working');
+  });
+
+  // Task 81 — awaiting_tests is understood by deriveAgentStatuses
+  it('derives server=done when all server tasks are awaiting_tests', () => {
+    const state = foldEvents([], [{ ...baseTask, status: 'awaiting_tests' }]);
+    expect(state.agentStatuses['server']).toBe('done');
+  });
+
+  it('derives server=done when tasks are a mix of completed and awaiting_tests', () => {
+    const state = foldEvents(
+      [],
+      [
+        { ...baseTask, status: 'completed' },
+        { ...baseTask, status: 'awaiting_tests' },
+      ],
+    );
+    expect(state.agentStatuses['server']).toBe('done');
+  });
+
+  it('derives test=working when any dev task is awaiting_tests', () => {
+    const state = foldEvents(
+      [],
+      [
+        { ...baseTask, status: 'awaiting_tests' },
+        { ...baseTask, coveredByTestPlan: true, status: 'pending', testsWritten: false },
+      ],
+    );
+    expect(state.agentStatuses['test']).toBe('working');
+  });
+
+  it('derives test=working when awaiting_tests even if no test task is running', () => {
+    // The test task is still pending, but a dev task is awaiting_tests — test agent is next.
+    const state = foldEvents(
+      [],
+      [
+        { side: 'server', status: 'awaiting_tests', coveredByTestPlan: false, testsWritten: false },
+        { side: 'server', status: 'pending', coveredByTestPlan: true, testsWritten: false },
+      ],
+    );
+    expect(state.agentStatuses['test']).toBe('working');
+  });
 });

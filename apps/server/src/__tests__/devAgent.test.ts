@@ -518,6 +518,58 @@ describe('devAgent — metacharacter violation budget (2>&1 regression guard)', 
       MetacharViolationError,
     );
   });
+
+  it('two violations in one turn count as one slot against the budget', async () => {
+    // Turn 1: agent returns TWO bash tool calls, both violating — only ONE slot consumed.
+    // Turns 2 and 3: one violation each (slots 2 and 3). Turn 3 should throw (count = 3).
+    // Turn 4 would be clean (end_turn), but we never reach it.
+    // If both violations in turn 1 counted, turn 2 would already hit the cap (count = 3).
+    // So: with the per-turn gate, the throw happens on turn 3 (not turn 2).
+    const twoViolationsTurn = {
+      id: 'two',
+      type: 'message',
+      role: 'assistant',
+      model: 'claude-sonnet-5',
+      stop_reason: 'tool_use',
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 10 },
+      content: [
+        { type: 'tool_use', id: 'tu_v1', name: 'bash', input: { command: 'cat /etc > out1' } },
+        { type: 'tool_use', id: 'tu_v2', name: 'bash', input: { command: 'cat /etc > out2' } },
+      ],
+    } as unknown as Anthropic.Message;
+
+    let callN = 0;
+    mockCreateMessageStream.mockImplementation(() => {
+      callN++;
+      if (callN === 1) return Promise.resolve(makeStreamMock(twoViolationsTurn));
+      // Turns 2 and 3: single violation each
+      return Promise.resolve(
+        makeStreamMock(toolUseMessage(`bad${callN}`, 'bash', { command: 'cat x > out' })),
+      );
+    });
+
+    const container = makeContainer((cmd) => {
+      if (cmd.includes('> out')) return Promise.reject(new MetacharViolationError(cmd, '>'));
+      return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
+    });
+
+    // With per-turn gate: turn 1 = 1 slot, turn 2 = 1 slot (total 2), turn 3 = 1 slot (total 3 → throw).
+    // Without: turn 1 = 2 slots, turn 2 = 1 slot (total 3 → throw earlier, on turn 2).
+    // Either way it throws; what matters is it completes turn 1 without throwing.
+    // Verify: no throw on turn 1 (the two-violation turn), throw eventually.
+    const violations: Array<{ count: number }> = [];
+    const onViolation = (v: { count: number }) => {
+      violations.push({ count: v.count });
+    };
+    await expect(
+      runDevAgent('feat-1', TASK, CTX, container, tmpDir, undefined, onViolation),
+    ).rejects.toThrow(MetacharViolationError);
+
+    // The first two violation callbacks (from the two-violation turn) must both report count=1.
+    expect(violations[0]?.count).toBe(1);
+    expect(violations[1]?.count).toBe(1);
+  });
 });
 
 // ── read_file range ───────────────────────────────────────────────────────────

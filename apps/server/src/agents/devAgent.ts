@@ -415,6 +415,7 @@ export async function runDevAgent(
 
   while (turn < maxTurns) {
     turn++;
+    let violationsThisTurn = 0;
 
     // Budget warning: inject a user nudge at turn budgetWarningTurn so the agent
     // knows it is running low and should stop exploring and commit what it has.
@@ -693,7 +694,8 @@ export async function runDevAgent(
         } catch (err) {
           if (block.name === 'bash') {
             if (err instanceof MetacharViolationError) {
-              violationCount++;
+              if (violationsThisTurn === 0) violationCount++;
+              violationsThisTurn++;
               if (onViolation) {
                 const metaCmd = (block.input as { command?: string }).command ?? '';
                 await onViolation({
@@ -725,7 +727,8 @@ export async function runDevAgent(
               continue;
             }
             if (err instanceof AllowlistViolationError) {
-              violationCount++;
+              if (violationsThisTurn === 0) violationCount++;
+              violationsThisTurn++;
               // Detect git commands specifically and give a more helpful message.
               const cmd = (block.input as { command?: string }).command ?? '';
               if (onViolation)

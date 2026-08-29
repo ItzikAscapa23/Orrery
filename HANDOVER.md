@@ -54,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 19 — Declared config replaces the last inference
+- **Current phase:** 20 — Violations cost what they should, and the UI says what is running
 - **State:** `complete`
 - **Last updated:** 2026-08-29
 
@@ -62,11 +62,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] Task 1 — Determine whether `path: light` ever reaches `detectJsonCommand`
-- [x] Task 2 — Set `probe_command` for every active repo that can reach `detectJsonCommand`
-- [x] Task 3 — Remove CLAUDE.md inference fallback from `detectJsonCommand`
-- [x] Task 4 — Resolve the six `# confirm` markers on `default_branch`
-- [x] Task 5 — Audit every `RepoEntry` field with a code-side default or inferred value
+- [x] Task 1 — `78-exempt-null-redirect` — strip `2>/dev/null` before metachar check
+- [x] Task 2 — `79-one-violation-per-turn` — per-turn gate on `violationCount` in devAgent + testAgent
+- [x] Task 3 — `80-working-is-authoritative` — widen guard in `eventFold.ts` to protect `working` from any task-derived overwrite
+- [x] Task 4 — `81-derive-knows-awaiting-tests` — `deriveAgentStatuses` now knows `awaiting_tests`
+- [x] Task 5 — `awaiting_tests` consumer audit recorded in Decisions
 
 ---
 
@@ -74,8 +74,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1093 passed across 84 files** (−5 removed inference tests replaced by 2 error tests), 2026-08-29 |
-| `npm run typecheck` | passed — clean across all three workspaces (including pre-existing `eventFold.ts` TS2322 now fixed), 2026-08-29 |
+| `npm test` (repo root) | passed — **1103 passed across 84 files** (+10 new tests), 2026-08-29 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
 | `npm run lint` | exit 0 — 0 problems, 2026-08-29 |
 
 ---
@@ -117,6 +117,18 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **Task-derived agent status applied after the event-sourced fold** — except for the
   `working → done` guard above. Task rows are authoritative for dev/test agents; review,
   spec, and planner remain event-sourced.
+- **`awaiting_tests` consumer audit (Phase 20)** — every site that reads `task.status`:
+  | File | Line(s) | Handles `awaiting_tests`? | Notes |
+  |---|---|---|---|
+  | `apps/web/src/lib/activityFold.ts` | 36, 202–209 | Yes | Type-union member; passes through as task status |
+  | `apps/web/src/components/ActivityTab.tsx` | 267–276, 317 | Yes | Purple color + raw string label |
+  | `apps/web/src/lib/eventFold.ts` (`deriveAgentStatuses`) | 57–64, 68–77 | Yes (fixed Phase 20) | Server/client: `awaiting_tests` → `done`; test block: any `awaiting_tests` → `working` |
+  | `apps/server/src/jobs/devJob.ts` | 371 | No (intentional gap) | Early-exit guard checks `completed\|parked` only; no re-enqueue path dispatches `awaiting_tests` tasks |
+  | `apps/server/src/jobs/devJob.ts` | 870–889, 1005–1011 | Yes (writes it) | Two write sites: noop-success and post-commit path |
+  | `apps/server/src/lib/dispatch.ts` | 125–127 | No (intentional) | Not in `completedIds` — dependent tasks stay blocked until `completed` |
+  | `apps/server/src/lib/dispatch.ts` | 169–175 | Yes | Suppresses "no tasks" warning — treated as terminal-enough |
+  | `apps/server/src/routes/featureSpendGate.ts` | 29 | No (out of scope) | Only accepts `parked`; `awaiting_tests` tasks are not spend-gate candidates |
+  | `apps/server/src/routes/featureTestPlanGate.ts` | 156, 205 | No (out of scope) | Both override and retry routes require `parked` |
 - **`path: light` repos never reach `detectJsonCommand`** — light-path repos dispatch
   via `LIGHT_IMPLEMENTING` → `lightDevJob.ts`, which is a completely separate code path
   that does not run a test suite at all. `bff-configurations` and `swaggers` have no
@@ -179,6 +191,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 17 | The UI states what the data says | `d00751f` | 2026-08-29 |
 | 18 | Close the backlog honestly | `78ff9ee` | 2026-08-29 |
 | 19 | Declared config replaces the last inference | `716a783` | 2026-08-29 |
+| 20 | Violations cost what they should, and the UI says what is running | TBD | 2026-08-29 |
 
 ---
 
