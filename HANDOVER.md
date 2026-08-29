@@ -33,7 +33,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
 - `apps/web/src/lib/activityFold.ts` — activity-tab rows folded from events + task rows
 - `packages/shared/` — event payload schemas
-- `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 17)
+- `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 18)
 - `docs/agents/repo-manifest.yaml` — operator config, gitignored, example committed
 
 **Conventions:**
@@ -44,6 +44,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   `phase.changed` in the same transaction.
 - One task = one brief. Briefs carry evidence, numbered requirements, fail-first
   tests, and an acceptance block.
+- **Backlog entries in `docs/phase-6.md` are deleted on close, not annotated.**
+  The phase commit is the evidence for each closed item, reachable via the phase
+  log table below. Do not add `✅ DONE` or `Items closed in Phase N` lines —
+  delete the entry outright once its fix is committed and the phase passes
+  verification.
 
 ---
 
@@ -57,10 +62,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] Diagnose O-15 (review agent 29k/14 tokens)
-- [x] Close O-15 — no fix warranted (recorded in Decisions)
-- [x] Trim `docs/phase-6.md` to open items only (C-3 and O-12 remain)
-- [x] Record deletion convention in HANDOVER Conventions section
+*Phase 18 closed. No further phases are defined in `plan.md`.*
 
 ---
 
@@ -118,16 +120,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 - `apps/web/.env.local` setting `VITE_PRODUCT_NAME=PepperOrchestrator` is a
   deliberate local brand override. The fallback `'Orrery'` stays.
-
----
-
-## Conventions
-
-- **Backlog entries in `docs/phase-6.md` are deleted on close, not annotated.**
-  The phase commit is the evidence for each closed item, reachable via the phase
-  log table below. Do not add `✅ DONE` or `Items closed in Phase N` lines —
-  delete the entry outright once its fix is committed and the phase passes
-  verification.
 
 ---
 
