@@ -178,7 +178,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 16 | Environmental failures leave a recoverable task | `58bb2f7` | 2026-08-29 |
 | 17 | The UI states what the data says | `d00751f` | 2026-08-29 |
 | 18 | Close the backlog honestly | `78ff9ee` | 2026-08-29 |
-| 19 | Declared config replaces the last inference | TBD | 2026-08-29 |
+| 19 | Declared config replaces the last inference | `716a783` | 2026-08-29 |
 
 ---
 
