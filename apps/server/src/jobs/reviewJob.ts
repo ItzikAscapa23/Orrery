@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { EXEC_MAX_BUFFER } from '../lib/container.js';
-import { checkBedrockConnectivity } from '../lib/connectivity.js';
+import { checkBedrockWithRetry } from '../lib/connectivity.js';
+import { parkFeatureAgentOnBedrockFailure } from '../lib/bedrockPark.js';
 import path from 'node:path';
 import { getPrisma } from '../lib/prisma.js';
 import { appendEvent } from '../lib/events.js';
@@ -53,18 +54,13 @@ export async function runReviewJob(featureId: string, jobId?: string): Promise<v
     return;
   }
 
-  // Pre-flight: park rather than skip the gate on Bedrock credential failure
-  if (!(await checkBedrockConnectivity())) {
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.status',
-      agent: 'review',
-      status: 'failed',
-    });
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.log',
-      agent: 'review',
-      severity: 'muted',
-      text: `· review agent parked — Bedrock unreachable; check VPN / aws sso login. Use POST /features/${featureId}/retry-review to resume.`,
+  // Pre-flight: park rather than skip the gate on Bedrock credential failure.
+  // 3 probes ~30s apart so a transient blip does not force operator intervention.
+  if (!(await checkBedrockWithRetry(2, 15_000))) {
+    await parkFeatureAgentOnBedrockFailure({
+      featureId,
+      agentName: 'review',
+      retryPath: `POST /features/${featureId}/retry-review`,
     });
     return;
   }

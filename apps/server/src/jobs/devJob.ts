@@ -31,7 +31,8 @@ import {
 import { dispatchUnblockedTasks, dispatchForState } from '../lib/dispatch.js';
 import { getRejectedAmendments } from '../routes/featureAmendment.js';
 import { maybeAdvanceToReview } from '../lib/maybeAdvance.js';
-import { checkBedrockConnectivity } from '../lib/connectivity.js';
+import { checkBedrockWithRetry } from '../lib/connectivity.js';
+import { parkTaskOnBedrockFailure } from '../lib/bedrockPark.js';
 import {
   runDevAgent,
   AgentNoopError,
@@ -448,26 +449,17 @@ export async function runDevJob(
     text: `◦ repo orientation: ${orientationBlock.length} chars`,
   });
 
-  if (!(await checkBedrockConnectivity())) {
-    // Environmental failure — does not consume a retry slot.
+  if (!(await checkBedrockWithRetry(2, 15_000))) {
+    // Environmental failure after 3 probes (~30s). Does not consume a retry slot.
     // Roll back the attempt increment so the slot is preserved for the real agent run.
-    // Park with a distinct reason so the operator and UI can distinguish infra-down
-    // from an agent quality failure. final:false = recoverable (fix VPN and retry-bounce).
-    await getPrisma().task.update({
-      where: { id: taskId },
-      data: {
-        status: 'parked',
-        parkReason: 'bedrock_unreachable',
-        attemptCount: task.attemptCount,
-      },
-    });
-    await appendEvent(getPrisma(), featureId, {
-      type: 'task.failed',
+    await parkTaskOnBedrockFailure({
+      featureId,
+      taskId,
       repo: task.repo,
-      task_id: task.id,
-      reason: 'Bedrock unreachable — check VPN / aws sso login',
+      agentName: task.side,
+      retryPath: `POST /features/${featureId}/retry-bounce`,
+      attemptRollback: { attemptCount: task.attemptCount },
       attempt,
-      final: false,
     });
     return 'parked';
   }
@@ -876,6 +868,26 @@ export async function runDevJob(
         detectJsonCommand(repoClaudeMd, repoEntry.probe_command),
       );
       if (noopTestResult.exitCode === 0) {
+        if (task.coveredByTestPlan && !task.testsWritten) {
+          await getPrisma().task.update({
+            where: { id: taskId },
+            data: { status: 'awaiting_tests' },
+          });
+          await appendEvent(getPrisma(), featureId, {
+            type: 'agent.log',
+            agent: task.side,
+            repo: task.repo,
+            severity: 'info',
+            text: `◦ task ${task.id} noop-success — awaiting acceptance tests`,
+          });
+          await appendEvent(getPrisma(), featureId, {
+            type: 'agent.status',
+            agent: task.side,
+            repo: task.repo,
+            status: 'waiting',
+          });
+          return 'completed';
+        }
         return completeTask(featureId, taskId, task, worktreeInfo, undefined);
       }
       const noopCatResult = await container.exec(`cat ${TEST_REPORT_FILE}`);
@@ -989,6 +1001,30 @@ export async function runDevJob(
       }
     }
     // ── End acceptance check ───────────────────────────────────────────────────
+
+    // Guard: covered task committed code but test task hasn't written tests yet.
+    // Hold in awaiting_tests so the task never counts as completed prematurely and
+    // doesn't trigger a branch push or review advance until tests exist.
+    if (task.coveredByTestPlan && !task.testsWritten) {
+      await getPrisma().task.update({
+        where: { id: taskId },
+        data: { status: 'awaiting_tests', commitSha },
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: task.side,
+        repo: task.repo,
+        severity: 'info',
+        text: `◦ task ${task.id} awaiting acceptance tests — test agent will trigger re-dispatch`,
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.status',
+        agent: task.side,
+        repo: task.repo,
+        status: 'waiting',
+      });
+      return 'completed';
+    }
 
     return completeTask(featureId, taskId, task, worktreeInfo, commitSha);
   } catch (err: unknown) {

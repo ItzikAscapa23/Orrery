@@ -67,3 +67,21 @@ export function getConnectivityCache(): CacheEntry | null {
 export function resetConnectivityCache(): void {
   cache = null;
 }
+
+/**
+ * Connectivity check with backoff retry. Calls checkBedrockConnectivity(); on
+ * failure waits delayMs and retries up to maxRetries more times before giving
+ * up. Cache is expired between attempts so each probe makes a real network call.
+ *
+ * Use at all Bedrock pre-flight sites so a transient blip shorter than
+ * maxRetries × delayMs does not park a task.
+ */
+export async function checkBedrockWithRetry(maxRetries: number, delayMs: number): Promise<boolean> {
+  if (await checkBedrockConnectivity()) return true;
+  for (let i = 0; i < maxRetries; i++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    resetConnectivityCache();
+    if (await checkBedrockConnectivity()) return true;
+  }
+  return false;
+}

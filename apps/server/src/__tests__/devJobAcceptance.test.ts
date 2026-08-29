@@ -43,6 +43,7 @@ vi.mock('../lib/dispatch.js', () => ({
 
 vi.mock('../lib/connectivity.js', () => ({
   checkBedrockConnectivity: vi.fn().mockResolvedValue(true),
+  checkBedrockWithRetry: vi.fn().mockResolvedValue(true),
 }));
 
 // Mock node:fs so manifest reads don't fail on missing file
@@ -805,7 +806,7 @@ describe('devJob — baseline-diff gate (R9)', () => {
 
 // ── R-13: environmental failures do not advance attempt counter ───────────────
 
-import { checkBedrockConnectivity } from '../lib/connectivity.js';
+import { checkBedrockWithRetry } from '../lib/connectivity.js';
 
 describe('devJob — Bedrock unreachable (R-13)', () => {
   async function makeTask(attemptCount = 1): Promise<string> {
@@ -827,11 +828,11 @@ describe('devJob — Bedrock unreachable (R-13)', () => {
   }
 
   beforeEach(() => {
-    vi.mocked(checkBedrockConnectivity).mockResolvedValue(false);
+    vi.mocked(checkBedrockWithRetry).mockResolvedValue(false);
   });
 
   afterEach(() => {
-    vi.mocked(checkBedrockConnectivity).mockResolvedValue(true);
+    vi.mocked(checkBedrockWithRetry).mockResolvedValue(true);
   });
 
   it('parks task with parkReason bedrock_unreachable, not failure', async () => {
@@ -840,6 +841,13 @@ describe('devJob — Bedrock unreachable (R-13)', () => {
     const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
     expect(task.status).toBe('parked');
     expect(task.parkReason).toBe('bedrock_unreachable');
+  });
+
+  it('clears bullJobId on park so the task is visible to reconciler and dispatch', async () => {
+    const taskId = await makeTask(1);
+    await runDevJob(featureId, taskId, 'job-bedrock-1b');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.bullJobId).toBeNull();
   });
 
   it('does not advance the attempt counter (counter rolled back to pre-run value)', async () => {
@@ -858,13 +866,63 @@ describe('devJob — Bedrock unreachable (R-13)', () => {
     expect((failedEvt!.payload as { final: boolean }).final).toBe(false);
   });
 
-  it('does not emit agent.status:failed (Bedrock is infra, not agent fault)', async () => {
+  it('emits agent.status:failed for unified operator visibility', async () => {
     const taskId = await makeTask(0);
     await runDevJob(featureId, taskId, 'job-bedrock-4');
     const events = await getPrisma().event.findMany({ where: { featureId } });
     const agentFailed = events.find(
       (e) => e.type === 'agent.status' && (e.payload as { status: string }).status === 'failed',
     );
-    expect(agentFailed).toBeUndefined();
+    expect(agentFailed).not.toBeUndefined();
+  });
+});
+
+// ── R-25: covered task without testsWritten must not reach completed ──────────
+
+describe('devJob — awaiting_tests guard (R-25)', () => {
+  async function makeCoveredNoTests(): Promise<string> {
+    const task = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Awaiting tests task',
+        description: 'task covered but not yet written',
+        specRefs: [],
+        dependsOn: [],
+        status: 'pending',
+        coveredByTestPlan: true,
+        testsWritten: false,
+        attemptCount: 0,
+      },
+    });
+    return task.id;
+  }
+
+  it('sets status to awaiting_tests (not completed) when covered and testsWritten=false', async () => {
+    // Container execs for the pre-commit verify (no acceptance check since testsWritten=false)
+    mockContainerExec
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // probe json cmd
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // cat probe report
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }); // npm test (pre-commit)
+    const taskId = await makeCoveredNoTests();
+    await runDevJob(featureId, taskId, 'job-await-1');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe('awaiting_tests');
+    expect(task.commitSha).toBeTruthy();
+  });
+
+  it('emits agent.status:waiting when entering awaiting_tests', async () => {
+    mockContainerExec
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+    const taskId = await makeCoveredNoTests();
+    await runDevJob(featureId, taskId, 'job-await-2');
+    const events = await getPrisma().event.findMany({ where: { featureId } });
+    const waiting = events.find(
+      (e) => e.type === 'agent.status' && (e.payload as { status: string }).status === 'waiting',
+    );
+    expect(waiting).not.toBeUndefined();
   });
 });

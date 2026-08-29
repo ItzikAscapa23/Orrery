@@ -33,7 +33,7 @@ export interface ActivityTask {
   taskTitle: string;
   side: string;
   repo: string;
-  status: 'running' | 'completed' | 'failed' | 'parked';
+  status: 'running' | 'completed' | 'failed' | 'parked' | 'awaiting_tests';
   turns: number;
   testTurns: number;
   spendGuardThreshold: number;
@@ -201,7 +201,13 @@ export function foldActivityEvents(events: EventRow[], tasks: TaskLike[]): Activ
       .reduce((sum, j) => sum + j.turns, 0);
 
     const status: ActivityTask['status'] =
-      taskInfo.status === 'parked' ? 'parked' : !span.terminated ? 'running' : span.termStatus;
+      taskInfo.status === 'parked'
+        ? 'parked'
+        : taskInfo.status === 'awaiting_tests'
+          ? 'awaiting_tests'
+          : !span.terminated
+            ? 'running'
+            : span.termStatus;
 
     taskSections.push({
       taskId: span.taskId,

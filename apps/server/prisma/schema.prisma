@@ -130,7 +130,7 @@ model Task {
   description  String
   specRefs     Json     @default("[]") @map("spec_refs")
   dependsOn    Json     @default("[]") @map("depends_on")
-  // pending | running | completed | parked | amendment_paused
+  // pending | running | completed | parked | amendment_paused | awaiting_tests
   status       String   @default("pending")
   attemptCount      Int      @default(0) @map("attempt_count")
   bullJobId         String?  @map("bull_job_id")

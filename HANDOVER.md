@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 15 — The gate counts what actually ran
+- **Current phase:** 16 — Environmental failures leave a recoverable task
 - **State:** `complete`
 - **Last updated:** 2026-08-29
 
@@ -56,7 +56,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 15 closed. Next work requires a new phase entry in `plan.md`.*
+- [x] T-73 — One Bedrock park definition (`lib/bedrockPark.ts`, 4 job sites updated)
+- [x] T-74 — Bedrock reprobe before park (`checkBedrockWithRetry` in `lib/connectivity.ts`)
+- [x] T-75 — `awaiting_tests` status: covered tasks blocked until `testsWritten: true`
+- [x] State-write audit compiled (see Phase 16 audit section below)
+- [x] Tests, typecheck, lint all green (1097 passed / 84 files)
 
 ---
 
@@ -64,9 +68,33 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — 1085 passed across 84 files, 2026-08-29 |
+| `npm test` (repo root) | passed — **1097 passed across 84 files** (+12 new tests), 2026-08-29 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
 | `npm run lint` | **exit 0** — 0 problems, 2026-08-29 |
+
+---
+
+## Phase 16 audit — task state-write sites
+
+Every site that writes `completed`, `parked`, `pending`, or `awaiting_tests` to a Task row after a failure or terminal event:
+
+| File:line | State written | `bullJobId` | `parkReason` | Notes |
+|---|---|---|---|---|
+| `lib/bedrockPark.ts:25` | `parked` | `null` (cleared) | `bedrock_unreachable` | Canonical Bedrock park — called by devJob + taskTestJob |
+| `jobs/devJob.ts:780` | `parked` | not touched | `failure` | Agent failure after max attempts (final) |
+| `jobs/devJob.ts:874` | `awaiting_tests` | not touched | — | Noop-success path: code unchanged, tests not yet written |
+| `jobs/devJob.ts:983` | `parked` | not touched | `failure` | Per-attempt failure during acceptance check |
+| `jobs/devJob.ts:1011` | `awaiting_tests` | not touched | — | Normal-success path: commit done, test task not yet written |
+| `jobs/devJob.ts:1076` | `parked` | not touched | `failure` | PushError / CommitStepError (always final) |
+| `jobs/devJob.ts:1086` | `pending` | not touched | — | Retry after non-final agent failure (re-dispatch follows) |
+| `jobs/taskTestJob.ts:394` | `pending` | `null` (cleared) | — | Tests written, task ready for re-dispatch (path A) |
+| `jobs/taskTestJob.ts:434` | `pending` | `null` (cleared) | — | Tests written, task ready for re-dispatch (path B) |
+| `jobs/taskTestJob.ts:450` | `pending` | `null` (cleared) | — | Tests written, task ready for re-dispatch (path C) |
+| `jobs/devJob.ts:290` | `completed` | not touched | — | `completeTask` helper — normal completion |
+
+**R-23 fix confirmed:** `taskTestJob.ts` Bedrock park now routes through `bedrockPark.ts` which writes `parked` + clears `bullJobId`. Old code wrote `pending` only, leaving stale `bullJobId` invisible to reconciler and dispatch.
+
+**R-25 fix confirmed:** `awaiting_tests` rows block `maybeAdvanceToReview` (counts tasks where `status !== 'completed'`) and are transparent to `dispatchUnblockedTasks` (only dispatches `pending`). The `allDone` guard in dispatch also includes `awaiting_tests` to suppress false `dispatch_no_tasks` warnings.
 
 ---
 
@@ -145,6 +173,14 @@ Every failure classification — confirmed they share one definition:
   returns `[raw output — zero tests reported]` when `passed + failed === 0`.
 - **Phase 14: `resultFirstLine` in `ToolCallInfo`** — first line of every tool result
   appended to the `agent.log` event. Consumers: `devJob.ts` and `testJob.ts`.
+- **Phase 16: `awaiting_tests` is a string status, not a Prisma enum** — the `status`
+  column is `String` in schema.prisma; new values never require a migration. Only the
+  comment and the TypeScript union (`ActivityTask['status']`) must be updated.
+- **Phase 16: `checkBedrockWithRetry` must call `resetConnectivityCache()` between retries** — the cache TTL is 30 s; without resetting it, all retry probes read the same stale `false` and park immediately.
+- **Phase 16: Bedrock park is always `parked`, never `pending`** — `pending` after a
+  Bedrock failure leaves a stale `bullJobId` on the row; reconciler scans `running` and
+  gate logic scans `parked`. The row becomes invisible to both. `parked` + `bullJobId: null`
+  is the only safe treatment.
 
 ---
 

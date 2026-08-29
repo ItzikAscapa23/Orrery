@@ -168,7 +168,11 @@ export async function dispatchUnblockedTasks(
 
   if (dispatchable.length === 0) {
     const pendingCount = sideTasks.filter((t) => t.status === 'pending').length;
-    const allCompleted = sideTasks.length > 0 && sideTasks.every((t) => t.status === 'completed');
+    // Suppress the no-tasks warning when all tasks are completed or awaiting_tests
+    // (covered tasks holding in awaiting_tests are not a seeding bug).
+    const allDone =
+      sideTasks.length > 0 &&
+      sideTasks.every((t) => t.status === 'completed' || t.status === 'awaiting_tests');
     if (pendingCount > 0) {
       console.error(
         JSON.stringify({
@@ -178,9 +182,9 @@ export async function dispatchUnblockedTasks(
           warning: `${pendingCount} pending task(s) blocked by unmet dependencies or running sibling`,
         }),
       );
-    } else if (!allCompleted) {
+    } else if (!allDone) {
       // Only warn when no tasks exist at all (plan seeding bug).
-      // Suppress when all tasks are completed — that's the normal post-last-task call.
+      // Suppress when all tasks are completed or awaiting acceptance tests.
       console.error(
         JSON.stringify({
           event: 'dispatch_no_tasks',

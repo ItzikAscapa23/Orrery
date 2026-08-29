@@ -55,7 +55,10 @@ vi.mock('../lib/queue.js', () => ({
   getQueue: vi.fn(),
   closeQueue: vi.fn(),
 }));
-vi.mock('../lib/connectivity.js', () => ({ checkBedrockConnectivity: mockCheckBedrock }));
+vi.mock('../lib/connectivity.js', () => ({
+  checkBedrockConnectivity: mockCheckBedrock,
+  checkBedrockWithRetry: mockCheckBedrock,
+}));
 const { mockReadClaudeMdTestJob } = vi.hoisted(() => ({
   mockReadClaudeMdTestJob: vi.fn().mockReturnValue('# CLAUDE.md\nnpm test\n'),
 }));

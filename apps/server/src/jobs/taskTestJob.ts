@@ -12,7 +12,8 @@ import {
   EXEC_MAX_BUFFER,
 } from '../lib/container.js';
 import { dispatchUnblockedTasks } from '../lib/dispatch.js';
-import { checkBedrockConnectivity } from '../lib/connectivity.js';
+import { checkBedrockWithRetry } from '../lib/connectivity.js';
+import { parkTaskOnBedrockFailure } from '../lib/bedrockPark.js';
 import { readClaudeMdFromDefaultBranch, getRepoEntry, routeInstall } from './devJob.js';
 import { createWorktree } from '../lib/worktree.js';
 import {
@@ -114,21 +115,19 @@ export async function runTaskTestJob(
     text: `▸ writing acceptance tests for task: ${task.title}`,
   });
 
-  if (!(await checkBedrockConnectivity())) {
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.status',
-      agent: 'test',
-      status: 'failed',
-    });
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.log',
-      agent: 'test',
-      severity: 'muted',
-      text: '· task-test agent parked — Bedrock unreachable; check VPN / aws sso login',
-    });
-    await getPrisma().task.update({
-      where: { id: taskId },
-      data: { status: 'pending' },
+  if (!(await checkBedrockWithRetry(2, 15_000))) {
+    // Environmental failure after 3 probes (~30s). Roll back testTaskAttempts so the
+    // next dispatch re-routes to the test-task job rather than skipping to dev.
+    // Set parked (not pending) so the stale bullJobId is cleared and the row is
+    // visible to gate handling and the retry-bounce path.
+    await parkTaskOnBedrockFailure({
+      featureId,
+      taskId,
+      repo: task.repo,
+      agentName: 'test',
+      retryPath: `POST /features/${featureId}/retry-bounce`,
+      attemptRollback: { testTaskAttempts: { decrement: 1 } },
+      attempt: task.testTaskAttempts + 1,
     });
     return;
   }
@@ -392,7 +391,7 @@ export async function runTaskTestJob(
 
     await getPrisma().task.update({
       where: { id: taskId },
-      data: { testsWritten: true, status: 'pending' },
+      data: { testsWritten: true, status: 'pending', bullJobId: null },
     });
 
     await appendEvent(getPrisma(), featureId, {
@@ -432,7 +431,7 @@ export async function runTaskTestJob(
       // Policy violations are not retryable — skip test coverage for this task.
       await getPrisma().task.update({
         where: { id: taskId },
-        data: { testsWritten: true, status: 'pending' },
+        data: { testsWritten: true, status: 'pending', bullJobId: null },
       });
       await dispatchUnblockedTasks(featureId, side);
     } else {
@@ -448,7 +447,7 @@ export async function runTaskTestJob(
         });
         await getPrisma().task.update({
           where: { id: taskId },
-          data: { testsWritten: true, status: 'pending' },
+          data: { testsWritten: true, status: 'pending', bullJobId: null },
         });
         await dispatchUnblockedTasks(featureId, side);
       } else {

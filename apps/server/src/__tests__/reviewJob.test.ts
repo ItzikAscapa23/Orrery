@@ -14,7 +14,10 @@ const { mockRunReviewAgent, mockExecFileSync, mockReadArtifact, mockCheckBedrock
 );
 
 vi.mock('../agents/reviewAgent.js', () => ({ runReviewAgent: mockRunReviewAgent }));
-vi.mock('../lib/connectivity.js', () => ({ checkBedrockConnectivity: mockCheckBedrock }));
+vi.mock('../lib/connectivity.js', () => ({
+  checkBedrockConnectivity: mockCheckBedrock,
+  checkBedrockWithRetry: mockCheckBedrock,
+}));
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>();
   return { ...original, execFileSync: mockExecFileSync };

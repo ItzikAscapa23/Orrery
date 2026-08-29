@@ -24,7 +24,8 @@ import {
   MetacharViolationError,
   EXEC_MAX_BUFFER,
 } from '../lib/container.js';
-import { checkBedrockConnectivity } from '../lib/connectivity.js';
+import { checkBedrockWithRetry } from '../lib/connectivity.js';
+import { parkFeatureAgentOnBedrockFailure } from '../lib/bedrockPark.js';
 import { readClaudeMdFromDefaultBranch, routeInstall } from './devJob.js';
 import { createWorktree } from '../lib/worktree.js';
 import { formatTestSummary } from '../lib/testOutputSummary.js';
@@ -427,18 +428,13 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
   const priorTestRounds = await getTestRound(featureId);
   const specRev = (await gateOpenedCount(featureId)) - 1;
 
-  // Verify connectivity before any container work
-  if (!(await checkBedrockConnectivity())) {
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.status',
-      agent: 'test',
-      status: 'failed',
-    });
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.log',
-      agent: 'test',
-      severity: 'muted',
-      text: '· test agent parked — Bedrock unreachable; check VPN / aws sso login. Use POST /retry-test to resume.',
+  // Verify connectivity before any container work.
+  // 3 probes ~30s apart so a transient blip does not force operator intervention.
+  if (!(await checkBedrockWithRetry(2, 15_000))) {
+    await parkFeatureAgentOnBedrockFailure({
+      featureId,
+      agentName: 'test',
+      retryPath: `POST /features/${featureId}/retry-test`,
     });
     return;
   }
@@ -900,7 +896,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
       await appendEvent(getPrisma(), featureId, {
         type: 'agent.log',
         agent: 'orchestrator',
-        severity: 'error',
+        severity: 'action',
         text: `getAuthoredTestFiles failed — git resolution error: ${gitErr instanceof Error ? gitErr.message : String(gitErr)}`,
       });
       await _handleNoAuthoredTests(
@@ -948,7 +944,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
       await appendEvent(getPrisma(), featureId, {
         type: 'agent.log',
         agent: 'orchestrator',
-        severity: 'error',
+        severity: 'action',
         text: '· zero tests executed — cannot confirm acceptance gate',
       });
       await _handleNoAuthoredTests(

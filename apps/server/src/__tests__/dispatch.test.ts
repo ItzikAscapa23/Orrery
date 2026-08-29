@@ -355,4 +355,19 @@ describe('dispatchUnblockedTasks — coverage routing', () => {
     await dispatchUnblockedTasks('cov-feat-4', 'server');
     expect(mockEnqueueJob).toHaveBeenCalledWith('cov-feat-4', 'server-dev', expect.any(Object));
   });
+
+  it('does not log dispatch_no_tasks when all tasks are awaiting_tests (R-25)', async () => {
+    // A covered task in awaiting_tests has committed code but is waiting for the
+    // test agent. dispatchUnblockedTasks fires (nothing to dispatch) but must not
+    // log the seeding-bug warning — awaiting_tests is a legitimate quiet state.
+    const taskId = await makeFeatureWithTask('cov-feat-5', true, false);
+    await getPrisma().task.update({ where: { id: taskId }, data: { status: 'awaiting_tests' } });
+    const errSpy = vi.spyOn(console, 'error');
+    await dispatchUnblockedTasks('cov-feat-5', 'server');
+    const noTasksWarning = errSpy.mock.calls.some((args) =>
+      String(args[0]).includes('dispatch_no_tasks'),
+    );
+    expect(noTasksWarning).toBe(false);
+    errSpy.mockRestore();
+  });
 });

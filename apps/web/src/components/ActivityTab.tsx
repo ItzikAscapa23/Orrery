@@ -269,9 +269,11 @@ function TaskSection({
       ? 'var(--accent-primary, #7c8cff)'
       : task.status === 'completed'
         ? 'var(--green, #4ade80)'
-        : task.status === 'parked'
-          ? '#fb923c'
-          : '#e04f4f';
+        : task.status === 'awaiting_tests'
+          ? 'var(--accent-secondary, #a78bfa)'
+          : task.status === 'parked'
+            ? '#fb923c'
+            : '#e04f4f';
 
   return (
     <div

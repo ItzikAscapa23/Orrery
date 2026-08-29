@@ -66,6 +66,7 @@ vi.mock('../lib/artifacts.js', () => ({
 
 vi.mock('../lib/connectivity.js', () => ({
   checkBedrockConnectivity: mockCheckBedrock,
+  checkBedrockWithRetry: mockCheckBedrock,
 }));
 
 vi.mock('../lib/promptScope.js', () => ({
@@ -623,5 +624,62 @@ describe('runTaskTestJob — harness brief', () => {
         (e.payload as { text?: string }).text?.includes('did not write harness brief'),
     );
     expect(noBriefLog).toBeDefined();
+  });
+});
+
+// ── R-23: Bedrock park leaves a consistent, recoverable task row ───────────────
+
+describe('taskTestJob — Bedrock unreachable (R-23)', () => {
+  beforeEach(() => {
+    mockCheckBedrock.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    mockCheckBedrock.mockResolvedValue(true);
+  });
+
+  it('sets status to parked (not pending) on Bedrock failure', async () => {
+    await runTaskTestJob(featureId, taskId, 'job-park-1', 'server');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe('parked');
+    expect(task.parkReason).toBe('bedrock_unreachable');
+  });
+
+  it('clears bullJobId so the row is visible to reconciler and dispatch', async () => {
+    await getPrisma().task.update({
+      where: { id: taskId },
+      data: { status: 'running', bullJobId: 'stale-641' },
+    });
+    await runTaskTestJob(featureId, taskId, 'job-park-2', 'server');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.bullJobId).toBeNull();
+  });
+
+  it('rolls back testTaskAttempts so next dispatch re-routes to the test-task job', async () => {
+    // Dispatch increments testTaskAttempts to 1 at job start.
+    // Park must decrement it back to 0 so the task routes to test-task, not dev.
+    await runTaskTestJob(featureId, taskId, 'job-park-3', 'server');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.testTaskAttempts).toBe(0);
+  });
+
+  it('emits task.failed with final:false', async () => {
+    await runTaskTestJob(featureId, taskId, 'job-park-4', 'server');
+    const events = await getPrisma().event.findMany({ where: { featureId } });
+    const failedEvt = events.find((e) => e.type === 'task.failed');
+    expect(failedEvt).not.toBeUndefined();
+    expect((failedEvt!.payload as { final: boolean }).final).toBe(false);
+  });
+});
+
+// ── R-25: testsWritten update clears bullJobId ────────────────────────────────
+
+describe('taskTestJob — testsWritten update clears bullJobId (R-25)', () => {
+  it('clears bullJobId when setting testsWritten=true on success path', async () => {
+    await getPrisma().task.update({ where: { id: taskId }, data: { bullJobId: 'dev-job-old' } });
+    await runTaskTestJob(featureId, taskId, 'job-tw-1', 'server');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.testsWritten).toBe(true);
+    expect(task.bullJobId).toBeNull();
   });
 });
