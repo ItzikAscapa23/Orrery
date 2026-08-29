@@ -367,3 +367,76 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A feature whose test agent authors one file passes its acceptance gate
+---
+## Phase 16 — Environmental failures leave a recoverable task
+**Goal:** A transient Bedrock outage neither strands a task nor requires a DB edit.
+**PRD refs:** §3 R8
+**Tasks:**
+- [ ] `73-bedrock-park-one-definition` — R-23. The Bedrock-unreachable park is
+      implemented in four places with three different row treatments:
+      `devJob.ts:460` sets `parkReason: 'bedrock_unreachable'`;
+      `taskTestJob.ts:129` writes `{ status: 'pending' }` only, leaving
+      `bullJobId` stale; `reviewJob.ts:67` and `testJob.ts:441` update no row at
+      all. Evidence: feature `14ec88b4` task `daee266f` sat at
+      `status: pending, bull_job_id: 641, park_reason: null` after
+      `taskTestJob.ts` parked it — invisible to the reconciler (scans `running`),
+      to gate handling (scans `parked`), and to dispatch. Recovery required a
+      manual `UPDATE tasks SET bull_job_id = NULL`. One definition, cited from
+      all four sites
+- [ ] `74-bedrock-reprobe-before-park` — R-24. The park fires on the first
+      failure. Re-probe with backoff (2–3 attempts over ~30s) before parking.
+      The probe already exists — `bedrock-probe passed` fired at 14:31 on the
+      same feature that parked at 14:38 and succeeded again on redispatch
+- [ ] `75-task-completed-requires-tests` — R-25. A task with
+      `coveredByTestPlan: true` reaches `completed` before its test task has run.
+      Observed on feature `14ec88b4`: both tasks displayed COMPLETED while the
+      test agent was still writing acceptance tests. `completed` must require
+      `testsWritten: true` or explicit non-coverage; a covered task awaiting
+      tests needs a distinct state
+- [ ] Audit — list, not summary — every site that writes a terminal or
+      near-terminal task state (`completed`, `parked`, `pending` after failure),
+      and confirm each leaves the row consistent with the event it emits
+**Definition of Done:**
+- A Bedrock failure in any of the four jobs leaves a task some path will recover
+- No task is observable as `pending` with a non-null stale `bullJobId`
+- A transient Bedrock drop shorter than the backoff window does not park
+- A covered task cannot display `completed` while its tests are unwritten
+- State-write audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1085 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A task parked by a simulated Bedrock failure recovers without a manual DB edit
+---
+## Phase 17 — The UI states what the data says
+**Goal:** No panel reports a status the underlying rows do not support.
+**PRD refs:** §3 R3
+**Tasks:**
+- [ ] `76-activity-severity-not-prefix` — O-18. `activityFold.ts:178` and `:299`
+      classify rows with
+      `text.startsWith('◦ turn ') ? 'turn' : 'violation'` — a prefix match on
+      display text, while the payload already carries `severity`
+      (`ok`/`action`/`info`/`muted`). Every `ok` line renders with the ⚠ glyph,
+      including `✓ all acceptance tests pass (2196 passed, 0 failed)`. Map from
+      `severity`; one definition, cited from both sites
+- [ ] `77-mesh-status-from-tasks` — O-17. Mesh shows Test Agent `DONE` while the
+      feature-level test job is running. Phase 12 made task rows authoritative
+      for dev/test agent status; the feature-level test job appears not to be
+      covered by that derivation. Extend it rather than adding a corrective event
+- [ ] Settle C-6. The Phase 15 audit records the nested-test-directory
+      hypothesis as resolved by the candidate-depth fix; the Phase 15 summary
+      lists `resolveReal` inner catch as still open. Determine whether a distinct
+      defect remains and renumber it if so — C-6 must not name two things
+**Definition of Done:**
+- An `ok`-severity line renders without the violation glyph
+- Mesh agent status matches task rows while a feature-level test job runs
+- C-6 names exactly one defect, open or closed, with its state recorded
+**Verification:**
+```bash
+npm test
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```

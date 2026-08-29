@@ -187,6 +187,36 @@ Items closed in Phase 14 (`da52c8d`): R-14 tool results logged as char count onl
 
 Items closed in Phase 15 (`4c8f1c6`): R-17 zero-tests guard before `_advanceTestPass`; R-18 prompt states spec/contract are inlined; R-19/C-6 candidate depth 1→3 plus empty-dir guard; R-20 git errors propagate as `parseError: 'git-resolution-error'`; R-21 caller guards `dir === ''` regardless of method; R-22 not an independent defect — resolved by the testDir stability fix (see HANDOVER Phase 15 audit).
 
+- **R-23** The Bedrock-unreachable park is implemented in four places with three
+  different row treatments. `devJob.ts:460` sets
+  `parkReason: 'bedrock_unreachable'`; `taskTestJob.ts:129` writes
+  `{ status: 'pending' }` only, leaving `bullJobId` stale and `parkReason` null;
+  `reviewJob.ts:67` and `testJob.ts:441` update no row at all and rely on an
+  operator calling a retry route. Evidence: feature `14ec88b4` task `daee266f`
+  sat at `status: pending, bull_job_id: 641, park_reason: null` — invisible to
+  the reconciler (scans `running`), to gate handling (scans `parked`), and to
+  dispatch. Recovery required a manual `UPDATE tasks SET bull_job_id = NULL`.
+  Sixth occurrence of one rule living in more than one place.
+- **R-24** The Bedrock park fires on the first failure with no re-probe. On
+  feature `14ec88b4` the probe passed at 14:31, the dev agent made Bedrock calls
+  through 14:38, the task-test job parked on a drop lasting seconds, and the same
+  job succeeded on redispatch. `aws sts get-caller-identity` succeeded before and
+  after — static IAM user, nothing expired. Re-probe with backoff (2–3 attempts
+  over ~30s) before parking; the probe already exists.
+- **R-25** A task with `coveredByTestPlan: true` reaches `completed` before its
+  test task has run. Observed on feature `14ec88b4`: both tasks displayed
+  COMPLETED while the test agent was still writing acceptance tests. `completed`
+  currently means "the dev agent finished and committed", not "acceptance
+  criteria verified" — for a covered task those differ. Needs a distinct state
+  for a covered task awaiting tests.
+- **O-18** `activityFold.ts:178` and `:299` classify activity rows with
+  `text.startsWith('◦ turn ') ? 'turn' : 'violation'` — a prefix match on display
+  text — while the event payload already carries `severity`
+  (`ok`/`action`/`info`/`muted`). Every non-`muted` line renders with the ⚠
+  violation glyph, including `✓ all acceptance tests pass (2196 passed, 0
+  failed)`. Declared field ignored in favour of prose inference, duplicated
+  across two sites.
+
 
 - **R-17** False pass at the acceptance gate. `testJob.ts:984` renders
   `✓ all acceptance tests pass (0 passed, 0 failed)` — a run that executed zero
