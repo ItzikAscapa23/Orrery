@@ -245,3 +245,39 @@ npm run lint      # baseline 364 problems (358 errors) — must not increase
 ```
 **Entry conditions for next phase:**
 - A restart mid-dispatch produces exactly one container
+---
+## Phase 13 — Recovery paths account for live work
+**Goal:** No recovery path re-dispatches a task whose agent is still running.
+**PRD refs:** §3 R8
+**Tasks:**
+- [ ] `65-container-task-identity` — container names carry the task id
+      (`container.ts`, currently `orrery-agent-<epoch-ms>`). Add targeted
+      termination; `sweepOrphanContainers` (`container.ts:478`) stays as the
+      crash-recovery blanket path
+- [ ] Any re-dispatch terminates the incumbent container first. Covers the
+      residue R8 could not reach: BullMQ `maxStalledCount: 1`
+      (`agentWorker.ts:204`) bypasses `queue.ts` and cannot be gated there
+- [ ] `66-environmental-retry-slots` — environmental failures do not consume
+      agent retry slots (R-13). `taskReconciler.ts:73` already states this
+      principle for orphans; `devJob`'s retry policy does not apply it. Evidence:
+      `task.failed {"final": true, "reason": "Bedrock unreachable — check VPN /
+      aws sso login", "attempt": 2}` parked a task permanently
+- [ ] Audit — list, not summary — every classification of a failure as
+      agent-caused vs environmental, and confirm they share one definition
+- [ ] `67-duplicate-pr-opened` — O-12, non-atomic ADO call plus event append.
+      Root cause already diagnosed in `docs/phase-6.md`; implement the fix
+**Definition of Done:**
+- Container name contains the task id; targeted kill terminates only that task's
+  container
+- A re-dispatch while an agent is live leaves one running container, not two
+- A Bedrock-unreachable failure does not advance the attempt counter
+- One shared definition of environmental failure, cited from every call site
+- A single ADO PR creation emits exactly one `pr.opened`
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1070 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A restart mid-dispatch produces exactly one container
