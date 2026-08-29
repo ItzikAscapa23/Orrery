@@ -31,8 +31,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `apps/server/src/jobs/` — devJob, testJob, taskTestJob, createAdoPrJob, agentWorker
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
+- `apps/web/src/lib/activityFold.ts` — activity-tab rows folded from events + task rows
 - `packages/shared/` — event payload schemas
-- `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 16)
+- `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 17)
 - `docs/agents/repo-manifest.yaml` — operator config, gitignored, example committed
 
 **Conventions:**
@@ -48,7 +49,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 16 — Environmental failures leave a recoverable task
+- **Current phase:** 17 — The UI states what the data says
 - **State:** `complete`
 - **Last updated:** 2026-08-29
 
@@ -56,7 +57,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 16 closed. Pull Phase 17 tasks from `docs/specs/` before starting.*
+*Phase 17 closed. No further phases are defined in `plan.md`.*
 
 ---
 
@@ -64,60 +65,42 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1097 passed across 84 files** (+12 new tests), 2026-08-29 |
+| `npm test` (repo root) | passed — **1098 passed across 84 files** (+1 new test), 2026-08-29 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
 | `npm run lint` | exit 0 — 0 problems, 2026-08-29 |
 
 ---
 
-## Phase 16 audit — task state-write sites
-
-Every site that writes a terminal or near-terminal state to a Task row:
-
-| File:line | State written | `bullJobId` | `parkReason` | Notes |
-|---|---|---|---|---|
-| `lib/bedrockPark.ts:25` | `parked` | `null` (cleared) | `bedrock_unreachable` | Canonical Bedrock park — called by devJob + taskTestJob |
-| `jobs/devJob.ts:780` | `parked` | not touched | `failure` | Agent failure after max attempts (final) |
-| `jobs/devJob.ts:874` | `awaiting_tests` | not touched | — | Noop-success path: code unchanged, tests not yet written |
-| `jobs/devJob.ts:983` | `parked` | not touched | `failure` | Per-attempt failure during acceptance check |
-| `jobs/devJob.ts:1011` | `awaiting_tests` | not touched | — | Normal-success: commit done, test task not yet written |
-| `jobs/devJob.ts:1076` | `parked` | not touched | `failure` | PushError / CommitStepError (always final) |
-| `jobs/devJob.ts:1086` | `pending` | not touched | — | Retry after non-final failure (re-dispatch follows) |
-| `jobs/taskTestJob.ts:394,434,450` | `pending` | `null` (cleared) | — | Tests written, task ready for re-dispatch |
-| `jobs/devJob.ts:290` | `completed` | not touched | — | `completeTask` helper — normal completion |
-
----
-
 ## Decisions
 
+- **`severity === 'action' → 'violation'`, all other severities → `'turn'` in
+  `activityFold.ts`** — violation text (`⚠ violation 1/3: allowlist — ...`) is logged
+  with `severity: 'muted'`, so it loses the orange UI glyph but the in-text `⚠`
+  remains visible. No double-glyph. Success lines (`ok`) and tool-call logs (`muted`)
+  are neutral; agent-action lines (`action`) are highlighted.
+- **Mesh status: skip `working → done` override from task-derived status** — the
+  feature-level test job emits `agent.status(working)` directly; task rows have no
+  record of it. `deriveAgentStatusesFromTasks` returns `'done'` when all covered tasks
+  have `testsWritten: true`, but the feature-level job runs after that. Fix: when
+  merging task-derived statuses, skip overriding an existing `'working'` with `'done'`.
+- **C-6 settled as resolved (no code change)** — the `resolveReal` macOS inner-catch
+  bug is unreachable: both `checkReadAllowed` and `checkWriteAllowed` pre-resolve the
+  worktreeRoot via `realpathSync` before calling `resolveReal`. Since `abs` is
+  constructed from the resolved root, the innermost catch returning `abs` already
+  returns a real-path. Phase 15's candidate-depth fix eliminated the observable symptom;
+  Phase 17 confirmed no distinct defect remains. C-6 closed.
 - **`awaiting_tests` is a string status, not a Prisma enum** — `status` column is
   `String`; new values never require a migration. Only the schema comment and the
   `ActivityTask['status']` TypeScript union must be updated.
 - **Bedrock park is always `parked` + `bullJobId: null`, never `pending`** —
   `pending` with a stale `bullJobId` is invisible to the reconciler (scans `running`)
   and gate logic (scans `parked`). `parked` + cleared ID is the only safe treatment.
-- **`checkBedrockWithRetry` must reset cache between retries** — the 30 s cache TTL
-  means all retry probes read the same stale `false` unless `resetConnectivityCache()`
-  is called before each attempt.
-- **`checkSpendGuard` returns a discriminated union** — callers need `remainingBudget`
-  to compute `effectiveCap`. A boolean return forced callers to re-query or over-run.
-- **Task-derived agent status applied after the event-sourced fold** — `agent.status`
-  events can be stale on the gate-resolved path. Task rows are authoritative for
-  dev/test agents; review/spec/planner remain event-sourced.
-- **`discoverTestDir` candidate depth = 3** — `findTestFiles(abs, N)` consumes depth
-  entering directories. BFF layout (`test/scenarios/<domain>/`) needs `maxDepth=3`;
-  depth=1 triggered deep-scan with inconsistent results across rounds.
-- **`getAuthoredTestFiles` lets git errors propagate** — silent `catch { return [] }`
-  was indistinguishable from zero authored files. Error propagation routes to
-  `_handleNoAuthoredTests` with a `parseError` marker, preventing a false gate pass.
-- **`enqueueJob` returns job ID; persisted at dispatch time** — closes the window
-  where a running task had a null `bullJobId`. Reconciler treats null as "not yet
-  dispatched" (skip), not orphaned.
-- **Baseline-diff gate** — `devJob.ts` captures probe test output immediately after
-  the probe passes. Verification only throws on failures absent from baseline, so
-  pre-existing broken tests do not block the agent.
-- **Container name = `${CONTAINER_PREFIX}-${label}`** — deterministic naming makes
-  targeted kill possible; re-dispatch automatically kills the incumbent.
+- **Finding identity is composite (featureId, specRev, id)** — model-assigned finding
+  ids (`f1`, `f2`) recur in every review cycle. Lookups must use the composite key or
+  scope by feature + current cycle; a plain `where: { id }` is always a bug.
+- **Task-derived agent status applied after the event-sourced fold** — except for the
+  `working → done` guard above. Task rows are authoritative for dev/test agents; review,
+  spec, and planner remain event-sourced.
 
 ---
 
@@ -130,12 +113,14 @@ Every site that writes a terminal or near-terminal state to a Task row:
 
 ## Open questions / blockers
 
-- **C-6 macOS jail bug — carry forward.** `resolveReal` (`testAgent.ts:209`) falls
-  back to the unresolved path when a nested parent dir doesn't exist. On macOS
-  `/var → /private/var` makes the jail check fail for new nested test dirs. Fix:
-  use `path.resolve` instead of `fs.realpathSync.native` in the inner catch.
 - **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
   features. Carry forward.
+- **O-12 Duplicate `pr.created` events.** Root cause diagnosed (non-atomic ADO call
+  + event append). Not implemented. Fix: re-query existing `pr.created` events inside
+  the per-repo loop immediately before the ADO API call.
+- **C-3 `detectJsonCommand` CLAUDE.md inference.** Mitigated — `probe_command` in
+  `repo-manifest.yaml` is primary. Fallback inference only triggers when `probe_command`
+  is unset. Ensure `probe_command` is set for every repo in the manifest.
 
 ---
 
@@ -160,6 +145,7 @@ Every site that writes a terminal or near-terminal state to a Task row:
 | 14 | Agents see what actually happened | `da52c8d` | 2026-08-29 |
 | 15 | The gate counts what actually ran | `4c8f1c6` | 2026-08-29 |
 | 16 | Environmental failures leave a recoverable task | `58bb2f7` | 2026-08-29 |
+| 17 | The UI states what the data says | pending | 2026-08-29 |
 
 ---
 

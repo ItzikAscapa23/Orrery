@@ -939,4 +939,15 @@ describe('foldEvents — task-based agent status derivation', () => {
     );
     expect(state.agentStatuses['review']).toBe('done');
   });
+
+  it('feature-level test job working is not overridden by task-derived done', () => {
+    // All covered tasks have testsWritten — deriveAgentStatusesFromTasks returns 'done'.
+    // But the feature-level test job is actively running (emitted agent.status working).
+    // The event-sourced 'working' must win.
+    const state = foldEvents(
+      [makeRow(1, { type: 'agent.status', agent: 'test', status: 'working' })],
+      [{ ...baseTask, coveredByTestPlan: true, testsWritten: true, status: 'completed' }],
+    );
+    expect(state.agentStatuses['test']).toBe('working');
+  });
 });

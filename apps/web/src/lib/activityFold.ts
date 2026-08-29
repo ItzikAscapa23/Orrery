@@ -174,10 +174,9 @@ export function foldActivityEvents(events: EventRow[], tasks: TaskLike[]): Activ
         continue;
       }
       if (e.payload.type === 'agent.log' && e.payload.agent === taskInfo.side) {
-        const text = e.payload.text;
-        const kind: 'turn' | 'violation' = text.startsWith('◦ turn ') ? 'turn' : 'violation';
+        const kind: 'turn' | 'violation' = e.payload.severity === 'action' ? 'violation' : 'turn';
         const bucket = jobRows.get(currentJobId);
-        if (bucket) bucket.push({ kind, seq: e.seq, text });
+        if (bucket) bucket.push({ kind, seq: e.seq, text: e.payload.text });
       }
     }
 
@@ -302,7 +301,7 @@ export function foldActivityEvents(events: EventRow[], tasks: TaskLike[]): Activ
         sectionOrder.push(sectionId);
         currentSectionIdByAgent.set(agent, sectionId);
       }
-      const kind: 'turn' | 'violation' = p.text.startsWith('◦ turn ') ? 'turn' : 'violation';
+      const kind: 'turn' | 'violation' = p.severity === 'action' ? 'violation' : 'turn';
       sectionData.get(sectionId)!.rows.push({ kind, seq: ev.seq, text: p.text });
     }
   }

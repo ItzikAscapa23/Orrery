@@ -85,7 +85,7 @@ describe('foldActivityEvents', () => {
     expect(task?.jobs[1]?.rows).toHaveLength(1);
   });
 
-  it('assigns kind=violation to non-turn lines and preserves seq order inline', () => {
+  it('assigns kind from severity: action→violation, all others→turn', () => {
     const events: EventRow[] = [
       makeRow(1, { type: 'task.started', repo: 'server', task_id: 'task-1', attempt: 1 }),
       makeRow(2, {
@@ -97,37 +97,46 @@ describe('foldActivityEvents', () => {
         job_id: 'job-A',
         task_id: 'task-1',
       }),
+      // muted: tool-call log → turn
       makeRow(3, {
         type: 'agent.log',
         agent: 'server',
         severity: 'muted',
         text: '◦ turn 1 · bash ls (42 chars)',
       }),
+      // muted: violation text → still turn (⚠ in text makes it visible; no double glyph)
       makeRow(4, {
         type: 'agent.log',
         agent: 'server',
         severity: 'muted',
         text: '⚠ violation 1/3: allowlist — git status',
       }),
+      // ok: success message → turn (not violation)
       makeRow(5, {
         type: 'agent.log',
         agent: 'server',
-        severity: 'muted',
-        text: '◦ turn 2 · bash npm ci (99 chars)',
+        severity: 'ok',
+        text: '✓ all acceptance tests pass (42 passed, 0 failed)',
       }),
-      makeRow(6, { type: 'task.completed', repo: 'server', task_id: 'task-1' }),
+      // action: progress/failure event → violation (highlighted)
+      makeRow(6, {
+        type: 'agent.log',
+        agent: 'server',
+        severity: 'action',
+        text: '▸ implementing task abc: set up auth',
+      }),
+      makeRow(7, { type: 'task.completed', repo: 'server', task_id: 'task-1' }),
     ];
 
     const result = foldActivityEvents(events, [BASE_TASK]);
     const task = result[0]?.kind === 'task' ? result[0].task : undefined;
     const rows = task?.jobs[0]?.rows ?? [];
-    expect(rows).toHaveLength(3);
-    expect(rows[0]?.kind).toBe('turn');
-    expect(rows[1]?.kind).toBe('violation');
-    expect(rows[2]?.kind).toBe('turn');
-    // Seq order preserved
-    expect(rows[0]!.seq).toBeLessThan(rows[1]!.seq);
-    expect(rows[1]!.seq).toBeLessThan(rows[2]!.seq);
+    expect(rows).toHaveLength(4);
+    expect(rows[0]?.kind).toBe('turn'); // muted tool-call
+    expect(rows[1]?.kind).toBe('turn'); // muted violation text (⚠ visible in text itself)
+    expect(rows[2]?.kind).toBe('turn'); // ok success
+    expect(rows[3]?.kind).toBe('violation'); // action event
+    expect(rows[0]!.seq).toBeLessThan(rows[3]!.seq);
   });
 
   it('carries spendGuardThreshold from the task row; turns come from usage events in the span', () => {

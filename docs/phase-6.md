@@ -67,17 +67,16 @@ intentionally — exit code is authoritative, and keeping `parseError` makes
 the `test.report` payload honest about missing counts rather than fabricating
 zeros. Comment at line 726 explains the choice.
 
-**C-6. Nested test directories — confirmed bug on macOS.** `WATCH LIST`
-`testAgent.ts:209-221`. Code analysis (Phase 9): when the nested parent
-(`acceptance/`) doesn't exist, `resolveReal` falls back to returning the
-un-`realpathSync`-resolved path. On macOS `/var → /private/var` symlink
-setups, `absTestDir` is realpathSync'd (`/private/var/…/__tests__`) but the
-candidate is unresolved (`/var/…/__tests__/acceptance/api.test.ts`). The jail
-check then fails — `path.relative(absTestDir, abs)` starts with `..` — and
-the write is blocked before `mkdirSync(recursive)` ever runs. Hypothesis
-confirmed by static analysis. Fix: in the inner catch of `resolveReal`, use
-`path.resolve` rather than `fs.realpathSync.native` for the parent, so the
-unresolved macOS prefix is stripped. Not fixed in Phase 9; scheduled forward.
+**C-6. Nested test directories — macOS jail bug.** ✅ RESOLVED (Phase 17 analysis)
+`testAgent.ts:209-221`. Phase 9 identified a theoretical path where `resolveReal`'s
+innermost catch returns an unresolved `/var/…` path while `absTestDir` has been
+`realpathSync`'d to `/private/var/…`, causing the jail check to fail. Phase 15 fixed
+the observable symptom (R-19: candidate depth 1→3 prevented the deep-scan empty-dir
+fallback that triggered the bug). Phase 17 settled: both `checkReadAllowed` and
+`checkWriteAllowed` pre-resolve the worktreeRoot via `realpathSync` before calling
+`resolveReal`; the `abs` path is therefore already in real-path space when the
+worktreeRoot is on a symlinked filesystem. The innermost catch returning `abs`
+returns the correct resolved path. No observable defect remains. Closing.
 
 ---
 

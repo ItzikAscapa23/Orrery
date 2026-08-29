@@ -411,8 +411,15 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
 
   // Override dev/test agent statuses from task rows — more reliable than the
   // last agent.status event, which can be left stale on the gate-resolved path (O-14).
+  // Exception: don't override an event-sourced 'working' with a task-derived 'done'.
+  // The feature-level test job emits agent.status(working) directly and runs after all
+  // covered tasks complete — task rows can't see it, so event wins.
   if (tasks && tasks.length > 0) {
-    Object.assign(agentStatuses, deriveAgentStatusesFromTasks(tasks));
+    const derived = deriveAgentStatusesFromTasks(tasks);
+    for (const [agent, derivedStatus] of Object.entries(derived)) {
+      if (agentStatuses[agent] === 'working' && derivedStatus === 'done') continue;
+      agentStatuses[agent] = derivedStatus;
+    }
     // Re-apply terminal override to any newly merged task-derived statuses.
     if (isTerminal) {
       for (const agent of Object.keys(agentStatuses)) {
