@@ -49,15 +49,18 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 17 — The UI states what the data says
-- **State:** `complete`
+- **Current phase:** 18 — Close the backlog honestly
+- **State:** `in-progress`
 - **Last updated:** 2026-08-29
 
 ---
 
 ## Current phase progress
 
-*Phase 17 closed. No further phases are defined in `plan.md`.*
+- [x] Diagnose O-15 (review agent 29k/14 tokens)
+- [x] Close O-15 — no fix warranted (recorded in Decisions)
+- [ ] Trim `docs/phase-6.md` to open items only
+- [ ] Record deletion convention in HANDOVER Conventions section
 
 ---
 
@@ -73,6 +76,13 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **O-15 closed — `reviewAgent` 29k input / 14 output tokens is correct
+  behavior.** `createAdoPrJob.ts` has zero Anthropic calls; the PR body is pure
+  string concatenation capped at 3,900 chars. The 29,870 in / 14 out event
+  labeled `review` comes from `reviewAgent.ts` returning `{"findings":[]}` on a
+  clean code review. `max_tokens` is 4096 — the 14 tokens is the minimal valid
+  JSON response, not a budget truncation. The large input (charter.md + spec +
+  contract + diff capped at 60 KB) is intentional. No fix warranted.
 - **`severity === 'action' → 'violation'`, all other severities → `'turn'` in
   `activityFold.ts`** — violation text (`⚠ violation 1/3: allowlist — ...`) is logged
   with `severity: 'muted'`, so it loses the orange UI glyph but the in-text `⚠`
@@ -113,8 +123,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Open questions / blockers
 
-- **O-15 AWS review 8 output tokens.** Low confidence; may be correct for trivial
-  features. Carry forward.
 - **O-12 Duplicate `pr.created` events.** Root cause diagnosed (non-atomic ADO call
   + event append). Not implemented. Fix: re-query existing `pr.created` events inside
   the per-repo loop immediately before the ADO API call.
