@@ -69,6 +69,7 @@ export function startAgentWorker(): Worker<AgentJobPayload> {
             job.data.featureId,
             { attempt: job.attemptsMade + 1, maxAttempts: job.opts.attempts ?? 1 },
             job.id ?? undefined,
+            job.data.charterPath,
           );
           break;
         case 'plan':

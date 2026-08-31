@@ -1,24 +1,15 @@
 import { z } from 'zod';
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createMessageStream } from '../lib/anthropic.js';
 import type { UsageRecord } from '../lib/anthropic.js';
 import { FindingSchema } from '@orrery/shared';
 
 const FindingArraySchema = z.object({ findings: z.array(FindingSchema) });
 
-// Resolve the charter path relative to this file so the server can be started
-// from any working directory.
-const CHARTER_PATH = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../../../docs/agents/aws-charter.md',
-);
-
-function buildSystemPrompt(): string {
-  const charter = fs.readFileSync(CHARTER_PATH, 'utf-8');
+function buildSystemPrompt(charterPath: string): string {
+  const charter = fs.readFileSync(charterPath, 'utf-8');
   return (
-    'You are an AWS solutions architect reviewing a feature specification for a bank.\n\n' +
+    'You are an AWS solutions architect reviewing a feature specification.\n\n' +
     charter +
     '\n\nReturn ONLY valid JSON — no prose, no markdown fences — matching:\n' +
     '{ "findings": [ { "id": "...", "severity": "blocker"|"warning"|"suggestion", ' +
@@ -46,10 +37,13 @@ export async function runAwsReview(
   featureId: string,
   featureName: string,
   specMarkdown: string,
+  charterPath: string,
+  repoContext?: string,
   onUsage?: (u: UsageRecord) => void | Promise<void>,
 ): Promise<z.infer<typeof FindingSchema>[]> {
-  const systemPrompt = buildSystemPrompt();
-  const userContent = `Feature: ${featureName}\n\nSpec:\n\n${specMarkdown}`;
+  const systemPrompt = buildSystemPrompt(charterPath);
+  const repoLine = repoContext ? `\nRepositories in scope: ${repoContext}\n` : '';
+  const userContent = `Feature: ${featureName}${repoLine}\n\nSpec:\n\n${specMarkdown}`;
   // createMessage accepts a void-returning callback; wrap to suppress the
   // no-misused-promises lint error when onUsage returns a Promise.
   const usageCb = onUsage ? (u: UsageRecord) => void onUsage(u) : undefined;

@@ -34,7 +34,7 @@ export const _headCommit: { value: string | null } = {
 export async function dispatchJob(
   featureId: string,
   task: AgentJobPayload['task'],
-  extra?: { taskId?: string },
+  extra?: { taskId?: string; charterPath?: string },
 ): Promise<string> {
   const jobId = await enqueueJob(featureId, task, extra);
 
@@ -214,10 +214,6 @@ export async function dispatchForState(
   feature: Pick<Feature, 'simulated_run'>,
 ): Promise<void> {
   switch (newState) {
-    case 'AWS_REVIEW':
-      await dispatchJob(featureId, 'aws-review');
-      break;
-
     case 'PLANNING':
       // The plan job handles real vs simulated internally via feature.simulatedRun.
       await dispatchJob(featureId, 'plan');

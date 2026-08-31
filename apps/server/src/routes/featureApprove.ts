@@ -7,7 +7,9 @@ import { getPrisma } from '../lib/prisma.js';
 import { appendEvent } from '../lib/events.js';
 import { applyTransition } from '../lib/orchestrator.js';
 import { runSpecAgentTurn } from '../agents/specAgent.js';
-import { dispatchForState } from '../lib/dispatch.js';
+import { dispatchForState, dispatchJob } from '../lib/dispatch.js';
+import { resolveCharterPath } from '../lib/charterResolver.js';
+import { submitSpecSkip } from '../lib/specSubmit.js';
 import { gateOpenedCount } from '../lib/reviewCycle.js';
 import type { FeatureStatus } from '@prisma/client';
 import { usageEventPayload } from '../lib/usageEvent.js';
@@ -162,8 +164,6 @@ export async function featureApproveRoutes(app: FastifyInstance): Promise<void> 
         text: '▸ addressing requested changes',
       });
 
-      const isLightReq = feature.feature_path === 'LIGHT';
-
       const result = await runSpecAgentTurn(
         feature.id,
         feature.name,
@@ -190,52 +190,19 @@ export async function featureApproveRoutes(app: FastifyInstance): Promise<void> 
             throw err;
           }
 
-          if (isLightReq) {
-            // Light path: skip AWS_REVIEW; go directly to AWAITING_APPROVAL and open spec gate.
-            await getPrisma().$transaction(async (tx) => {
-              await appendEvent(tx, feature.id, {
-                type: 'artifact.committed',
-                path: specCommitResult.path,
-                commit: specCommitResult.commit,
-                message: specCommitResult.message,
-              });
-              await tx.feature.update({
-                where: { id: feature.id },
-                data: { proposedSpec: specMarkdown },
-              });
-              const currentFeature = await tx.feature.findUniqueOrThrow({
-                where: { id: feature.id },
-              });
-              const afterSubmit = await applyTransition(
-                tx,
-                feature.id,
-                currentFeature.status,
-                'SUBMIT_SPEC_LIGHT',
-              );
-              if (afterSubmit) {
-                await appendEvent(tx, feature.id, {
-                  type: 'phase.changed',
-                  from: currentFeature.status,
-                  to: afterSubmit,
-                });
-              }
-              await appendEvent(tx, feature.id, {
-                type: 'gate.opened',
-                gate: 'spec_approval',
-                summary: specMarkdown.slice(0, 200),
-                revision: rev,
-                counts: { blockers: 0, warnings: 0, suggestions: 0 },
-                spec_commit: specCommitResult.commit,
-              });
-            });
+          const charterPath = resolveCharterPath(feature.repos);
+
+          if (!charterPath) {
+            // No charter configured — skip AWS review, go directly to AWAITING_APPROVAL.
+            await submitSpecSkip(feature.id, specMarkdown, specCommitResult, rev);
             await appendEvent(getPrisma(), feature.id, {
               type: 'agent.log',
               agent: 'orchestrator',
               severity: 'info',
-              text: '◦ light path — spec approval gate opened (AWS review skipped)',
+              text: '◦ no review charter configured — spec approval gate opened (AWS review skipped)',
             });
           } else {
-            // Full path: SUBMIT_SPEC → AWS_REVIEW
+            // Charter found — full path: SUBMIT_SPEC → AWS_REVIEW
             await getPrisma().$transaction(async (tx) => {
               await appendEvent(tx, feature.id, {
                 type: 'artifact.committed',
@@ -264,9 +231,7 @@ export async function featureApproveRoutes(app: FastifyInstance): Promise<void> 
                 });
               }
             });
-
-            // Dispatch the AWS review job via dispatchForState.
-            await dispatchForState(feature.id, 'AWS_REVIEW', feature);
+            await dispatchJob(feature.id, 'aws-review', { charterPath });
             await appendEvent(getPrisma(), feature.id, {
               type: 'agent.log',
               agent: 'orchestrator',

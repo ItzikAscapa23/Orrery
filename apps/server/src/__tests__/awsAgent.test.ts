@@ -10,6 +10,18 @@ vi.mock('../lib/anthropic.js', () => ({
   createMessageStream: mockCreateMessageStream,
 }));
 
+const { mockReadFileSync } = vi.hoisted(() => ({
+  mockReadFileSync: vi.fn((p: unknown) => {
+    if (typeof p === 'string' && p.endsWith('.md')) return '# Mock charter\n\nMandate: test.';
+    throw new Error(`readFileSync not mocked for: ${String(p)}`);
+  }),
+}));
+
+vi.mock('node:fs', () => ({
+  default: { readFileSync: mockReadFileSync },
+  readFileSync: mockReadFileSync,
+}));
+
 import { runAwsReview } from '../agents/awsAgent.js';
 import { disconnectPrisma } from '../lib/prisma.js';
 
@@ -51,7 +63,12 @@ describe('runAwsReview', () => {
   it('returns parsed findings on valid first response', async () => {
     mockCreateMessageStream.mockResolvedValueOnce(sm(VALID_FINDINGS_JSON));
 
-    const findings = await runAwsReview('feat-1', 'Login Feature', '## Overview\nSpec text here.');
+    const findings = await runAwsReview(
+      'feat-1',
+      'Login Feature',
+      '## Overview\nSpec text here.',
+      'test-charter.md',
+    );
     expect(findings).toHaveLength(1);
     expect(findings[0]?.id).toBe('f1');
     expect(findings[0]?.severity).toBe('warning');
@@ -61,7 +78,12 @@ describe('runAwsReview', () => {
   it('returns empty findings array when model reports no issues', async () => {
     mockCreateMessageStream.mockResolvedValueOnce(sm(VALID_EMPTY_JSON));
 
-    const findings = await runAwsReview('feat-2', 'Login Feature', '## Overview\nSpec text here.');
+    const findings = await runAwsReview(
+      'feat-2',
+      'Login Feature',
+      '## Overview\nSpec text here.',
+      'test-charter.md',
+    );
     expect(findings).toHaveLength(0);
   });
 
@@ -70,7 +92,12 @@ describe('runAwsReview', () => {
       .mockResolvedValueOnce(sm('This is not JSON at all.'))
       .mockResolvedValueOnce(sm(VALID_FINDINGS_JSON));
 
-    const findings = await runAwsReview('feat-3', 'Login Feature', '## Overview\nSpec text here.');
+    const findings = await runAwsReview(
+      'feat-3',
+      'Login Feature',
+      '## Overview\nSpec text here.',
+      'test-charter.md',
+    );
     expect(findings).toHaveLength(1);
     expect(mockCreateMessageStream).toHaveBeenCalledTimes(2);
   });
@@ -81,7 +108,7 @@ describe('runAwsReview', () => {
       .mockResolvedValueOnce(sm('also invalid'));
 
     await expect(
-      runAwsReview('feat-4', 'Login Feature', '## Overview\nSpec text here.'),
+      runAwsReview('feat-4', 'Login Feature', '## Overview\nSpec text here.', 'test-charter.md'),
     ).rejects.toThrow('AWS agent parse failure');
     expect(mockCreateMessageStream).toHaveBeenCalledTimes(2);
   });
@@ -100,7 +127,12 @@ describe('runAwsReview', () => {
     });
     mockCreateMessageStream.mockResolvedValueOnce(sm(jsonNoSuggest));
 
-    const findings = await runAwsReview('feat-5', 'Login Feature', '## Overview\nSpec text here.');
+    const findings = await runAwsReview(
+      'feat-5',
+      'Login Feature',
+      '## Overview\nSpec text here.',
+      'test-charter.md',
+    );
     expect(findings).toHaveLength(1);
     expect(findings[0]?.suggested_text).toBeUndefined();
   });
@@ -109,7 +141,12 @@ describe('runAwsReview', () => {
     const fenced = '```json\n' + VALID_FINDINGS_JSON + '\n```';
     mockCreateMessageStream.mockResolvedValueOnce(sm(fenced));
 
-    const findings = await runAwsReview('feat-6', 'Login Feature', '## Overview\nSpec text here.');
+    const findings = await runAwsReview(
+      'feat-6',
+      'Login Feature',
+      '## Overview\nSpec text here.',
+      'test-charter.md',
+    );
     expect(findings).toHaveLength(1);
   });
 
@@ -117,9 +154,16 @@ describe('runAwsReview', () => {
     mockCreateMessageStream.mockResolvedValueOnce(sm(VALID_EMPTY_JSON));
     const usageRecords: { input_tokens: number; output_tokens: number }[] = [];
 
-    await runAwsReview('feat-7', 'Login Feature', '## Overview\nSpec text here.', (u) => {
-      usageRecords.push(u);
-    });
+    await runAwsReview(
+      'feat-7',
+      'Login Feature',
+      '## Overview\nSpec text here.',
+      'test-charter.md',
+      undefined,
+      (u) => {
+        usageRecords.push(u);
+      },
+    );
 
     // The mock resolves without calling onUsage directly; the test verifies
     // that runAwsReview passes usageCb through to createMessageStream without error.

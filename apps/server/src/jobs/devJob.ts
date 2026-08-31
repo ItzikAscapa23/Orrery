@@ -110,6 +110,7 @@ export interface RepoEntry {
   install_timeout_ms?: number;
   bootstrap?: string; // custom install command; when set, replaces the npm ci path
   max_turns?: number;
+  review_charter?: string; // path to operator charter file; absence skips AWS review
 }
 
 export function getRepoEntry(repoId: string): RepoEntry {

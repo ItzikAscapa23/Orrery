@@ -15,6 +15,7 @@ apps/web/.env.local
 
 # Tenant-specific files — not shipped in the public repo
 docs/agents/repo-manifest.yaml
+docs/agents/aws-charter.md
 docs/architecture/**
 !docs/architecture/bff.example.md
 docs/design/

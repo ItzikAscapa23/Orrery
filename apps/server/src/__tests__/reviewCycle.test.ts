@@ -219,9 +219,9 @@ describe('aws review job retry policy', () => {
   it('rethrows on a non-final attempt without advancing the machine', async () => {
     mockRunAwsReview.mockRejectedValueOnce(new Error('transient API error'));
 
-    await expect(runAwsReviewJob(featureId, { attempt: 1, maxAttempts: 2 })).rejects.toThrow(
-      'transient API error',
-    );
+    await expect(
+      runAwsReviewJob(featureId, { attempt: 1, maxAttempts: 2 }, undefined, 'test-charter.md'),
+    ).rejects.toThrow('transient API error');
 
     const feature = await getPrisma().feature.findUniqueOrThrow({ where: { id: featureId } });
     expect(feature.status).toBe('AWS_REVIEW'); // machine did NOT advance
@@ -240,12 +240,12 @@ describe('aws review job retry policy', () => {
     mockRunAwsReview.mockRejectedValue(new Error('persistent API error'));
 
     // Attempt 1: rethrows (BullMQ would retry)
-    await expect(runAwsReviewJob(featureId, { attempt: 1, maxAttempts: 2 })).rejects.toThrow(
-      'persistent API error',
-    );
+    await expect(
+      runAwsReviewJob(featureId, { attempt: 1, maxAttempts: 2 }, undefined, 'test-charter.md'),
+    ).rejects.toThrow('persistent API error');
     // Attempt 2 (final): advances without findings
     await expect(
-      runAwsReviewJob(featureId, { attempt: 2, maxAttempts: 2 }),
+      runAwsReviewJob(featureId, { attempt: 2, maxAttempts: 2 }, undefined, 'test-charter.md'),
     ).resolves.toBeUndefined();
 
     const feature = await getPrisma().feature.findUniqueOrThrow({ where: { id: featureId } });
@@ -277,7 +277,7 @@ describe('aws review job retry policy', () => {
       },
     ]);
 
-    await runAwsReviewJob(featureId, { attempt: 1, maxAttempts: 2 });
+    await runAwsReviewJob(featureId, { attempt: 1, maxAttempts: 2 }, undefined, 'test-charter.md');
 
     const feature = await getPrisma().feature.findUniqueOrThrow({ where: { id: featureId } });
     expect(feature.status).toBe('AWAITING_APPROVAL');

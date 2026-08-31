@@ -2,6 +2,7 @@ import { getPrisma } from '../lib/prisma.js';
 import { appendEvent } from '../lib/events.js';
 import { applyTransition } from '../lib/orchestrator.js';
 import { runAwsReview } from '../agents/awsAgent.js';
+import { getAnyRepoEntry } from './devJob.js';
 import { gateOpenedCount } from '../lib/reviewCycle.js';
 import { persistFindings } from '../lib/persistFindings.js';
 import { usageEventPayload } from '../lib/usageEvent.js';
@@ -17,6 +18,7 @@ export async function runAwsReviewJob(
   featureId: string,
   { attempt, maxAttempts }: JobAttemptContext = { attempt: 1, maxAttempts: 1 },
   jobId?: string,
+  charterPath?: string,
 ): Promise<void> {
   const feature = await getPrisma().feature.findUniqueOrThrow({ where: { id: featureId } });
 
@@ -24,6 +26,37 @@ export async function runAwsReviewJob(
     // Already advanced or spec missing — nothing to do
     return;
   }
+
+  if (!charterPath) {
+    // Programming error: a job was dispatched without a charter path.
+    console.error(JSON.stringify({ event: 'aws_review_missing_charter', featureId }));
+    const specRev = await gateOpenedCount(featureId);
+    await getPrisma().$transaction(async (tx) => {
+      await appendEvent(tx, featureId, {
+        type: 'gate.opened',
+        gate: 'spec_approval',
+        summary: feature.proposedSpec!.slice(0, 200),
+        revision: specRev,
+      });
+      const next = await applyTransition(tx, featureId, 'AWS_REVIEW', 'AWS_DONE');
+      if (next) {
+        await appendEvent(tx, featureId, { type: 'phase.changed', from: 'AWS_REVIEW', to: next });
+      }
+    });
+    return;
+  }
+
+  // Resolve repo descriptions from the manifest for context (best-effort).
+  const repoContext = feature.repos
+    .map((id) => {
+      try {
+        return getAnyRepoEntry(id).description ?? id;
+      } catch {
+        return id;
+      }
+    })
+    .filter(Boolean)
+    .join('; ');
 
   const specRev = await gateOpenedCount(featureId);
 
@@ -58,6 +91,8 @@ export async function runAwsReviewJob(
       featureId,
       feature.name,
       feature.proposedSpec,
+      charterPath,
+      repoContext || undefined,
       async (usage) => {
         await appendEvent(getPrisma(), featureId, usageEventPayload(usage, 'aws', { jobId }));
       },

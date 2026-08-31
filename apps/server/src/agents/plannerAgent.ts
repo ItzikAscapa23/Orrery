@@ -18,6 +18,7 @@ const RepoEntrySchema = z.object({
   url: z.string(),
   default_branch: z.string(),
   description: z.string(),
+  review_charter: z.string().optional(),
 });
 
 const ManifestSchema = z.object({ repos: z.array(RepoEntrySchema) });

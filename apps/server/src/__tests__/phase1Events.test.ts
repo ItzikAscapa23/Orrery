@@ -111,7 +111,7 @@ describe('POST /features/:id/messages event emission', () => {
     expect((chatSpec?.payload as { text: string }).text).toBe('Got it.');
   });
 
-  it('transitions to AWS_REVIEW and enqueues aws-review job when spec is proposed', async () => {
+  it('transitions to AWAITING_APPROVAL and skips aws-review when no charter is configured', async () => {
     const specMarkdown = '## Overview\n' + 'x'.repeat(150);
     mockRunSpecAgentTurn.mockImplementation(
       async (
@@ -138,20 +138,20 @@ describe('POST /features/:id/messages event emission', () => {
     const events = await getEvents(feature.id);
     const types = events.map((e) => e.type);
 
-    // gate.opened is now emitted by the aws-review job, not the route
-    expect(types).not.toContain('gate.opened');
+    // No charter configured — spec approval gate is opened directly by the route
+    expect(types).toContain('gate.opened');
     expect(types).toContain('phase.changed');
     expect(types).toContain('agent.log');
 
-    // Machine advances to AWS_REVIEW synchronously; job emits gate.opened + AWAITING_APPROVAL
+    // Machine advances to AWAITING_APPROVAL directly (no AWS_REVIEW)
     const updated = await getPrisma().feature.findUnique({ where: { id: feature.id } });
-    expect(updated?.status).toBe('AWS_REVIEW');
+    expect(updated?.status).toBe('AWAITING_APPROVAL');
 
-    // Job was enqueued
-    expect(mockEnqueueJob).toHaveBeenCalledWith(feature.id, 'aws-review', undefined);
+    // aws-review job must NOT be enqueued
+    expect(mockEnqueueJob).not.toHaveBeenCalledWith(feature.id, 'aws-review', expect.anything());
   });
 
-  it('re-propose enqueues a second aws-review job', async () => {
+  it('re-propose skips aws-review when no charter is configured', async () => {
     const specMarkdown = '## Overview\n' + 'x'.repeat(150);
     mockRunSpecAgentTurn.mockImplementation(
       async (
@@ -189,6 +189,10 @@ describe('POST /features/:id/messages event emission', () => {
       payload: { text: 'revised' },
     });
 
-    expect(mockEnqueueJob).toHaveBeenCalledWith(feature.id, 'aws-review', undefined);
+    // Still no charter — aws-review not enqueued
+    expect(mockEnqueueJob).not.toHaveBeenCalledWith(feature.id, 'aws-review', expect.anything());
+    // Feature ends at AWAITING_APPROVAL again
+    const updated = await getPrisma().feature.findUnique({ where: { id: feature.id } });
+    expect(updated?.status).toBe('AWAITING_APPROVAL');
   });
 });

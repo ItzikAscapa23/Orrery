@@ -21,6 +21,7 @@ export interface AgentJobPayload {
   // task-specific fields
   taskId?: string; // required for 'server-dev' and 'client-dev'
   repoId?: string; // required for 'light-dev'
+  charterPath?: string; // required for 'aws-review' when a charter is in scope
 }
 
 // Pass the URL string directly — BullMQ creates its own ioredis instance,
@@ -46,7 +47,7 @@ export function getQueue(): Queue<AgentJobPayload> {
 export async function enqueueJob(
   featureId: string,
   task: AgentJobPayload['task'],
-  extra?: { taskId?: string; repoId?: string },
+  extra?: { taskId?: string; repoId?: string; charterPath?: string },
 ): Promise<string> {
   const opts =
     task === 'aws-review' || task === 'server-dev' || task === 'client-dev' || task === 'light-dev'

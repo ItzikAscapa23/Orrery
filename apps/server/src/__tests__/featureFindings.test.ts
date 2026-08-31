@@ -19,6 +19,10 @@ vi.mock('../lib/queue.js', () => ({
   getQueue: () => ({ getWorkers: vi.fn().mockResolvedValue([]) }),
   closeQueue: vi.fn(),
 }));
+// Simulate a repo with a charter so runSimulate uses the AWS-review path.
+vi.mock('../lib/charterResolver.js', () => ({
+  resolveCharterPath: vi.fn().mockReturnValue('docs/agents/aws-charter.md'),
+}));
 
 import { getPrisma, disconnectPrisma } from '../lib/prisma.js';
 import { createApp } from '../app.js';

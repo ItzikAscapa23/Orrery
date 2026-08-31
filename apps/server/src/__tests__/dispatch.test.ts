@@ -55,12 +55,6 @@ beforeEach(async () => {
 });
 
 describe('dispatchForState', () => {
-  it('enqueues aws-review on entering AWS_REVIEW', async () => {
-    await dispatchForState('feat-1', 'AWS_REVIEW', baseFeature);
-    expect(mockEnqueueJob).toHaveBeenCalledWith('feat-1', 'aws-review', undefined);
-    expect(mockEnqueueJob).toHaveBeenCalledTimes(1);
-  });
-
   it('enqueues plan on entering PLANNING (real run)', async () => {
     await dispatchForState('feat-2', 'PLANNING', { ...baseFeature, simulated_run: false });
     expect(mockEnqueueJob).toHaveBeenCalledWith('feat-2', 'plan', undefined);

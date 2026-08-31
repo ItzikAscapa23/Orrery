@@ -54,19 +54,31 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 20 — Violations cost what they should, and the UI says what is running
+- **Current phase:** 21 — Orrery is neutral; organisational policy is operator config
 - **State:** `complete`
-- **Last updated:** 2026-08-29
+- **Last updated:** 2026-08-31
 
 ---
 
 ## Current phase progress
 
-- [x] Task 1 — `78-exempt-null-redirect` — strip `2>/dev/null` before metachar check
-- [x] Task 2 — `79-one-violation-per-turn` — per-turn gate on `violationCount` in devAgent + testAgent
-- [x] Task 3 — `80-working-is-authoritative` — widen guard in `eventFold.ts` to protect `working` from any task-derived overwrite
-- [x] Task 4 — `81-derive-knows-awaiting-tests` — `deriveAgentStatuses` now knows `awaiting_tests`
-- [x] Task 5 — `awaiting_tests` consumer audit recorded in Decisions
+- [x] A1 — `review_charter` field on `RepoEntry` in `devJob.ts`
+- [x] A2 — `review_charter` field on `RepoEntrySchema` in `plannerAgent.ts`
+- [x] A3 — `review_charter` documented in `repo-manifest.example.yaml`
+- [x] A4 — `aws-charter.md` renamed to `aws-charter.example.md`; `.gitignore` updated
+- [x] B5 — `charterPath` in `AgentJobPayload` and `enqueueJob` (`queue.ts`)
+- [x] B6 — `charterPath` threaded in `dispatch.ts`; `AWS_REVIEW` case removed from `dispatchForState`
+- [x] C7 — `awsAgent.ts` hardcoded charter and org framing removed; new signature
+- [x] C8 — `awsReviewJob.ts` accepts `charterPath`; resolves repo context
+- [x] C9 — `agentWorker.ts` forwards `charterPath`
+- [x] D10 — `lib/charterResolver.ts` new file
+- [x] D11 — `lib/specSubmit.ts` new file (single skip-branch helper)
+- [x] E12 — `featureMessages.ts` charter-based branch
+- [x] E13 — `featureApprove.ts` charter-based branch
+- [x] E14 — `simulatorJob.ts` charter-aware + org-name fix
+- [x] F15 — `awsAgent.test.ts` updated
+- [x] F16 — `charterResolver.test.ts` new file
+- [x] F17 — `phase1Events.test.ts` / `dispatch.test.ts` / `reviewCycle.test.ts` / `featureFindings.test.ts` updated
 
 ---
 
@@ -74,9 +86,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1103 passed across 84 files** (+10 new tests), 2026-08-29 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-08-29 |
-| `npm run lint` | exit 0 — 0 problems, 2026-08-29 |
+| `npm test` (repo root) | passed — **1108 passed across 85 files** (+5 new tests), 2026-08-31 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-08-31 |
+| `npm run lint` | exit 0 — 0 problems, 2026-08-31 |
 
 ---
 
@@ -117,38 +129,25 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **Task-derived agent status applied after the event-sourced fold** — except for the
   `working → done` guard above. Task rows are authoritative for dev/test agents; review,
   spec, and planner remain event-sourced.
-- **`awaiting_tests` consumer audit (Phase 20)** — every site that reads `task.status`:
-  | File | Line(s) | Handles `awaiting_tests`? | Notes |
-  |---|---|---|---|
-  | `apps/web/src/lib/activityFold.ts` | 36, 202–209 | Yes | Type-union member; passes through as task status |
-  | `apps/web/src/components/ActivityTab.tsx` | 267–276, 317 | Yes | Purple color + raw string label |
-  | `apps/web/src/lib/eventFold.ts` (`deriveAgentStatuses`) | 57–64, 68–77 | Yes (fixed Phase 20) | Server/client: `awaiting_tests` → `done`; test block: any `awaiting_tests` → `working` |
-  | `apps/server/src/jobs/devJob.ts` | 371 | No (intentional gap) | Early-exit guard checks `completed\|parked` only; no re-enqueue path dispatches `awaiting_tests` tasks |
-  | `apps/server/src/jobs/devJob.ts` | 870–889, 1005–1011 | Yes (writes it) | Two write sites: noop-success and post-commit path |
-  | `apps/server/src/lib/dispatch.ts` | 125–127 | No (intentional) | Not in `completedIds` — dependent tasks stay blocked until `completed` |
-  | `apps/server/src/lib/dispatch.ts` | 169–175 | Yes | Suppresses "no tasks" warning — treated as terminal-enough |
-  | `apps/server/src/routes/featureSpendGate.ts` | 29 | No (out of scope) | Only accepts `parked`; `awaiting_tests` tasks are not spend-gate candidates |
-  | `apps/server/src/routes/featureTestPlanGate.ts` | 156, 205 | No (out of scope) | Both override and retry routes require `parked` |
-- **`path: light` repos never reach `detectJsonCommand`** — light-path repos dispatch
-  via `LIGHT_IMPLEMENTING` → `lightDevJob.ts`, which is a completely separate code path
-  that does not run a test suite at all. `bff-configurations` and `swaggers` have no
-  `probe_command` and need none.
 - **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — the
-  CLAUDE.md prose-inference fallback (lower.includes('jest')) is removed. Any active
-  full-path repo without `probe_command` will fail at the first `detectJsonCommand` call
-  with a clear error. Closes C-3.
-- **`RepoEntry` default audit (Phase 19)** — fields with code-side defaults:
-  | Field | Default | Where |
+  CLAUDE.md prose-inference fallback is removed. Any active full-path repo without
+  `probe_command` will fail at the first `detectJsonCommand` call with a clear error.
+- **Charter skip uses `SUBMIT_SPEC_LIGHT` regardless of `feature_path` (Phase 21)** —
+  `SUBMIT_SPEC_LIGHT` is the FSM edge from `DRAFTING_SPEC → AWAITING_APPROVAL`. For
+  features with no `review_charter`, it is the correct skip mechanism even for FULL-path
+  features. The `APPROVE` vs `APPROVE_LIGHT` split (which drops the planning/testing
+  states) still depends on `feature_path`, not the charter decision.
+- **`dispatchForState('AWS_REVIEW')` removed (Phase 21)** — no call site uses it
+  anymore. Route handlers that go through the AWS review path call
+  `dispatchJob(featureId, 'aws-review', { charterPath })` directly so the charterPath
+  travels with the payload. The `AWS_REVIEW` dispatch case in `dispatchForState` has
+  been deleted.
+- **Organisation-specific reference audit (Phase 21):**
+  | Location | Content | Disposition |
   |---|---|---|
-  | `path` | `'full'` (absent = full pipeline) | `devJob.ts:103` comment |
-  | `exec_timeout_ms` | `120_000` ms | `devJob.ts:478` |
-  | `install_timeout_ms` | `300_000` ms | `devJob.ts:477` |
-  | `max_turns` | `40` (mirrors `devAgent.ts MAX_TURNS`) | `devJob.ts:479–482` |
-  | `probe_command` | none — **throws if absent** (after Phase 19) | `testJob.ts:365` |
-  | `binary_sentinel` | none — skip check if absent | `devJob.ts` sentinel guard |
-  | `bootstrap` | none — npm ci path if absent | `devJob.ts:138` |
-  All other fields (`id`, `side`, `active`, `url`, `default_branch`, `description`) are
-  declared values with no inferred fallback.
+  | `agents/awsAgent.ts:21` (old) | `"reviewing a feature specification for a bank"` | Removed; domain framing now lives in the charter file |
+  | `jobs/simulatorJob.ts:159` (old) | `"bank IAM policy"` | Changed to `"platform IAM policy"` |
+  No other org-specific strings found in `apps/server/src` production code. Test scaffolding strings are out of scope.
 
 ---
 
@@ -156,6 +155,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 - `apps/web/.env.local` setting `VITE_PRODUCT_NAME=PepperOrchestrator` is a
   deliberate local brand override. The fallback `'Orrery'` stays.
+- When multiple repos in a feature declare different `review_charter` paths,
+  first-charter-found semantics applies (first repo in `feature.repos` wins). Documented
+  in `charterResolver.ts` JSDoc. No real operator has hit this yet.
 
 ---
 
@@ -192,6 +194,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 18 | Close the backlog honestly | `78ff9ee` | 2026-08-29 |
 | 19 | Declared config replaces the last inference | `716a783` | 2026-08-29 |
 | 20 | Violations cost what they should, and the UI says what is running | `8120094` | 2026-08-29 |
+| 21 | Orrery is neutral; organisational policy is operator config | pending | 2026-08-31 |
 
 ---
 
@@ -204,3 +207,5 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   is running.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
 - A restart mid-dispatch produces exactly one container.
+- A demo feature with repos that declare no `review_charter` completes the full
+  pipeline without entering `AWS_REVIEW` state and without any bank-policy finding.

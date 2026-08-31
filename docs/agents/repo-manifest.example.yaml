@@ -33,6 +33,9 @@ repos:
     binary_sentinel: "node_modules/@rollup/rollup-linux-arm64-musl/rollup.linux-arm64-musl.node"
     description: >
       Primary server-side repo. New/changed endpoints land here.
+    # review_charter: docs/agents/aws-charter.md
+    #   Path to operator-supplied AWS review charter. When set, AWS review runs for
+    #   features that touch this repo. Absent (or not set) means skip AWS review.
 
   # Uncomment and fill in additional repos as needed.
   # - id: my-api

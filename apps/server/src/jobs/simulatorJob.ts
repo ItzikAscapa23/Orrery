@@ -5,6 +5,7 @@ import { dispatchJob } from '../lib/dispatch.js';
 import { commitSpecDraft } from '../lib/artifacts.js';
 import { gateOpenedCount } from '../lib/reviewCycle.js';
 import { persistFindings } from '../lib/persistFindings.js';
+import { resolveCharterPath } from '../lib/charterResolver.js';
 import type { FeatureStatus } from '@prisma/client';
 import { simulatedUsagePayload } from '../lib/usageEvent.js';
 
@@ -138,90 +139,10 @@ export async function runSimulate(featureId: string): Promise<void> {
       }),
     );
 
-    // Simulate SUBMIT_SPEC → AWS_REVIEW transition
     const specSummary =
       'Simulated spec: feature fully defined with user stories and acceptance criteria';
-    await getPrisma().$transaction(async (tx) => {
-      await tx.feature.update({ where: { id: featureId }, data: { proposedSpec: specSummary } });
-      const afterSubmit = await applyTransition(tx, featureId, status, 'SUBMIT_SPEC');
-      if (afterSubmit) {
-        await appendEvent(tx, featureId, { type: 'phase.changed', from: status, to: afterSubmit });
-        status = afterSubmit;
-      }
-    });
-
-    // Simulate AWS review with a mock warning finding
     const specRev = await gateOpenedCount(featureId);
-    const mockFinding = {
-      id: 'sim-f1',
-      severity: 'warning' as const,
-      section: 'API endpoints',
-      issue: 'Simulated: verify endpoint authentication follows bank IAM policy.',
-      suggested_text: 'All API endpoints must use Cognito JWT authorisation via API Gateway.',
-    };
-
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.status',
-      agent: 'aws',
-      status: 'working',
-    });
-    await delay(jitter());
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.log',
-      agent: 'aws',
-      severity: 'action',
-      text: '▸ reviewing spec against charter',
-    });
-    await delay(jitter());
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.log',
-      agent: 'aws',
-      severity: 'ok',
-      text: '✓ review complete — 1 finding(s) (0 blockers, 1 warnings)',
-    });
-
-    // Persist mock finding row (ignore duplicate on re-run)
-    await getPrisma().finding.upsert({
-      where: {
-        featureId_specRev_id: {
-          featureId,
-          specRev,
-          id: mockFinding.id,
-        },
-      },
-      create: {
-        id: mockFinding.id,
-        featureId,
-        specRev,
-        severity: mockFinding.severity,
-        section: mockFinding.section,
-        issue: mockFinding.issue,
-        suggestedText: mockFinding.suggested_text,
-      },
-      update: {},
-    });
-
-    await appendEvent(
-      getPrisma(),
-      featureId,
-      simulatedUsagePayload(
-        'aws',
-        'claude-sonnet-5',
-        600 + Math.floor(Math.random() * 300),
-        150 + Math.floor(Math.random() * 100),
-      ),
-    );
-    await appendEvent(getPrisma(), featureId, {
-      type: 'review.findings',
-      agent: 'aws',
-      spec_rev: specRev,
-      findings: [mockFinding],
-    });
-    await appendEvent(getPrisma(), featureId, {
-      type: 'agent.status',
-      agent: 'aws',
-      status: 'done',
-    });
+    const charterPath = resolveCharterPath(feature.repos);
 
     // Commit a placeholder spec.md so the artifact viewer works for simulated
     // features. Guard: if ARTIFACTS_REPO_PATH is not set, skip silently.
@@ -251,28 +172,135 @@ export async function runSimulate(featureId: string): Promise<void> {
       }
     }
 
-    const next = await getPrisma().$transaction(async (tx) => {
-      await appendEvent(tx, featureId, {
-        type: 'gate.opened',
-        gate: 'spec_approval',
-        summary: specSummary.slice(0, 200),
-        revision: specRev,
-        counts: { blockers: 0, warnings: 1, suggestions: 0 },
-        spec_commit: simSpecCommit,
+    if (charterPath) {
+      // Charter present — simulate SUBMIT_SPEC → AWS_REVIEW
+      await getPrisma().$transaction(async (tx) => {
+        await tx.feature.update({ where: { id: featureId }, data: { proposedSpec: specSummary } });
+        const afterSubmit = await applyTransition(tx, featureId, status, 'SUBMIT_SPEC');
+        if (afterSubmit) {
+          await appendEvent(tx, featureId, {
+            type: 'phase.changed',
+            from: status,
+            to: afterSubmit,
+          });
+          status = afterSubmit;
+        }
       });
-      const afterDone = await applyTransition(tx, featureId, 'AWS_REVIEW', 'AWS_DONE');
-      if (afterDone) {
-        await appendEvent(tx, featureId, {
-          type: 'phase.changed',
-          from: 'AWS_REVIEW',
-          to: afterDone,
-        });
-        return afterDone;
-      }
-      return null;
-    });
 
-    if (next) status = next;
+      // Simulate AWS review with a mock warning finding
+      const mockFinding = {
+        id: 'sim-f1',
+        severity: 'warning' as const,
+        section: 'API endpoints',
+        issue: 'Simulated: verify endpoint authentication follows platform IAM policy.',
+        suggested_text: 'All API endpoints must use Cognito JWT authorisation via API Gateway.',
+      };
+
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.status',
+        agent: 'aws',
+        status: 'working',
+      });
+      await delay(jitter());
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'aws',
+        severity: 'action',
+        text: '▸ reviewing spec against charter',
+      });
+      await delay(jitter());
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'aws',
+        severity: 'ok',
+        text: '✓ review complete — 1 finding(s) (0 blockers, 1 warnings)',
+      });
+
+      // Persist mock finding row (ignore duplicate on re-run)
+      await getPrisma().finding.upsert({
+        where: { featureId_specRev_id: { featureId, specRev, id: mockFinding.id } },
+        create: {
+          id: mockFinding.id,
+          featureId,
+          specRev,
+          severity: mockFinding.severity,
+          section: mockFinding.section,
+          issue: mockFinding.issue,
+          suggestedText: mockFinding.suggested_text,
+        },
+        update: {},
+      });
+
+      await appendEvent(
+        getPrisma(),
+        featureId,
+        simulatedUsagePayload(
+          'aws',
+          'claude-sonnet-5',
+          600 + Math.floor(Math.random() * 300),
+          150 + Math.floor(Math.random() * 100),
+        ),
+      );
+      await appendEvent(getPrisma(), featureId, {
+        type: 'review.findings',
+        agent: 'aws',
+        spec_rev: specRev,
+        findings: [mockFinding],
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.status',
+        agent: 'aws',
+        status: 'done',
+      });
+
+      const next = await getPrisma().$transaction(async (tx) => {
+        await appendEvent(tx, featureId, {
+          type: 'gate.opened',
+          gate: 'spec_approval',
+          summary: specSummary.slice(0, 200),
+          revision: specRev,
+          counts: { blockers: 0, warnings: 1, suggestions: 0 },
+          spec_commit: simSpecCommit,
+        });
+        const afterDone = await applyTransition(tx, featureId, 'AWS_REVIEW', 'AWS_DONE');
+        if (afterDone) {
+          await appendEvent(tx, featureId, {
+            type: 'phase.changed',
+            from: 'AWS_REVIEW',
+            to: afterDone,
+          });
+          return afterDone;
+        }
+        return null;
+      });
+
+      if (next) status = next;
+    } else {
+      // No charter — skip AWS review, go directly to AWAITING_APPROVAL
+      const next = await getPrisma().$transaction(async (tx) => {
+        await tx.feature.update({ where: { id: featureId }, data: { proposedSpec: specSummary } });
+        const afterSubmit = await applyTransition(tx, featureId, status, 'SUBMIT_SPEC_LIGHT');
+        if (afterSubmit) {
+          await appendEvent(tx, featureId, {
+            type: 'phase.changed',
+            from: status,
+            to: afterSubmit,
+          });
+          await appendEvent(tx, featureId, {
+            type: 'gate.opened',
+            gate: 'spec_approval',
+            summary: specSummary.slice(0, 200),
+            revision: specRev,
+            counts: { blockers: 0, warnings: 0, suggestions: 0 },
+            spec_commit: simSpecCommit,
+          });
+          return afterSubmit;
+        }
+        return null;
+      });
+
+      if (next) status = next;
+    }
   }
 
   if (status === 'AWAITING_APPROVAL') {
