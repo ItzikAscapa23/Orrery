@@ -556,3 +556,60 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A feature run displays the correct agent as working throughout
+---
+## Phase 21 — Orrery is neutral; organisational policy is operator config
+**Goal:** No target's policy is compiled into the orchestrator.
+**PRD refs:** §3 R1, §2 C6
+**Tasks:**
+- [ ] `82-charter-is-config` — R-32. `awsAgent.ts:21` frames every review as
+      "reviewing a feature specification for a bank" and `buildSystemPrompt`
+      loads `docs/agents/aws-charter.md` unconditionally — 78 lines including a
+      literal `## Bank-specific concerns` section. `runAwsReview(featureId,
+      featureName, specMarkdown, onUsage)` receives no repo context, so the
+      agent cannot know what it is reviewing. Evidence: a demo repo described in
+      the manifest as "Express 5 + TypeScript API, ESM. No network calls at
+      request time" was told it violates bank CloudWatch logging policy for a
+      Lambda it does not have. Move the charter to per-repo operator config:
+      `RepoEntry` gains an optional `review_charter` path; the domain framing
+      comes from the charter, not a string literal
+- [ ] Rename `docs/agents/aws-charter.md` to `.example.md` and commit it as the
+      template, matching `repo-manifest.example.yaml`. The Leumi charter becomes
+      gitignored operator config
+- [ ] AWS review runs only when a charter applies. Reuse the existing
+      `SUBMIT_SPEC_LIGHT` → `AWAITING_APPROVAL` transition
+      (`orchestrator.ts:38`); no new states. The decision is feature-level,
+      resolved at spec submission from the charters of the repos in scope
+- [ ] **The AWS-review decision must be independent of `feature_path`.** A FULL
+      feature with no charter skips AWS review and keeps PLANNING,
+      AWAITING_PLAN_APPROVAL, PLANNING_TESTS, AWAITING_TEST_PLAN_APPROVAL and
+      TESTING. Setting `feature_path = 'LIGHT'` to achieve the skip is wrong:
+      `APPROVE_LIGHT` (`orchestrator.ts:43`) drops four states and two human
+      gates, `REVIEW_PASS_LIGHT` drops TESTING, and `specAgent.ts:95` switches
+      to config-change framing. Reuse the transition, not the path flag
+- [ ] Extract the skip branch into one function. The body currently lives twice
+      — `featureMessages.ts:182-215` and `featureApprove.ts:213` — and carries a
+      side effect the full path does not: it opens the `spec_approval` gate
+      itself, because `awsReviewJob` normally does. A third copy is not
+      acceptable
+- [ ] `runAwsReview` receives the repo context so the review knows the
+      deployment model. Pass the manifest `description` at minimum
+- [ ] Audit — list, not summary — every prompt, charter, or default in
+      `apps/server/src` that names a specific organisation, deployment model, or
+      target repo. State for each whether it belongs in operator config
+**Definition of Done:**
+- A FULL feature whose repos declare no `review_charter` reaches
+  AWAITING_APPROVAL with the spec gate open, no AWS review job dispatched, and
+  planning, both plan gates, and TESTING still in its path
+- A feature whose repos declare a charter is reviewed against that charter
+- No organisation is named in `apps/server/src`
+- The skip branch exists once
+- Organisation-specific reference audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 84 files / 1103 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A demo feature completes the full pipeline with no AWS review and no
+  bank-policy finding
