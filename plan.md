@@ -613,3 +613,47 @@ npm run lint      # must stay clean (exit 0)
 **Entry conditions for next phase:**
 - A demo feature completes the full pipeline with no AWS review and no
   bank-policy finding
+---
+## Phase 22 — Recovery is one click, and failures say why
+**Goal:** A parked feature is recoverable from the UI, and a probe failure names its cause.
+**PRD refs:** §3 R3
+**Tasks:**
+- [ ] `83-redispatch-button` — add a REDISPATCH control to the header, beside
+      the existing buttons. Calls the existing `POST /features/:id/redispatch`
+      (`featureRedispatch.ts:25`). Enabled only when at least one task on the
+      feature has `status: 'parked'`; disabled otherwise, so it cannot be used
+      to double-dispatch a healthy run. Parked state comes from task rows, not
+      from an event — the same rule Phase 12 established for agent status
+- [ ] `84-probe-stderr-surfaced` — R-36. A failed probe reports
+      `toolchain probe failed: test command exited 1 (report 0 bytes, no output)`
+      while stderr held `CACError: Unknown option \`--poolOptions\``. The cause
+      was in hand and discarded. Include the first line of probe stderr in the
+      failure event, as R-14 did for tool results. Evidence: feature `07f7ad96`
+      parked five times across two days before the message was read directly
+      from the event payload
+- [ ] `85-validate-probe-command` — R-37. `probe_command` is unvalidated
+      operator config; a wrong-runner flag surfaces only as a parked task
+      mid-run. At startup, for each `active: true` full-path repo, verify the
+      declared command's runner matches what `detectJsonCommand` will build.
+      Fail loudly at boot, not per feature
+- [ ] `86-charter-must-resolve` — R-35. `charterResolver.ts` catches a read
+      failure and returns `undefined`, so a missing or misnamed charter file is
+      indistinguishable from "no charter declared". A declared `review_charter`
+      that does not resolve must throw. Evidence: the Phase 21 rename removed
+      `aws-charter.md` entirely and `bff` would have silently skipped AWS review
+- [ ] Audit — list, not summary — every startup-time read of operator config
+      (manifest, charters, env) and state for each whether a missing or
+      malformed value fails loudly or falls through to a default
+**Definition of Done:**
+- REDISPATCH is visible in the header, enabled only when a task is parked
+- A probe failure event carries the first line of the command's stderr
+- A repo whose `probe_command` names a runner the repo does not use fails at
+  server start with the repo id and the offending command
+- A declared `review_charter` pointing at a missing file throws
+- Config-resolution audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 85 files / 1108 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
