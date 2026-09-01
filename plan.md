@@ -657,3 +657,82 @@ npm test          # baseline 85 files / 1108 tests — must not decrease
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 23 — Config validation that fits reality
+**Goal:** Validation rejects what is broken, not what is merely unfamiliar.
+**PRD refs:** §2 C6, §3 R1
+**Tasks:**
+- [ ] `87-validate-via-consumer` — R-38. `validateProbeCommands`
+      (`validateManifest.ts:54`) requires a literal `npx jest` or `npx vitest`
+      and rejected `npm test -- --maxWorkers=2`, the form `bff` had been running
+      successfully all week. Validate that `detectJsonCommand` can build a
+      reporter command from the declared probe — the actual downstream
+      consumer — rather than matching a string pattern
+- [ ] `88-config-error-is-not-a-crash` — the same failure surfaced as
+      `{"event":"uncaught_exception", ... "origin":"unhandledRejection"}` and took
+      the server down with a stack trace. A config validation failure must print
+      the repo id, the offending value and the expectation, then exit
+      deliberately
+- [ ] `89-charter-example-neutral` — R-33. `aws-charter.example.md` is the
+      committed template and still contains `## Bank-specific concerns` (line 28),
+      CloudWatch logging policy (52) and bank-specific reasoning (66). Phase 21
+      renamed the file without neutralising it. Anyone adopting Orrery copies
+      bank policy as their starting point
+- [ ] `90-one-charter-mechanism` — R-34. `review-charter.md:69` gates its
+      concerns on `deploy: aws` in the manifest — a field that does not exist.
+      Phase 21 built `review_charter`. One rule, two mechanisms, one of them
+      dead. Reconcile, and confirm whether `test-charter.md` has the same shape
+- [ ] Audit — list, not summary — every charter and prompt file under
+      `docs/agents/`, which agent loads it, and whether it is operator config or
+      committed template
+**Definition of Done:**
+- `npm test -- <flags>` passes validation; a genuinely unusable probe does not
+- A config error exits with a readable message and no stack trace
+- No organisation is named in any committed `.example` file
+- `deploy: aws` appears nowhere, or exists as a real field
+- Charter inventory recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 86 files / 1124 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+---
+## Phase 24 — The test agent stops paying twice
+**Goal:** A test task writes its file once and keeps only what it meant to keep.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] Report first: measure rewrite cost. On feature `f78613cd` the test agent
+      ran 45 turns for $1.75, writing `orderCardClubsListStrongId.test.js` at
+      turns 21, 32, 34 and 37 — four versions of one file. Quantify how much of
+      test-agent output tokens across recent features is rewriting rather than
+      first authorship. Do not fix in this task
+- [ ] `91-scratch-files-not-authored` — R-31. Agents create debug files
+      (`debug-clubs.test.js` turn 38, `orderCardClubsListDebug.test.js` turn 25)
+      that get committed and counted. One run reported "3 file(s)" of acceptance
+      tests including scratch. Either exclude them from the authored set or
+      prevent their commit
+- [ ] Act on the rewrite measurement — the fix depends on what it shows, so the
+      brief for it is written after the report lands
+- [ ] `92-vendored-node-modules` — the dev-agent prompt
+      (`devAgent.ts:314`) forbids reading node_modules, but `bff`'s Lambda layers
+      live at `graphql/layers/*/nodejs/node_modules/` and are vendored source
+      that must be edited. The agent worked against the instruction for ten
+      turns. State the exception in the target repo's `CLAUDE.md`, which reaches
+      every dev prompt
+- [ ] `93-binary-sentinel-is-real` — the demo repos declare
+      `binary_sentinel: node_modules/.bin/vitest`, a symlink present after any
+      install regardless of platform. It cannot detect a wrong-ABI tree, which
+      is the failure it exists to catch. The real artifact for these repos is the
+      `@rolldown/binding-*` native module
+**Definition of Done:**
+- Rewrite cost measured and recorded in HANDOVER.md with a figure
+- A debug or scratch file is never counted as an authored acceptance test
+- `binary_sentinel` for each active repo names an ABI-specific artifact
+- The vendored-layer exception is stated in `bff`'s `CLAUDE.md`
+**Verification:**
+```bash
+npm test
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
