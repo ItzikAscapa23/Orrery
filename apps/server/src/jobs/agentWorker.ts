@@ -15,6 +15,7 @@ import { runTestingStubJob } from './testingStubJob.js';
 import { runTestPlannerJob } from './testPlannerJob.js';
 import { runTaskTestJob } from './taskTestJob.js';
 import { runLightDevJob } from './lightDevJob.js';
+import { validateProbeCommands } from '../lib/validateManifest.js';
 
 /**
  * The single worker for the "agent-jobs" queue, dispatching by task type.
@@ -36,6 +37,7 @@ export function startAgentWorker(): Worker<AgentJobPayload> {
 
   void sweepOrphanContainers(); // remove leftover containers from a prior crash
   void resumeOrphanStalledFeatures(); // resume IMPLEMENTING features stalled by orphan-parks
+  validateProbeCommands(); // throws at boot if any active full-path repo has an invalid probe_command
 
   console.error(
     JSON.stringify({

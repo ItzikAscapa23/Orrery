@@ -54,31 +54,19 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 21 — Orrery is neutral; organisational policy is operator config
+- **Current phase:** 22 — Recovery is one click, and failures say why
 - **State:** `complete`
-- **Last updated:** 2026-08-31
+- **Last updated:** 2026-09-01
 
 ---
 
 ## Current phase progress
 
-- [x] A1 — `review_charter` field on `RepoEntry` in `devJob.ts`
-- [x] A2 — `review_charter` field on `RepoEntrySchema` in `plannerAgent.ts`
-- [x] A3 — `review_charter` documented in `repo-manifest.example.yaml`
-- [x] A4 — `aws-charter.md` renamed to `aws-charter.example.md`; `.gitignore` updated
-- [x] B5 — `charterPath` in `AgentJobPayload` and `enqueueJob` (`queue.ts`)
-- [x] B6 — `charterPath` threaded in `dispatch.ts`; `AWS_REVIEW` case removed from `dispatchForState`
-- [x] C7 — `awsAgent.ts` hardcoded charter and org framing removed; new signature
-- [x] C8 — `awsReviewJob.ts` accepts `charterPath`; resolves repo context
-- [x] C9 — `agentWorker.ts` forwards `charterPath`
-- [x] D10 — `lib/charterResolver.ts` new file
-- [x] D11 — `lib/specSubmit.ts` new file (single skip-branch helper)
-- [x] E12 — `featureMessages.ts` charter-based branch
-- [x] E13 — `featureApprove.ts` charter-based branch
-- [x] E14 — `simulatorJob.ts` charter-aware + org-name fix
-- [x] F15 — `awsAgent.test.ts` updated
-- [x] F16 — `charterResolver.test.ts` new file
-- [x] F17 — `phase1Events.test.ts` / `dispatch.test.ts` / `reviewCycle.test.ts` / `featureFindings.test.ts` updated
+- [x] 86 — `charterResolver.ts` throws when declared charter file is unreadable
+- [x] 84 — probe stderr first line included in `task.failed.reason`
+- [x] 85 — `validateManifest.ts` + startup hook in `agentWorker.ts`
+- [x] 83 — `RedispatchCard` component + prop threading in `App.tsx` / `MissionControl.tsx`
+- [x] Audit — startup config reads documented in HANDOVER.md (see Decisions below)
 
 ---
 
@@ -86,13 +74,26 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1108 passed across 85 files** (+5 new tests), 2026-08-31 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-08-31 |
-| `npm run lint` | exit 0 — 0 problems, 2026-08-31 |
+| `npm test` (repo root) | passed — **1124 passed across 86 files** (+16 new tests), 2026-09-01 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-01 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-01 |
 
 ---
 
 ## Decisions
+
+- **Startup config reads audit (Phase 22):**
+
+  | Config source | Read location | Missing/malformed → |
+  |---|---|---|
+  | `repo-manifest.yaml` | `validateProbeCommands` (boot, worker) | absent: silent return; invalid YAML: `yaml.load` throws |
+  | `repo-manifest.yaml` | `resolveCharterPath` (per-feature, aws-review) | absent: `undefined`; declared charter file missing: **throws** (Phase 22) |
+  | `repo-manifest.yaml` | `getRepoEntry` / `getAnyRepoEntry` (per-job) | absent or repo not found: throws |
+  | `probe_command` field | `validateProbeCommands` (boot) | missing or ambiguous runner: **throws at boot** (Phase 22) |
+  | `probe_command` field | `detectJsonCommand` (per-task, runtime) | absent: throws |
+  | Env vars (`.env`) | `lib/env.ts` via `--env-file` at process start | absent required var: Zod parse throws at boot |
+  | `BEDROCK_MODEL_ID` / `AWS_PROFILE` | Bedrock probe (boot) | absent/expired: probe fails with actionable message |
+  | Charter file (operator-written) | `awsReviewJob.ts` → `readFileSync` | missing: `resolveCharterPath` now throws before reaching this point |
 
 - **O-15 closed — `reviewAgent` 29k input / 14 output tokens is correct
   behavior.** `createAdoPrJob.ts` has zero Anthropic calls; the PR body is pure
@@ -195,6 +196,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 19 | Declared config replaces the last inference | `716a783` | 2026-08-29 |
 | 20 | Violations cost what they should, and the UI says what is running | `8120094` | 2026-08-29 |
 | 21 | Orrery is neutral; organisational policy is operator config | pending | 2026-08-31 |
+| 22 | Recovery is one click, and failures say why | pending | 2026-09-01 |
 
 ---
 

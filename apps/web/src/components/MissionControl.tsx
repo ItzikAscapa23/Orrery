@@ -19,6 +19,7 @@ import { TestPlanGate } from './TestPlanGate.js';
 import { TaskAcceptanceGate } from './TaskAcceptanceGate.js';
 import { AmendmentGate } from './AmendmentGate.js';
 import { SpendGateCard } from './SpendGateCard.js';
+import { RedispatchCard } from './RedispatchCard.js';
 import { resolveVariant } from './TestReportCard.js';
 import type { ArtifactKind } from '@orrery/shared';
 
@@ -113,6 +114,7 @@ interface MissionControlProps {
   prLinks: PrLink[];
   testReport: TestReportState | null;
   sseError: string | null;
+  showRedispatch: boolean;
   onGateAction: () => void;
   onViewArtifact?: (kind: ArtifactKind) => void;
   onViewTestReport?: () => void;
@@ -131,6 +133,7 @@ export function MissionControl({
   prLinks,
   testReport,
   sseError,
+  showRedispatch,
   onGateAction,
   onViewArtifact,
   onViewTestReport,
@@ -381,6 +384,7 @@ export function MissionControl({
         {spendGates.map((sg) => (
           <SpendGateCard key={sg.taskId} featureId={featureId} gate={sg} onAction={onGateAction} />
         ))}
+        {showRedispatch && <RedispatchCard featureId={featureId} onAction={onGateAction} />}
 
         {/* Test report summary chip — links to the TEST REPORT tab in the centre pane */}
         {testReport && <TestReportSummaryChip testReport={testReport} onView={onViewTestReport} />}

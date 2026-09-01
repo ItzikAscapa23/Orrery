@@ -33,7 +33,16 @@ export function resolveCharterPath(
   if (!manifest?.repos) return undefined;
   for (const id of repoIds) {
     const entry = manifest.repos.find((r) => r.id === id);
-    if (entry?.review_charter) return entry.review_charter;
+    if (!entry?.review_charter) continue;
+    const charterPath = entry.review_charter;
+    try {
+      fs.readFileSync(charterPath, 'utf-8');
+    } catch {
+      throw new Error(
+        `Repo '${id}' declares review_charter '${charterPath}' but the file could not be read`,
+      );
+    }
+    return charterPath;
   }
   return undefined;
 }

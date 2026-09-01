@@ -16,6 +16,7 @@ const baseProps = {
   taskAcceptanceGateOpen: null,
   amendmentGateOpen: null,
   spendGates: [],
+  showRedispatch: false,
   findings: [],
   prLinks: [],
   testReport: null,
@@ -125,5 +126,30 @@ describe('MissionControl — attachment kind selector', () => {
       expect(btn).not.toHaveClass('selected');
       expect(btn).not.toHaveClass('active');
     });
+  });
+});
+
+describe('MissionControl — RedispatchCard', () => {
+  it('shows REDISPATCH button when showRedispatch is true', () => {
+    render(<MissionControl {...baseProps} showRedispatch={true} />);
+    expect(screen.getByRole('button', { name: /redispatch/i })).toBeInTheDocument();
+  });
+
+  it('does not show REDISPATCH button when showRedispatch is false', () => {
+    render(<MissionControl {...baseProps} showRedispatch={false} />);
+    expect(screen.queryByRole('button', { name: /redispatch/i })).not.toBeInTheDocument();
+  });
+
+  it('calls redispatch endpoint and fires onGateAction on success', async () => {
+    const onGateAction = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+    render(<MissionControl {...baseProps} showRedispatch={true} onGateAction={onGateAction} />);
+    fireEvent.click(screen.getByRole('button', { name: /redispatch/i }));
+    await screen.findByRole('button', { name: /redispatch/i });
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/features/f1/redispatch',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(onGateAction).toHaveBeenCalledTimes(1);
   });
 });

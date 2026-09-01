@@ -45,6 +45,9 @@ export function App() {
     () => (events.length > 0 ? foldEvents(events, tasks) : EMPTY_STATE),
     [events, tasks],
   );
+  const showRedispatch =
+    tasks.some((t) => t.status === 'parked') &&
+    (runState.currentPhase === 'IMPLEMENTING' || runState.currentPhase === 'LIGHT_IMPLEMENTING');
   const usageEventCount = useMemo(
     () => events.filter((e) => e.payload.type === 'usage.recorded').length,
     [events],
@@ -172,6 +175,7 @@ export function App() {
             taskAcceptanceGateOpen={runState.taskAcceptanceGateOpen}
             amendmentGateOpen={runState.amendmentGateOpen}
             spendGates={runState.spendGates}
+            showRedispatch={showRedispatch}
             findings={runState.findings}
             prLinks={runState.prLinks}
             testReport={runState.testReport}

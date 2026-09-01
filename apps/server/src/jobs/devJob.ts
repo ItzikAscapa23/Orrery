@@ -635,7 +635,8 @@ export async function runDevJob(
         severity: 'muted',
         text: `✗ toolchain probe failed — ${reason.slice(0, 200)}`,
       });
-      throw new Error(reason);
+      const stderrLine = probeExecResult.stderr?.split('\n')[0]?.trim() ?? '';
+      throw new Error(stderrLine ? `${reason}: ${stderrLine}` : reason);
     }
 
     // Baseline: names of tests already failing before the agent touched anything (R9).
