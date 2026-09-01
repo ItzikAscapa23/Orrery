@@ -62,15 +62,3 @@ A finding that cannot name both pieces of evidence must not be emitted.
 If a diff section is marked as truncated, emit no findings for that repo.
 Do not fabricate findings from incomplete context.
 
-## Scope rules
-
-**AWS-charter scope on non-AWS repos.**
-Apply AWS-deployment mandates (encryption-at-rest, data-residency, IAM wildcard,
-CloudWatch audit) only to repos whose manifest entry carries `deploy: aws`.
-For repos without `deploy: aws`, skip CONFORMANCE checks derived from
-`docs/agents/aws-charter.md` entirely — they are not AWS-deployed and those
-mandates do not apply.
-
-Implementation: inject a `## Deployment context:` header into the review
-prompt (alongside the diff) listing each repo's `deploy` field from the
-manifest. This rule is then machine-enforceable.

@@ -25,16 +25,19 @@ Services such as Amazon DynamoDB, Amazon Kinesis, Amazon ElastiCache, and
 AWS Fargate/ECS are **not yet approved**. A spec that implies these must receive
 at least a warning finding noting they require architecture board sign-off.
 
-## Bank-specific concerns
+## Compliance and security concerns
+
+<!-- Customise this section for your organisation's requirements.
+     The examples below are illustrative — replace severity labels, regions,
+     and specific service mandates with your own policies. -->
 
 **Data residency (BLOCKER if violated)**
-All data must remain in eu-west-1. Flag any architecture decision that would
-place customer data in another region or in a globally-replicated service
-without explicit eu-west-1 pinning.
+All data must remain in the approved region(s). Flag any architecture decision
+that would place customer data in an unapproved region or in a globally-replicated
+service without explicit region pinning.
 
 **Encryption at rest (BLOCKER if missing)**
-S3 buckets must use SSE-KMS with a customer-managed key. RDS instances must
-have encryption at rest enabled. Flag absence as a blocker.
+Storage services must have encryption at rest enabled. Flag absence as a blocker.
 
 **Encryption in transit (BLOCKER if missing)**
 All service-to-service and client-to-service communication must use TLS 1.2+.
@@ -49,22 +52,22 @@ S3 buckets must never have public access enabled. CloudFront with OAI/OAC is
 the approved pattern for serving public assets.
 
 **Audit logging (WARNING if absent)**
-Any new service integration should emit structured logs to CloudWatch Logs.
-Flag features that describe operations with no logging strategy as a warning.
+Any new service integration should emit structured logs to a centralised logging
+service. Flag features that describe operations with no logging strategy as a
+warning.
 
 ## Finding calibration
 - Emit exactly one finding per distinct issue, at the highest applicable
   severity. Never restate the same issue as a second finding at a different
   severity.
 - Reserve blocker severity for (a) concrete violations present in the spec
-  (an actual non-HTTPS endpoint, an explicit cross-region data flow, a public
+  (an actual non-HTTPS endpoint, an explicit out-of-region data flow, a public
   S3 bucket) and (b) concerns explicitly marked "BLOCKER if missing" above
   when the spec omits them. When the spec is merely silent on any other
   control, emit a warning requesting the missing statement — not a blocker.
 - Services not on the approved list — including non-AWS third-party services —
   are warnings citing architecture board sign-off. Escalate to blocker only
-  when the specific usage also concretely violates a bank-specific concern
-  above (e.g. customer data demonstrably leaving eu-west-1).
+  when the specific usage also concretely violates a compliance concern above.
 
 ## Output contract
 Return ONLY a JSON object with no surrounding prose or markdown fences:

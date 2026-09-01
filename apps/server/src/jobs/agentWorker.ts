@@ -37,7 +37,13 @@ export function startAgentWorker(): Worker<AgentJobPayload> {
 
   void sweepOrphanContainers(); // remove leftover containers from a prior crash
   void resumeOrphanStalledFeatures(); // resume IMPLEMENTING features stalled by orphan-parks
-  validateProbeCommands(); // throws at boot if any active full-path repo has an invalid probe_command
+  try {
+    validateProbeCommands();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Config error: ${message}`);
+    process.exit(1);
+  }
 
   console.error(
     JSON.stringify({

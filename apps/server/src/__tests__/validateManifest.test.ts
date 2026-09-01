@@ -87,22 +87,31 @@ repos:
     expect(() => validateProbeCommands(manifestPath)).toThrow(/probe_command/);
   });
 
-  it('throws for an active full-path repo with an ambiguous probe_command', () => {
+  it('does NOT throw for npm test (was wrongly rejected by inferRunner)', () => {
     const manifestPath = writeTmpManifest(`
 repos:
   - id: repo-a
     active: true
     probe_command: 'npm test'${REPO_BASE}
 `);
-    expect(() => validateProbeCommands(manifestPath)).toThrow(/npm test/);
+    expect(() => validateProbeCommands(manifestPath)).not.toThrow();
   });
 
-  it('includes the repo id in the error message', () => {
+  it('does NOT throw for npm test with extra flags (bff-style probe)', () => {
+    const manifestPath = writeTmpManifest(`
+repos:
+  - id: bff
+    active: true
+    probe_command: 'npm test -- --maxWorkers=2'${REPO_BASE}
+`);
+    expect(() => validateProbeCommands(manifestPath)).not.toThrow();
+  });
+
+  it('throws for an active full-path repo with no probe_command; error includes repo id', () => {
     const manifestPath = writeTmpManifest(`
 repos:
   - id: my-special-repo
-    active: true
-    probe_command: 'npm test'${REPO_BASE}
+    active: true${REPO_BASE}
 `);
     expect(() => validateProbeCommands(manifestPath)).toThrow(/my-special-repo/);
   });

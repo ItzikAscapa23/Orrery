@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import type { RepoEntry } from '../jobs/devJob.js';
+import { detectJsonCommand } from '../jobs/testJob.js';
 
 const DEFAULT_MANIFEST_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -21,9 +22,10 @@ export function inferRunner(cmd: string): 'vitest' | 'jest' | null {
 }
 
 /**
- * For every active full-path repo in the manifest, verifies:
- *   1. probe_command is declared.
- *   2. probe_command names an explicit runner ('vitest' or 'jest').
+ * For every active full-path repo in the manifest, verifies that
+ * detectJsonCommand can build a reporter command from the declared probe.
+ * Uses the actual downstream consumer as the validation criterion rather than
+ * a string pattern — so any probe that works in production passes here.
  *
  * Throws with repo id and offending command on the first violation.
  * Returns without error when the manifest file is absent.
@@ -44,16 +46,15 @@ export function validateProbeCommands(manifestPath = DEFAULT_MANIFEST_PATH): voi
     if (!repo.active) continue;
     if (repo.path === 'light') continue;
 
-    if (!repo.probe_command) {
+    try {
+      // Pass an empty CLAUDE.md — runner detection uses CLAUDE.md content at
+      // job time, not at boot. We only need to confirm a command can be built.
+      detectJsonCommand('', repo.probe_command);
+    } catch {
+      const probe = repo.probe_command ?? '(missing)';
       throw new Error(
-        `Repo '${repo.id}' is active (full-path) but has no probe_command in repo-manifest.yaml`,
-      );
-    }
-
-    if (inferRunner(repo.probe_command) === null) {
-      throw new Error(
-        `Repo '${repo.id}' probe_command '${repo.probe_command}' does not name an explicit runner ` +
-          `(vitest or jest). Use 'npx vitest run' or 'npx jest' explicitly.`,
+        `Repo '${repo.id}' probe_command '${probe}' cannot be used to build a reporter command. ` +
+          `Set probe_command in repo-manifest.yaml (e.g. 'npm test', 'npx vitest run', 'npx jest').`,
       );
     }
   }

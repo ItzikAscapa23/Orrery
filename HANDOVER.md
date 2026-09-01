@@ -54,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 22 — Recovery is one click, and failures say why
+- **Current phase:** 23 — Config validation that fits reality
 - **State:** `complete`
 - **Last updated:** 2026-09-01
 
@@ -62,11 +62,13 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] 86 — `charterResolver.ts` throws when declared charter file is unreadable
-- [x] 84 — probe stderr first line included in `task.failed.reason`
-- [x] 85 — `validateManifest.ts` + startup hook in `agentWorker.ts`
-- [x] 83 — `RedispatchCard` component + prop threading in `App.tsx` / `MissionControl.tsx`
-- [x] Audit — startup config reads documented in HANDOVER.md (see Decisions below)
+*Next phase (24) tasks — all unticked:*
+
+- [ ] Report: measure test-agent rewrite cost on recent features (do not fix yet)
+- [ ] `91-scratch-files-not-authored` — exclude debug/scratch test files from authored set
+- [ ] Act on rewrite measurement — brief written after report lands
+- [ ] `92-vendored-node-modules` — state the vendored-layer exception in `bff`'s CLAUDE.md
+- [ ] `93-binary-sentinel-is-real` — `binary_sentinel` must name an ABI-specific artifact
 
 ---
 
@@ -74,7 +76,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1124 passed across 86 files** (+16 new tests), 2026-09-01 |
+| `npm test` (repo root) | passed — **1125 passed across 86 files** (+1 new test), 2026-09-01 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-01 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-01 |
 
@@ -82,73 +84,71 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
-- **Startup config reads audit (Phase 22):**
+- **`validateProbeCommands` validates via `detectJsonCommand` (Phase 23)** —
+  `inferRunner` checked whether the probe string contained 'vitest' or 'jest',
+  rejecting valid probes like `npm test -- --maxWorkers=2`. The new validator calls
+  `detectJsonCommand('', probe)` — if that doesn't throw, the probe is usable. In
+  practice `detectJsonCommand` only throws when `probe_command` is absent, so the
+  effective rule is: probe must be declared. Runner detection happens from CLAUDE.md
+  content at job time, not from the probe string.
+
+- **Config validation failure → `process.exit(1)` with a readable message (Phase 23)** —
+  previously the throw from `validateProbeCommands` propagated as an unhandledRejection
+  and crashed the server with a stack trace. `agentWorker.ts` now catches it and exits
+  deliberately: `Config error: <message>`.
+
+- **Charter inventory (Phase 23):**
+
+  | File | Kind | Loaded by |
+  |---|---|---|
+  | `docs/agents/aws-charter.example.md` | Committed template | Nobody — operator copies to `aws-charter.md` |
+  | `docs/agents/aws-charter.md` | Operator config (gitignored) | `awsAgent.ts` via `charterPath` arg at job dispatch |
+  | `docs/agents/repo-manifest.example.yaml` | Committed template | Nobody — operator copies to `repo-manifest.yaml` |
+  | `docs/agents/repo-manifest.yaml` | Operator config (gitignored) | `devJob.ts` (`getRepoEntry`), `validateManifest.ts`, `charterResolver.ts` |
+  | `docs/agents/review-charter.md` | Committed agent prompt | `reviewAgent.ts` (hardcoded path) — injected into every code-review system prompt |
+  | `docs/agents/test-charter.md` | Committed documentation | Not loaded in production; used in tests as a dummy AWS-review charter path |
+
+- **`deploy: aws` removed from `review-charter.md` (Phase 23)** — the field doesn't
+  exist in `RepoEntry`. AWS review routing is already handled by the `review_charter`
+  field on a repo entry: repos without it never enter `AWS_REVIEW`. The dead scope rule
+  would have caused the review agent to silently skip AWS-charter checks for all repos.
+  Removed; architecture review belongs to `aws-charter.md` + the AWS review agent, not
+  the code review charter.
+
+- **Startup config reads (Phase 22/23):**
 
   | Config source | Read location | Missing/malformed → |
   |---|---|---|
   | `repo-manifest.yaml` | `validateProbeCommands` (boot, worker) | absent: silent return; invalid YAML: `yaml.load` throws |
-  | `repo-manifest.yaml` | `resolveCharterPath` (per-feature, aws-review) | absent: `undefined`; declared charter file missing: **throws** (Phase 22) |
+  | `repo-manifest.yaml` | `resolveCharterPath` (per-feature, aws-review) | absent: `undefined`; declared charter file missing: throws |
   | `repo-manifest.yaml` | `getRepoEntry` / `getAnyRepoEntry` (per-job) | absent or repo not found: throws |
-  | `probe_command` field | `validateProbeCommands` (boot) | missing or ambiguous runner: **throws at boot** (Phase 22) |
+  | `probe_command` field | `validateProbeCommands` (boot) | absent: exits with `Config error:` message; any non-empty value: passes |
   | `probe_command` field | `detectJsonCommand` (per-task, runtime) | absent: throws |
   | Env vars (`.env`) | `lib/env.ts` via `--env-file` at process start | absent required var: Zod parse throws at boot |
   | `BEDROCK_MODEL_ID` / `AWS_PROFILE` | Bedrock probe (boot) | absent/expired: probe fails with actionable message |
-  | Charter file (operator-written) | `awsReviewJob.ts` → `readFileSync` | missing: `resolveCharterPath` now throws before reaching this point |
 
-- **O-15 closed — `reviewAgent` 29k input / 14 output tokens is correct
-  behavior.** `createAdoPrJob.ts` has zero Anthropic calls; the PR body is pure
-  string concatenation capped at 3,900 chars. The 29,870 in / 14 out event
-  labeled `review` comes from `reviewAgent.ts` returning `{"findings":[]}` on a
-  clean code review. `max_tokens` is 4096 — the 14 tokens is the minimal valid
-  JSON response, not a budget truncation. The large input (charter.md + spec +
-  contract + diff capped at 60 KB) is intentional. No fix warranted.
-- **`severity === 'action' → 'violation'`, all other severities → `'turn'` in
-  `activityFold.ts`** — violation text (`⚠ violation 1/3: allowlist — ...`) is logged
-  with `severity: 'muted'`, so it loses the orange UI glyph but the in-text `⚠`
-  remains visible. No double-glyph. Success lines (`ok`) and tool-call logs (`muted`)
-  are neutral; agent-action lines (`action`) are highlighted.
-- **Mesh status: skip `working → done` override from task-derived status** — the
-  feature-level test job emits `agent.status(working)` directly; task rows have no
-  record of it. `deriveAgentStatusesFromTasks` returns `'done'` when all covered tasks
-  have `testsWritten: true`, but the feature-level job runs after that. Fix: when
-  merging task-derived statuses, skip overriding an existing `'working'` with `'done'`.
-- **C-6 settled as resolved (no code change)** — the `resolveReal` macOS inner-catch
-  bug is unreachable: both `checkReadAllowed` and `checkWriteAllowed` pre-resolve the
-  worktreeRoot via `realpathSync` before calling `resolveReal`. Since `abs` is
-  constructed from the resolved root, the innermost catch returning `abs` already
-  returns a real-path. Phase 15's candidate-depth fix eliminated the observable symptom;
-  Phase 17 confirmed no distinct defect remains. C-6 closed.
-- **`awaiting_tests` is a string status, not a Prisma enum** — `status` column is
-  `String`; new values never require a migration. Only the schema comment and the
-  `ActivityTask['status']` TypeScript union must be updated.
-- **Bedrock park is always `parked` + `bullJobId: null`, never `pending`** —
-  `pending` with a stale `bullJobId` is invisible to the reconciler (scans `running`)
-  and gate logic (scans `parked`). `parked` + cleared ID is the only safe treatment.
-- **Finding identity is composite (featureId, specRev, id)** — model-assigned finding
-  ids (`f1`, `f2`) recur in every review cycle. Lookups must use the composite key or
-  scope by feature + current cycle; a plain `where: { id }` is always a bug.
-- **Task-derived agent status applied after the event-sourced fold** — except for the
-  `working → done` guard above. Task rows are authoritative for dev/test agents; review,
-  spec, and planner remain event-sourced.
-- **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — the
-  CLAUDE.md prose-inference fallback is removed. Any active full-path repo without
-  `probe_command` will fail at the first `detectJsonCommand` call with a clear error.
 - **Charter skip uses `SUBMIT_SPEC_LIGHT` regardless of `feature_path` (Phase 21)** —
   `SUBMIT_SPEC_LIGHT` is the FSM edge from `DRAFTING_SPEC → AWAITING_APPROVAL`. For
   features with no `review_charter`, it is the correct skip mechanism even for FULL-path
-  features. The `APPROVE` vs `APPROVE_LIGHT` split (which drops the planning/testing
-  states) still depends on `feature_path`, not the charter decision.
-- **`dispatchForState('AWS_REVIEW')` removed (Phase 21)** — no call site uses it
-  anymore. Route handlers that go through the AWS review path call
-  `dispatchJob(featureId, 'aws-review', { charterPath })` directly so the charterPath
-  travels with the payload. The `AWS_REVIEW` dispatch case in `dispatchForState` has
-  been deleted.
-- **Organisation-specific reference audit (Phase 21):**
-  | Location | Content | Disposition |
-  |---|---|---|
-  | `agents/awsAgent.ts:21` (old) | `"reviewing a feature specification for a bank"` | Removed; domain framing now lives in the charter file |
-  | `jobs/simulatorJob.ts:159` (old) | `"bank IAM policy"` | Changed to `"platform IAM policy"` |
-  No other org-specific strings found in `apps/server/src` production code. Test scaffolding strings are out of scope.
+  features. The `APPROVE` vs `APPROVE_LIGHT` split (which drops planning/testing states)
+  still depends on `feature_path`, not the charter decision.
+
+- **`dispatchForState('AWS_REVIEW')` removed (Phase 21)** — route handlers that go
+  through the AWS review path call `dispatchJob(featureId, 'aws-review', { charterPath })`
+  directly so the charterPath travels with the payload.
+
+- **Finding identity is composite (featureId, specRev, id)** — model-assigned finding
+  ids (`f1`, `f2`) recur in every review cycle. Lookups must use the composite key or
+  scope by feature + current cycle; a plain `where: { id }` is always a bug.
+
+- **Task-derived agent status applied after event-sourced fold; skip `working → done`
+  override** — the feature-level test job emits `agent.status(working)` directly, after
+  task rows already show `testsWritten: true`. Merging must not override an existing
+  `'working'` with task-derived `'done'`.
+
+- **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — the
+  CLAUDE.md prose-inference fallback is removed. Any active full-path repo without
+  `probe_command` fails at the first `detectJsonCommand` call.
 
 ---
 
@@ -158,7 +158,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   deliberate local brand override. The fallback `'Orrery'` stays.
 - When multiple repos in a feature declare different `review_charter` paths,
   first-charter-found semantics applies (first repo in `feature.repos` wins). Documented
-  in `charterResolver.ts` JSDoc. No real operator has hit this yet.
+  in `charterResolver.ts` JSDoc.
 
 ---
 
@@ -197,6 +197,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 20 | Violations cost what they should, and the UI says what is running | `8120094` | 2026-08-29 |
 | 21 | Orrery is neutral; organisational policy is operator config | pending | 2026-08-31 |
 | 22 | Recovery is one click, and failures say why | `593dc75` | 2026-09-01 |
+| 23 | Config validation that fits reality | pending | 2026-09-01 |
 
 ---
 
@@ -209,5 +210,3 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   is running.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
 - A restart mid-dispatch produces exactly one container.
-- A demo feature with repos that declare no `review_charter` completes the full
-  pipeline without entering `AWS_REVIEW` state and without any bank-policy finding.
