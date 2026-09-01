@@ -447,6 +447,7 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     '- You do not git commit.',
     '- The container working directory is /workspace — run commands directly. Never prefix with `cd /workspace &&` or any `cd <path> &&`.',
     "- Use edit_file to modify existing test files. Use write_file only to create new files or when replacing most of a file's content. Rewriting a whole file to change a few lines wastes context and slows every later turn.",
+    '- Before calling end_turn, delete any debug or scratch test files you created (files whose names contain "debug" or "scratch") — they must not reach the commit.',
     '',
     '## Tools',
     '',

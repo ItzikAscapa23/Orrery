@@ -38,3 +38,42 @@ describe('getAuthoredTestFiles — trailer filter', () => {
     expect(result).not.toContain(devFile);
   });
 });
+
+describe('getAuthoredTestFiles — scratch-file filter', () => {
+  it('excludes debug-prefixed files (e.g. debug-clubs.test.js)', async () => {
+    const debugFile = 'src/__tests__/debug-clubs.test.js';
+    const realFile = 'src/__tests__/orderCardClubsListStrongId.test.js';
+
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValue(`\n${debugFile}\n${realFile}\n`);
+
+    const result = getAuthoredTestFiles('/fake/worktree', 'src/__tests__');
+
+    expect(result).toContain(realFile);
+    expect(result).not.toContain(debugFile);
+  });
+
+  it('excludes files with Debug in the name (e.g. orderCardClubsListDebug.test.js)', async () => {
+    const debugFile = 'src/__tests__/orderCardClubsListDebug.test.js';
+    const realFile = 'src/__tests__/orderCardClubsListStrongId.test.js';
+
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValue(`\n${debugFile}\n${realFile}\n`);
+
+    const result = getAuthoredTestFiles('/fake/worktree', 'src/__tests__');
+
+    expect(result).toContain(realFile);
+    expect(result).not.toContain(debugFile);
+  });
+
+  it('still includes a normal test file that does not contain debug or scratch', async () => {
+    const realFile = 'src/__tests__/orderCardClubsListStrongId.test.js';
+
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValue(`\n${realFile}\n`);
+
+    const result = getAuthoredTestFiles('/fake/worktree', 'src/__tests__');
+
+    expect(result).toContain(realFile);
+  });
+});

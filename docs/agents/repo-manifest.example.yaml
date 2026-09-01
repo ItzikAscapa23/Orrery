@@ -30,6 +30,11 @@ repos:
     url: https://dev.azure.com/my-org/my-project/_git/demo-server
     default_branch: main
     probe_command: "npx vitest run --reporter=json --passWithNoTests"
+    # binary_sentinel must be a platform-native .node binary, NOT a symlink like
+    # node_modules/.bin/vitest — that symlink exists after any install regardless
+    # of ABI. Use the platform-specific optional-dep binding instead:
+    #   vitest 1.x/2.x (Vite + rollup):  @rollup/rollup-linux-arm64-musl/rollup.linux-arm64-musl.node
+    #   vitest 3.x+     (Vite + rolldown): @rolldown/binding-linux-arm64-musl/rolldown-binding.linux-arm64-musl.node
     binary_sentinel: "node_modules/@rollup/rollup-linux-arm64-musl/rollup.linux-arm64-musl.node"
     description: >
       Primary server-side repo. New/changed endpoints land here.

@@ -54,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 23 — Config validation that fits reality
+- **Current phase:** 24 — The test agent stops paying twice
 - **State:** `complete`
 - **Last updated:** 2026-09-01
 
@@ -62,13 +62,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Next phase (24) tasks — all unticked:*
-
-- [ ] Report: measure test-agent rewrite cost on recent features (do not fix yet)
-- [ ] `91-scratch-files-not-authored` — exclude debug/scratch test files from authored set
-- [ ] Act on rewrite measurement — brief written after report lands
-- [ ] `92-vendored-node-modules` — state the vendored-layer exception in `bff`'s CLAUDE.md
-- [ ] `93-binary-sentinel-is-real` — `binary_sentinel` must name an ABI-specific artifact
+*plan.md has no phase 25 yet — next phases pending plan update.*
 
 ---
 
@@ -76,7 +70,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1125 passed across 86 files** (+1 new test), 2026-09-01 |
+| `npm test` (repo root) | passed — **1128 passed across 86 files** (+3 new tests), 2026-09-01 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-01 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-01 |
 
@@ -84,18 +78,49 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **Test-agent rewrite cost measurement (Phase 24):** `scripts/measure-rewrite-cost.ts`
+  run against the local dev DB. Results across 5 recent features:
+
+  | Feature | Output tokens | Rewrite tokens | Rewrite % | Rewrote |
+  |---|---|---|---|---|
+  | b2262ace | 40,251 | 4,472 | 11.1% | worldClock.acceptance.test.tsx ×5 |
+  | 07f7ad96 | 15,760 | 0 | 0% | — |
+  | c1be95c8 | 17,489 | 0 | 0% | — |
+  | ffb01e01 | 19,408 | 719 | 3.7% | (harness brief only) |
+  | 58185ae5 | 25,672 | 2,232 | 8.7% | worldClock.acceptance.test.tsx ×2, probe.test.tsx ×3 |
+
+  Actual acceptance test file rewrites: 6–11% of output tokens in the worst case.
+  **Brief for "act on rewrite"**: measurement is below the 30% threshold; no
+  immediate code change needed. If a future feature exceeds 30%, strengthen the
+  `write_file` prohibition in `testAgent.ts:449` to: "Never use write_file on a
+  file you already wrote this session — use edit_file instead."
+
+- **Scratch-file filter `SCRATCH_FILE_RE = /debug|scratch/i` (Phase 24)** — checked
+  against `path.basename(f)` after `TEST_FILE_RE`. Excludes `debug-clubs.test.js` and
+  `orderCardClubsListDebug.test.js` from `getAuthoredTestFilesForTask` and
+  `getAuthoredTestFiles`. Applied before the authored count and the `task.tests_written`
+  event payload. Prompt rule added to `testAgent.ts` to delete scratch files before
+  `end_turn`.
+
+- **`binary_sentinel` for worldclock repos updated (Phase 24)** — changed from
+  `node_modules/.bin/vitest` (a symlink, present after any install regardless of ABI) to
+  `node_modules/@rolldown/binding-linux-arm64-musl/rolldown-binding.linux-arm64-musl.node`.
+  Verified: worldclock repos use vitest 4.x which bundles Rolldown; the binding file is
+  `rolldown-binding.linux-arm64-musl.node`. Comment added to `repo-manifest.example.yaml`
+  explaining the anti-pattern.
+
+- **`bff` vendored layer exception committed (Phase 24)** — `bff/CLAUDE.md` on branch
+  `version11/11.10.0/update-claude-md` (the `default_branch` agents read) now states that
+  `graphql/layers/*/nodejs/node_modules/` is vendored source, not installed packages.
+  Commit: `8655de932`.
+
 - **`validateProbeCommands` validates via `detectJsonCommand` (Phase 23)** —
-  `inferRunner` checked whether the probe string contained 'vitest' or 'jest',
-  rejecting valid probes like `npm test -- --maxWorkers=2`. The new validator calls
-  `detectJsonCommand('', probe)` — if that doesn't throw, the probe is usable. In
-  practice `detectJsonCommand` only throws when `probe_command` is absent, so the
-  effective rule is: probe must be declared. Runner detection happens from CLAUDE.md
-  content at job time, not from the probe string.
+  `inferRunner` checked for 'vitest'/'jest' in the probe string, rejecting valid probes
+  like `npm test -- --maxWorkers=2`. New validator calls `detectJsonCommand('', probe)` —
+  any non-empty probe passes.
 
 - **Config validation failure → `process.exit(1)` with a readable message (Phase 23)** —
-  previously the throw from `validateProbeCommands` propagated as an unhandledRejection
-  and crashed the server with a stack trace. `agentWorker.ts` now catches it and exits
-  deliberately: `Config error: <message>`.
+  `agentWorker.ts` catches the throw and exits deliberately: `Config error: <message>`.
 
 - **Charter inventory (Phase 23):**
 
@@ -105,50 +130,32 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   | `docs/agents/aws-charter.md` | Operator config (gitignored) | `awsAgent.ts` via `charterPath` arg at job dispatch |
   | `docs/agents/repo-manifest.example.yaml` | Committed template | Nobody — operator copies to `repo-manifest.yaml` |
   | `docs/agents/repo-manifest.yaml` | Operator config (gitignored) | `devJob.ts` (`getRepoEntry`), `validateManifest.ts`, `charterResolver.ts` |
-  | `docs/agents/review-charter.md` | Committed agent prompt | `reviewAgent.ts` (hardcoded path) — injected into every code-review system prompt |
-  | `docs/agents/test-charter.md` | Committed documentation | Not loaded in production; used in tests as a dummy AWS-review charter path |
-
-- **`deploy: aws` removed from `review-charter.md` (Phase 23)** — the field doesn't
-  exist in `RepoEntry`. AWS review routing is already handled by the `review_charter`
-  field on a repo entry: repos without it never enter `AWS_REVIEW`. The dead scope rule
-  would have caused the review agent to silently skip AWS-charter checks for all repos.
-  Removed; architecture review belongs to `aws-charter.md` + the AWS review agent, not
-  the code review charter.
+  | `docs/agents/review-charter.md` | Committed agent prompt | `reviewAgent.ts` (hardcoded path) |
+  | `docs/agents/test-charter.md` | Committed documentation | Not loaded in production; test fixture |
 
 - **Startup config reads (Phase 22/23):**
 
   | Config source | Read location | Missing/malformed → |
   |---|---|---|
-  | `repo-manifest.yaml` | `validateProbeCommands` (boot, worker) | absent: silent return; invalid YAML: `yaml.load` throws |
-  | `repo-manifest.yaml` | `resolveCharterPath` (per-feature, aws-review) | absent: `undefined`; declared charter file missing: throws |
+  | `repo-manifest.yaml` | `validateProbeCommands` (boot) | absent: silent return; invalid YAML: throws |
+  | `repo-manifest.yaml` | `resolveCharterPath` (per-feature) | absent: `undefined`; charter file missing: throws |
   | `repo-manifest.yaml` | `getRepoEntry` / `getAnyRepoEntry` (per-job) | absent or repo not found: throws |
-  | `probe_command` field | `validateProbeCommands` (boot) | absent: exits with `Config error:` message; any non-empty value: passes |
-  | `probe_command` field | `detectJsonCommand` (per-task, runtime) | absent: throws |
-  | Env vars (`.env`) | `lib/env.ts` via `--env-file` at process start | absent required var: Zod parse throws at boot |
-  | `BEDROCK_MODEL_ID` / `AWS_PROFILE` | Bedrock probe (boot) | absent/expired: probe fails with actionable message |
-
-- **Charter skip uses `SUBMIT_SPEC_LIGHT` regardless of `feature_path` (Phase 21)** —
-  `SUBMIT_SPEC_LIGHT` is the FSM edge from `DRAFTING_SPEC → AWAITING_APPROVAL`. For
-  features with no `review_charter`, it is the correct skip mechanism even for FULL-path
-  features. The `APPROVE` vs `APPROVE_LIGHT` split (which drops planning/testing states)
-  still depends on `feature_path`, not the charter decision.
-
-- **`dispatchForState('AWS_REVIEW')` removed (Phase 21)** — route handlers that go
-  through the AWS review path call `dispatchJob(featureId, 'aws-review', { charterPath })`
-  directly so the charterPath travels with the payload.
+  | `probe_command` field | `validateProbeCommands` (boot) | absent: exits `Config error:`; any non-empty: passes |
+  | `probe_command` field | `detectJsonCommand` (per-task) | absent: throws |
+  | Env vars (`.env`) | `lib/env.ts` at process start | absent required var: Zod throws at boot |
 
 - **Finding identity is composite (featureId, specRev, id)** — model-assigned finding
-  ids (`f1`, `f2`) recur in every review cycle. Lookups must use the composite key or
-  scope by feature + current cycle; a plain `where: { id }` is always a bug.
+  ids (`f1`, `f2`) recur in every review cycle. Lookups must use the composite key; a
+  plain `where: { id }` is always a bug.
 
 - **Task-derived agent status applied after event-sourced fold; skip `working → done`
-  override** — the feature-level test job emits `agent.status(working)` directly, after
-  task rows already show `testsWritten: true`. Merging must not override an existing
-  `'working'` with task-derived `'done'`.
+  override** — the feature-level test job emits `agent.status(working)` after task rows
+  show `testsWritten: true`. Merging must not override an existing `'working'` with
+  task-derived `'done'`.
 
-- **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — the
-  CLAUDE.md prose-inference fallback is removed. Any active full-path repo without
-  `probe_command` fails at the first `detectJsonCommand` call.
+- **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — CLAUDE.md
+  prose-inference fallback removed. Any active full-path repo without `probe_command`
+  fails at the first `detectJsonCommand` call.
 
 ---
 
@@ -157,16 +164,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `apps/web/.env.local` setting `VITE_PRODUCT_NAME=PepperOrchestrator` is a
   deliberate local brand override. The fallback `'Orrery'` stays.
 - When multiple repos in a feature declare different `review_charter` paths,
-  first-charter-found semantics applies (first repo in `feature.repos` wins). Documented
-  in `charterResolver.ts` JSDoc.
+  first-charter-found semantics applies (first repo in `feature.repos` wins).
 
 ---
 
 ## Open questions / blockers
 
-- **O-12 Duplicate `pr.created` events.** Root cause diagnosed (non-atomic ADO call
-  + event append). Not implemented. Fix: re-query existing `pr.created` events inside
-  the per-repo loop immediately before the ADO API call.
+- **O-12 Duplicate `pr.created` events.** Root cause: non-atomic ADO call + event
+  append. Fix: re-query existing `pr.created` events inside the per-repo loop
+  immediately before the ADO API call.
 
 ---
 
@@ -198,6 +204,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 21 | Orrery is neutral; organisational policy is operator config | pending | 2026-08-31 |
 | 22 | Recovery is one click, and failures say why | `593dc75` | 2026-09-01 |
 | 23 | Config validation that fits reality | `48f540f` | 2026-09-01 |
+| 24 | The test agent stops paying twice | pending | 2026-09-01 |
 
 ---
 

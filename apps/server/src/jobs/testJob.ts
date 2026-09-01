@@ -68,6 +68,9 @@ function pushBranch(worktreePath: string, branch: string): void {
 }
 
 const TEST_FILE_RE = /\.(test|spec)\./;
+// Excludes debug/scratch files created by agents as temporary investigation aids.
+// Checked against the basename only to avoid false-positives from directory names.
+const SCRATCH_FILE_RE = /debug|scratch/i;
 
 export function getAuthoredTestFilesForTask(
   worktreePath: string,
@@ -88,7 +91,7 @@ export function getAuthoredTestFilesForTask(
     return out
       .trim()
       .split('\n')
-      .filter((f) => f && TEST_FILE_RE.test(f));
+      .filter((f) => f && TEST_FILE_RE.test(f) && !SCRATCH_FILE_RE.test(path.basename(f)));
   } catch {
     return [];
   }
@@ -108,7 +111,7 @@ export function getAuthoredTestFiles(worktreePath: string, testDir: string): str
   return out
     .trim()
     .split('\n')
-    .filter((f) => f && TEST_FILE_RE.test(f));
+    .filter((f) => f && TEST_FILE_RE.test(f) && !SCRATCH_FILE_RE.test(path.basename(f)));
 }
 
 export function extractDescribeBlocks(worktreePath: string, relPath: string): string[] {
