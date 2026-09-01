@@ -196,7 +196,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 19 | Declared config replaces the last inference | `716a783` | 2026-08-29 |
 | 20 | Violations cost what they should, and the UI says what is running | `8120094` | 2026-08-29 |
 | 21 | Orrery is neutral; organisational policy is operator config | pending | 2026-08-31 |
-| 22 | Recovery is one click, and failures say why | pending | 2026-09-01 |
+| 22 | Recovery is one click, and failures say why | `593dc75` | 2026-09-01 |
 
 ---
 
