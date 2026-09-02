@@ -788,3 +788,42 @@ npm test          # baseline 86 files / 1130 tests — must not decrease
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 27 — The scratch filter excludes only scratch
+**Goal:** No legitimate test file is dropped from the authored set.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `97-narrow-scratch-pattern` — R-42. `SCRATCH_FILE_RE = /debug|scratch/i`
+      (`testJob.ts:73`) matches any filename containing those substrings, so a
+      legitimate `debugPanel.test.ts` or `scratchpadReducer.test.ts` is excluded
+      from the authored set. An excluded real test means
+      `authoredPassed === 0`, which fires the `no-authored-tests` blocker — the
+      same false rejection that cost two wasted test-agent rounds on feature
+      `0be2aa39`. Narrow the pattern to what the agents actually produce:
+      observed scratch files were `debug-clubs.test.js` and
+      `orderCardClubsListDebug.test.js`
+- [ ] The filter is applied at `testJob.ts:94` and `:114`. One definition, cited
+      from both
+- [ ] Tests, fail-first: `debug-clubs.test.js` excluded;
+      `orderCardClubsListDebug.test.js` excluded; `debugPanel.test.ts` retained;
+      `scratchpadReducer.test.ts` retained; a file matching neither retained
+- [ ] Confirm the prompt-only fix from Phase 26 is measurable. The
+      `## Iterating on test files` block instructs the test agent to edit rather
+      than rewrite, but instruction-only changes have not held before —
+      `devAgent.ts:314` forbids reading node_modules and the agent spent ten
+      turns there on feature `14ec88b4`; the pipe and redirect rules are stated
+      three times and were violated three times on `f78613cd`. State how the
+      11–15% rewrite share will be re-measured after the next few features, and
+      what would count as the instruction having failed
+**Definition of Done:**
+- A test file whose name merely contains "debug" or "scratch" is counted as authored
+- The two observed scratch filenames are excluded
+- The pattern is defined once
+- Fail-first output shown per case
+- Re-measurement method for rewrite share recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 86 files / 1130 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
