@@ -736,3 +736,52 @@ npm test
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 25 — Tests exist before code, and the flag says so
+**Goal:** A covered task never reaches the dev agent without its tests.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `94-tests-written-means-tests-written` — R-40. `taskTestJob.ts:432` and
+      `:449` both write `data: { testsWritten: true, status: 'pending' }` on a
+      task where the test agent failed and wrote nothing. The flag is used as
+      "stop retrying" and read everywhere as "tests exist": `deriveAgentStatuses`
+      reads it, the `no-authored-tests` gate reads it, and Phase 16's
+      `awaiting_tests` guard checks `coveredByTestPlan && !testsWritten` — so a
+      task marked this way passes the guard built to stop exactly this. Whatever
+      the recovery, `testsWritten` must reflect reality
+- [ ] A covered task whose test agent did not complete parks, and does not
+      dispatch the dev job. `taskTestJob.ts:437-452` currently dispatches after
+      one transient failure (`testTaskAttempts >= 1`). Evidence: feature
+      `7d1146f5` logged `task-test agent failed after 1 attempt(s) — skipping to
+      dev job` on a 403, and the dev agent then implemented with no acceptance
+      tests
+- [ ] `95-environmental-failure-is-not-agent-failure` — the only classification
+      in that catch block is `isViolation`. An expired credential, a Bedrock
+      outage, and an agent that cannot write tests all take the same path.
+      `lib/bedrockPark.ts` is the canonical handler and is not used here. Route
+      environmental failures through it
+- [ ] `96-dev-agent-does-not-write-acceptance-tests` — on feature `7d1146f5` the
+      dev agent wrote ten scenarios into `orderCardClubsList.test.js` that the
+      test agent had already covered in
+      `orderCardClubsListStrongId.acceptance.test.js`: delta ≥ 500, delta < 500,
+      boundary 500, all three merge cases, both error paths, empty responses,
+      field precedence. The dev agent's file also left dead scaffolding
+      (`runWithMockedDcsApis`, defined and never called). A covered task's dev
+      agent should extend or run existing tests, not author parallel ones
+- [ ] Audit — list, not summary — every write of `testsWritten` and every read
+      of it, in both workspaces, and state for each whether it means "tests
+      exist" or something else
+**Definition of Done:**
+- No code path writes `testsWritten: true` without a test file authored
+- A covered task with a failed test agent is `parked`, recoverable by
+  REDISPATCH, and its dev job is not dispatched
+- A 403 or Bedrock failure in `taskTestJob` routes through `bedrockPark`
+- `testsWritten` read/write audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 86 files / 1125 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A feature whose test agent fails parks without the dev agent running
