@@ -151,10 +151,9 @@ export async function dispatchUnblockedTasks(
   for (const task of dispatchable) {
     // Covered tasks with no tests yet go to the task-test job first; once
     // testsWritten is set, the same task routes to the dev job on re-dispatch.
-    // If a prior test-task attempt already ran (testTaskAttempts > 0), skip
-    // the test-task routing — the task proceeds directly to the dev job.
-    const needsTestFirst =
-      task.coveredByTestPlan && !task.testsWritten && task.testTaskAttempts === 0;
+    // Parking replaces the old one-round cap — a failed test task is parked so
+    // REDISPATCH retries the test-first path rather than skipping to dev.
+    const needsTestFirst = task.coveredByTestPlan && !task.testsWritten;
     const resolvedJobType = needsTestFirst
       ? side === 'server'
         ? ('server-test-task' as const)

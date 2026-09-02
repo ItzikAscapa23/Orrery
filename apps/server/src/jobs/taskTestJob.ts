@@ -371,17 +371,36 @@ export async function runTaskTestJob(
       gitCommit(worktreePath, commitMessage);
     }
 
-    if (statusOut === '') {
+    // Find what was committed.
+    const authoredFiles = getAuthoredTestFilesForTask(worktreePath, testDir, taskId);
+
+    if (authoredFiles.length === 0) {
+      // Agent ran but committed no test files — park so the operator can REDISPATCH.
       await appendEvent(getPrisma(), featureId, {
         type: 'agent.log',
         agent: 'test',
         severity: 'muted',
-        text: `· task-test agent wrote no files for task ${taskId} — marking testsWritten and proceeding to dev job`,
+        text: `· task-test agent wrote no files for task ${taskId} — parking (use REDISPATCH to retry)`,
       });
+      await getPrisma().task.update({
+        where: { id: taskId },
+        data: { status: 'parked', parkReason: 'no_tests_authored', bullJobId: null },
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'task.failed',
+        repo: task.repo,
+        task_id: taskId,
+        reason: 'test agent wrote no acceptance test files',
+        attempt: task.testTaskAttempts + 1,
+        final: false,
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.status',
+        agent: 'test',
+        status: 'failed',
+      });
+      return;
     }
-
-    // Find what was committed.
-    const authoredFiles = getAuthoredTestFilesForTask(worktreePath, testDir, taskId);
 
     await appendEvent(getPrisma(), featureId, {
       type: 'task.tests_written',
@@ -414,6 +433,24 @@ export async function runTaskTestJob(
 
     const isViolation =
       err instanceof AllowlistViolationError || err instanceof MetacharViolationError;
+    // Credential expiry or Bedrock outage during the agent run — same canonical
+    // handler as the pre-agent probe, with attempt rollback so the retry goes
+    // back through the test-task path instead of skipping to dev.
+    const isBedrockError =
+      err instanceof Error && err.message.startsWith('Bedrock credentials expired');
+
+    if (isBedrockError) {
+      await parkTaskOnBedrockFailure({
+        featureId,
+        taskId,
+        repo: task.repo,
+        agentName: 'test',
+        retryPath: `POST /features/${featureId}/retry-bounce`,
+        attemptRollback: { testTaskAttempts: { decrement: 1 } },
+        attempt: task.testTaskAttempts + 1,
+      });
+      return;
+    }
 
     await appendEvent(getPrisma(), featureId, {
       type: 'agent.log',
@@ -428,28 +465,53 @@ export async function runTaskTestJob(
     });
 
     if (isViolation) {
-      // Policy violations are not retryable — skip test coverage for this task.
+      // Park — violations leave testsWritten unset so the task stays in the
+      // test-first path on REDISPATCH; the dev job does not run untested code.
       await getPrisma().task.update({
         where: { id: taskId },
-        data: { testsWritten: true, status: 'pending', bullJobId: null },
+        data: { status: 'parked', parkReason: 'allowlist_violation', bullJobId: null },
       });
-      await dispatchUnblockedTasks(featureId, side);
+      await appendEvent(getPrisma(), featureId, {
+        type: 'task.failed',
+        repo: task.repo,
+        task_id: taskId,
+        reason: msg.slice(0, 300),
+        attempt: task.testTaskAttempts + 1,
+        final: false,
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'test',
+        severity: 'muted',
+        text: `· test agent parked (allowlist violation) — use REDISPATCH to retry`,
+      });
     } else {
-      // Transient error. After the first failed attempt, skip to the dev job
-      // rather than re-routing to test-task forever (one-round cap).
       const refreshed = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
       if (refreshed.testTaskAttempts >= 1) {
         await appendEvent(getPrisma(), featureId, {
           type: 'agent.log',
           agent: 'test',
           severity: 'muted',
-          text: `· task-test agent failed after ${refreshed.testTaskAttempts} attempt(s) — skipping to dev job`,
+          text: `· task-test agent failed after ${refreshed.testTaskAttempts} attempt(s) — parked (use REDISPATCH to retry)`,
         });
         await getPrisma().task.update({
           where: { id: taskId },
-          data: { testsWritten: true, status: 'pending', bullJobId: null },
+          data: { status: 'parked', parkReason: 'test_agent_failed', bullJobId: null },
         });
-        await dispatchUnblockedTasks(featureId, side);
+        await appendEvent(getPrisma(), featureId, {
+          type: 'task.failed',
+          repo: task.repo,
+          task_id: taskId,
+          reason: msg.slice(0, 300),
+          attempt: refreshed.testTaskAttempts,
+          final: false,
+        });
+        await appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'test',
+          severity: 'muted',
+          text: `· test agent parked after failure — use REDISPATCH to retry`,
+        });
       } else {
         await getPrisma().task.update({ where: { id: taskId }, data: { status: 'pending' } });
       }

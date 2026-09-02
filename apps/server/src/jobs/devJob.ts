@@ -676,6 +676,7 @@ export async function runDevJob(
         orientationBlock,
         ...(repoEntry.description ? { repoDescription: repoEntry.description } : {}),
         ...(rejectedAmendments.length > 0 ? { rejectedAmendments } : {}),
+        ...(task.coveredByTestPlan ? { coveredByTestPlan: true } : {}),
       },
     );
     await appendEvent(getPrisma(), featureId, {
@@ -703,6 +704,7 @@ export async function runDevJob(
         ...(rejectedAmendments.length > 0 ? { rejectedAmendments } : {}),
         maxTurns: effectiveCap,
         ...(repoEntry.probe_command ? { probeCommand: repoEntry.probe_command } : {}),
+        ...(task.coveredByTestPlan ? { coveredByTestPlan: true } : {}),
       },
       container,
       worktreeInfo.worktreePath,

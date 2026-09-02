@@ -207,6 +207,28 @@ beforeEach(async () => {
   );
   mockGetAuthoredTestFilesForTask.mockReturnValue(['src/__tests__/items.test.ts']);
 
+  // Restore execFileSync to the default git-dispatching implementation so tests that
+  // call vi.mocked(execFileSync).mockImplementation(...) don't bleed into later tests.
+  const { execFileSync } = await import('node:child_process');
+  vi.mocked(execFileSync).mockImplementation((_cmd: unknown, args: unknown) => {
+    const a = (args ?? []) as ReadonlyArray<string>;
+    if (a.includes('status')) return mockGitStatus();
+    if (a.includes('add')) return mockGitAdd();
+    if (a.includes('checkout')) return mockGitCheckout();
+    if (a.includes('clean')) return mockGitClean();
+    if (a.includes('commit')) {
+      const mIdx = a.indexOf('-m');
+      const msg = mIdx !== -1 ? a[mIdx + 1] : undefined;
+      return mockGitCommit(msg);
+    }
+    return '';
+  });
+
+  // Clear dispatchUnblockedTasks call history so not.toHaveBeenCalled() assertions
+  // in individual tests are not polluted by successful runs in previous tests.
+  const { dispatchUnblockedTasks } = await import('../lib/dispatch.js');
+  vi.mocked(dispatchUnblockedTasks).mockClear();
+
   const f = await createFeature({ name: 'Task Test Job', requirement: 'req' });
   featureId = f.id;
   await getPrisma().feature.update({
@@ -272,44 +294,77 @@ describe('runTaskTestJob', () => {
     expect((written!.payload as { task_id: string }).task_id).toBe(taskId);
   });
 
-  it('sets testsWritten=true and emits agent.log when agent writes no files', async () => {
+  it('parks with no_tests_authored when agent writes no files', async () => {
     // Zero staged files: git status returns '', getAuthoredTestFilesForTask returns [].
-    // The job must still mark testsWritten so the task proceeds to the dev job.
+    // The job must park the task (testsWritten stays false) rather than proceeding to dev.
     mockGitStatus.mockReturnValueOnce('');
     mockGetAuthoredTestFilesForTask.mockReturnValueOnce([]);
     await runTaskTestJob(featureId, taskId, 'job-2', 'server');
     const task = await getPrisma().task.findUnique({ where: { id: taskId } });
-    expect(task?.testsWritten).toBe(true);
-    expect(task?.status).toBe('pending');
+    expect(task?.testsWritten).toBe(false);
+    expect(task?.status).toBe('parked');
+    expect(task?.parkReason).toBe('no_tests_authored');
     const events = await getPrisma().event.findMany({ where: { featureId } });
-    const noFilesLog = events.find(
+    const parkLog = events.find(
       (e) =>
         e.type === 'agent.log' &&
         typeof (e.payload as Record<string, unknown>)['text'] === 'string' &&
-        ((e.payload as Record<string, unknown>)['text'] as string).includes('wrote no files'),
+        ((e.payload as Record<string, unknown>)['text'] as string).includes('parking'),
     );
-    expect(noFilesLog).not.toBeUndefined();
+    expect(parkLog).not.toBeUndefined();
   });
 
-  it('sets testsWritten=true and dispatches dev job after one transient error', async () => {
+  it('parks with test_agent_failed after one transient error (no skip to dev)', async () => {
     // The increment fires at job start (testTaskAttempts becomes 1), then the
     // agent throws a non-violation error. The catch branch must detect
-    // testTaskAttempts >= 1, mark testsWritten=true, and call dispatchUnblockedTasks.
+    // testTaskAttempts >= 1 and park — testsWritten stays false, dev job is not dispatched.
     const { dispatchUnblockedTasks: mockDispatch } = await import('../lib/dispatch.js');
     mockRunTestAgent.mockRejectedValueOnce(new Error('transient network error'));
     await runTaskTestJob(featureId, taskId, 'job-3', 'server');
     const task = await getPrisma().task.findUnique({ where: { id: taskId } });
-    expect(task?.testsWritten).toBe(true);
-    expect(task?.status).toBe('pending');
-    expect(mockDispatch).toHaveBeenCalled();
+    expect(task?.testsWritten).toBe(false);
+    expect(task?.status).toBe('parked');
+    expect(task?.parkReason).toBe('test_agent_failed');
+    expect(mockDispatch).not.toHaveBeenCalled();
     const events = await getPrisma().event.findMany({ where: { featureId } });
-    const skipLog = events.find(
+    const parkLog = events.find(
       (e) =>
         e.type === 'agent.log' &&
         typeof (e.payload as Record<string, unknown>)['text'] === 'string' &&
-        ((e.payload as Record<string, unknown>)['text'] as string).includes('skipping to dev job'),
+        ((e.payload as Record<string, unknown>)['text'] as string).includes('parked'),
     );
-    expect(skipLog).not.toBeUndefined();
+    expect(parkLog).not.toBeUndefined();
+  });
+
+  it('parks with allowlist_violation on policy violation (no testsWritten, no dispatch)', async () => {
+    const { AllowlistViolationError } = await import('../lib/container.js');
+    const { dispatchUnblockedTasks: mockDispatch } = await import('../lib/dispatch.js');
+    mockRunTestAgent.mockRejectedValueOnce(new AllowlistViolationError('bash: rm -rf /'));
+    await runTaskTestJob(featureId, taskId, 'job-viol', 'server');
+    const task = await getPrisma().task.findUnique({ where: { id: taskId } });
+    expect(task?.testsWritten).toBe(false);
+    expect(task?.status).toBe('parked');
+    expect(task?.parkReason).toBe('allowlist_violation');
+    expect(mockDispatch).not.toHaveBeenCalled();
+    const events = await getPrisma().event.findMany({ where: { featureId } });
+    const failedEvt = events.find((e) => e.type === 'task.failed');
+    expect(failedEvt).not.toBeUndefined();
+    expect((failedEvt!.payload as { final: boolean }).final).toBe(false);
+  });
+
+  it('parks via bedrockPark on mid-run Bedrock credential expiry (rolls back testTaskAttempts)', async () => {
+    mockRunTestAgent.mockRejectedValueOnce(
+      new Error(
+        'Bedrock credentials expired. Refresh with:\n  aws sso login --profile ai-devtools-dev',
+      ),
+    );
+    await runTaskTestJob(featureId, taskId, 'job-bdrk-catch', 'server');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe('parked');
+    expect(task.parkReason).toBe('bedrock_unreachable');
+    expect(task.testsWritten).toBe(false);
+    // increment fires at job start (→ 1), bedrockPark decrements (→ 0)
+    expect(task.testTaskAttempts).toBe(0);
   });
 
   it('includes only task title and specRefs in agent context, not description', async () => {

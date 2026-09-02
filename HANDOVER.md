@@ -54,15 +54,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 24 — The test agent stops paying twice
+- **Current phase:** 25 — Tests exist before code, and the flag says so
 - **State:** `complete`
-- **Last updated:** 2026-09-01
+- **Last updated:** 2026-09-02
 
 ---
 
 ## Current phase progress
 
-*plan.md has no phase 25 yet — next phases pending plan update.*
+*plan.md has no phase 26 yet — next phases pending plan update.*
 
 ---
 
@@ -70,79 +70,69 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1128 passed across 86 files** (+3 new tests), 2026-09-01 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-01 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-01 |
+| `npm test` (repo root) | passed — **1130 passed across 86 files** (+5 new tests), 2026-09-02 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-02 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-02 |
 
 ---
 
 ## Decisions
 
-- **Test-agent rewrite cost measurement (Phase 24):** `scripts/measure-rewrite-cost.ts`
-  run against the local dev DB. Results across 5 recent features:
+- **Parking replaces the one-round cap (Phase 25)** — The old `taskTestJob.ts` catch
+  block wrote `testsWritten: true` on violation or after `testTaskAttempts >= 1`
+  (one-round cap), then dispatched the dev job. This meant `testsWritten` could be
+  `true` with no test files on disk. Now: all failure paths park the task
+  (`status: 'parked'`, no `testsWritten` change) and REDISPATCH retries the test-first
+  path. The `testTaskAttempts === 0` routing guard in `dispatch.ts:157` was the
+  mechanism for the old cap — removed so REDISPATCH re-enters the test job.
 
-  | Feature | Output tokens | Rewrite tokens | Rewrite % | Rewrote |
-  |---|---|---|---|---|
-  | b2262ace | 40,251 | 4,472 | 11.1% | worldClock.acceptance.test.tsx ×5 |
-  | 07f7ad96 | 15,760 | 0 | 0% | — |
-  | c1be95c8 | 17,489 | 0 | 0% | — |
-  | ffb01e01 | 19,408 | 719 | 3.7% | (harness brief only) |
-  | 58185ae5 | 25,672 | 2,232 | 8.7% | worldClock.acceptance.test.tsx ×2, probe.test.tsx ×3 |
+- **Zero-file success path parks (Phase 25)** — `taskTestJob.ts` previously wrote
+  `testsWritten: true` even when the agent ran successfully but committed no files
+  (`authoredFiles.length === 0`). Now parks with `parkReason: 'no_tests_authored'`.
+  The DoD says "no code path writes `testsWritten: true` without a test file authored".
 
-  Actual acceptance test file rewrites: 6–11% of output tokens in the worst case.
-  **Brief for "act on rewrite"**: measurement is below the 30% threshold; no
-  immediate code change needed. If a future feature exceeds 30%, strengthen the
-  `write_file` prohibition in `testAgent.ts:449` to: "Never use write_file on a
-  file you already wrote this session — use edit_file instead."
+- **Mid-run Bedrock error classified in catch block (Phase 25)** — `anthropic.ts`
+  re-throws credential expiry as `'Bedrock credentials expired. ...'`. The catch block
+  now checks `err.message.startsWith('Bedrock credentials expired')` and routes to
+  `parkTaskOnBedrockFailure` with attempt rollback — same treatment as the pre-agent
+  probe path.
 
-- **Scratch-file filter `SCRATCH_FILE_RE = /debug|scratch/i` (Phase 24)** — checked
-  against `path.basename(f)` after `TEST_FILE_RE`. Excludes `debug-clubs.test.js` and
-  `orderCardClubsListDebug.test.js` from `getAuthoredTestFilesForTask` and
-  `getAuthoredTestFiles`. Applied before the authored count and the `task.tests_written`
-  event payload. Prompt rule added to `testAgent.ts` to delete scratch files before
-  `end_turn`.
+- **Dev agent told not to write acceptance tests for covered tasks (Phase 25)** —
+  `coveredByTestPlan: boolean` added to `DevContext`. When true, `buildSystemPrompt`
+  injects a `## Test-first task` block telling the agent the tests already exist and
+  it must not author new ones. Threaded through both `measurePromptSections` and
+  `runDevAgent` calls in `devJob.ts`.
 
-- **`binary_sentinel` for worldclock repos updated (Phase 24)** — changed from
-  `node_modules/.bin/vitest` (a symlink, present after any install regardless of ABI) to
-  `node_modules/@rolldown/binding-linux-arm64-musl/rolldown-binding.linux-arm64-musl.node`.
-  Verified: worldclock repos use vitest 4.x which bundles Rolldown; the binding file is
-  `rolldown-binding.linux-arm64-musl.node`. Comment added to `repo-manifest.example.yaml`
-  explaining the anti-pattern.
+- **Park reason values (Phase 25):** `'no_tests_authored'`, `'allowlist_violation'`,
+  `'test_agent_failed'` — all `final: false` (recoverable by REDISPATCH). No schema
+  change needed; `parkReason` is a free-text string column.
 
-- **`bff` vendored layer exception committed (Phase 24)** — `bff/CLAUDE.md` on branch
-  `version11/11.10.0/update-claude-md` (the `default_branch` agents read) now states that
-  `graphql/layers/*/nodejs/node_modules/` is vendored source, not installed packages.
-  Commit: `8655de932`.
+- **`testsWritten` read/write audit (Phase 25):**
 
-- **`validateProbeCommands` validates via `detectJsonCommand` (Phase 23)** —
-  `inferRunner` checked for 'vitest'/'jest' in the probe string, rejecting valid probes
-  like `npm test -- --maxWorkers=2`. New validator calls `detectJsonCommand('', probe)` —
-  any non-empty probe passes.
+  Writes (after fix):
+  | Site | Condition |
+  |---|---|
+  | `taskTestJob.ts` success path | Only when `authoredFiles.length > 0` |
 
-- **Config validation failure → `process.exit(1)` with a readable message (Phase 23)** —
-  `agentWorker.ts` catches the throw and exits deliberately: `Config error: <message>`.
+  Reads:
+  | Site | Meaning |
+  |---|---|
+  | `taskTestJob.ts:88` | Idempotency gate — skip if already written |
+  | `dispatch.ts` | Route to test-task if `!testsWritten` (no `testTaskAttempts` guard after fix) |
+  | `taskReconciler.ts` | Orphan counter selection — `testTaskAttempts` vs `attemptCount` |
+  | `devJob.ts:873` | Noop-success → `awaiting_tests` |
+  | `devJob.ts:945` | Gate for per-task acceptance test run |
+  | `devJob.ts:1010` | Post-commit guard → `awaiting_tests` |
+  | `featureTasks.ts` | API serialization |
+  | `eventFold.ts:76` | Test agent display → `'done'` |
+  | `TaskTable.tsx` | "TDD ✓ tests" badge |
 
-- **Charter inventory (Phase 23):**
-
-  | File | Kind | Loaded by |
-  |---|---|---|
-  | `docs/agents/aws-charter.example.md` | Committed template | Nobody — operator copies to `aws-charter.md` |
-  | `docs/agents/aws-charter.md` | Operator config (gitignored) | `awsAgent.ts` via `charterPath` arg at job dispatch |
-  | `docs/agents/repo-manifest.example.yaml` | Committed template | Nobody — operator copies to `repo-manifest.yaml` |
-  | `docs/agents/repo-manifest.yaml` | Operator config (gitignored) | `devJob.ts` (`getRepoEntry`), `validateManifest.ts`, `charterResolver.ts` |
-  | `docs/agents/review-charter.md` | Committed agent prompt | `reviewAgent.ts` (hardcoded path) |
-  | `docs/agents/test-charter.md` | Committed documentation | Not loaded in production; test fixture |
-
-- **Startup config reads (Phase 22/23):**
-
-  | Config source | Read location | Missing/malformed → |
-  |---|---|---|
-  | `repo-manifest.yaml` | `validateProbeCommands` (boot) | absent: silent return; invalid YAML: throws |
-  | `repo-manifest.yaml` | `resolveCharterPath` (per-feature) | absent: `undefined`; charter file missing: throws |
-  | `repo-manifest.yaml` | `getRepoEntry` / `getAnyRepoEntry` (per-job) | absent or repo not found: throws |
-  | `probe_command` field | `validateProbeCommands` (boot) | absent: exits `Config error:`; any non-empty: passes |
-  | `probe_command` field | `detectJsonCommand` (per-task) | absent: throws |
-  | Env vars (`.env`) | `lib/env.ts` at process start | absent required var: Zod throws at boot |
+- **Test mock pollution fix (Phase 25)** — `taskTestJob.test.ts` `beforeEach` now
+  restores `execFileSync` to the default git-dispatching implementation before each
+  test. Two tests (`git helper maxBuffer` and `git ENOBUFS`) used `mockImplementation`
+  without cleanup, polluting the R-25 `bullJobId` test. Also clears
+  `dispatchUnblockedTasks` call history so `not.toHaveBeenCalled()` assertions are
+  isolated.
 
 - **Finding identity is composite (featureId, specRev, id)** — model-assigned finding
   ids (`f1`, `f2`) recur in every review cycle. Lookups must use the composite key; a
@@ -204,7 +194,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 21 | Orrery is neutral; organisational policy is operator config | pending | 2026-08-31 |
 | 22 | Recovery is one click, and failures say why | `593dc75` | 2026-09-01 |
 | 23 | Config validation that fits reality | `48f540f` | 2026-09-01 |
-| 24 | The test agent stops paying twice | pending | 2026-09-01 |
+| 24 | The test agent stops paying twice | `657c09e` | 2026-09-01 |
+| 25 | Tests exist before code, and the flag says so | pending | 2026-09-02 |
 
 ---
 
@@ -217,3 +208,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   is running.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
 - A restart mid-dispatch produces exactly one container.
+- A feature whose test agent fails parks without the dev agent running.

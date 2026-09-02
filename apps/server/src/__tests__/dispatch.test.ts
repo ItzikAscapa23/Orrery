@@ -341,13 +341,20 @@ describe('dispatchUnblockedTasks — coverage routing', () => {
     expect(mockEnqueueJob).toHaveBeenCalledWith('cov-feat-3', 'server-dev', expect.any(Object));
   });
 
-  it('dispatches server-dev for covered task with testsWritten=false but testTaskAttempts>0', async () => {
-    // A task that already had a test-task attempt (failed) must bypass the test
-    // job and go straight to the dev job — prevents infinite re-routing.
+  it('dispatches server-test-task for covered task with testsWritten=false even when testTaskAttempts>0', async () => {
+    // Parking replaces the old one-round cap — a task parked by a failed test-task
+    // run is pending=false (parked), not pending=true, so it won't be dispatched here.
+    // But if somehow a covered task arrives pending with testTaskAttempts>0 (e.g. after
+    // a manual recovery that resets status without resetting the flag), it should still
+    // go to the test job, not the dev job.
     const taskId = await makeFeatureWithTask('cov-feat-4', true, false);
     await getPrisma().task.update({ where: { id: taskId }, data: { testTaskAttempts: 1 } });
     await dispatchUnblockedTasks('cov-feat-4', 'server');
-    expect(mockEnqueueJob).toHaveBeenCalledWith('cov-feat-4', 'server-dev', expect.any(Object));
+    expect(mockEnqueueJob).toHaveBeenCalledWith(
+      'cov-feat-4',
+      'server-test-task',
+      expect.any(Object),
+    );
   });
 
   it('does not log dispatch_no_tasks when all tasks are awaiting_tests (R-25)', async () => {

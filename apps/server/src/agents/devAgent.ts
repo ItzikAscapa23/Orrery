@@ -156,6 +156,10 @@ export interface DevContext {
   // Optional: manifest probe_command for this repo. When set, its extra flags
   // (e.g. --maxWorkers=2) are grafted onto every agent-issued test command.
   probeCommand?: string;
+  // When true, the test agent has already authored acceptance tests for this
+  // task. The dev agent must not write new test files — its job is to make the
+  // existing acceptance tests pass.
+  coveredByTestPlan?: boolean;
 }
 
 // Discriminated union returned by runDevAgent (formerly runServerDevAgent).
@@ -244,6 +248,16 @@ export function buildSystemPrompt(task: DevTask, ctx: DevContext): string {
     `Description: ${task.description}`,
     task.specRefs.length > 0 ? `Spec refs: ${task.specRefs.join(', ')}` : '',
     '',
+    ...(ctx.coveredByTestPlan
+      ? [
+          '## Test-first task',
+          'The test agent has already written acceptance tests for this task.',
+          'Do NOT write new test files or author acceptance tests — the test files already exist.',
+          'Your job is to implement production code so that the existing acceptance tests pass.',
+          'Run `npm test`. When acceptance tests pass, call end_turn.',
+          '',
+        ]
+      : []),
     '## Rules',
     '- Implement only what this task requires. Do not change unrelated code.',
     '- Run `npm test` after implementation. Fix all failures.',
