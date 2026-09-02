@@ -228,7 +228,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 23 | Config validation that fits reality | `48f540f` | 2026-09-01 |
 | 24 | The test agent stops paying twice (tasks 91–93) | `657c09e` | 2026-09-01 |
 | 25 | Tests exist before code, and the flag says so | `f2a30d4` | 2026-09-02 |
-| 26 | The test agent stops paying twice (measurement + prompt fix) | pending | 2026-09-03 |
+| 26 | The test agent stops paying twice (measurement + prompt fix) | `d55a601` | 2026-09-03 |
 
 ---
 
