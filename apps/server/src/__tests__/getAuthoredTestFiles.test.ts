@@ -76,4 +76,26 @@ describe('getAuthoredTestFiles — scratch-file filter', () => {
 
     expect(result).toContain(realFile);
   });
+
+  it('retains debugPanel.test.ts — "debug" is a camelCase prefix, not a standalone scratch label', async () => {
+    const realFile = 'src/__tests__/debugPanel.test.ts';
+
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValue(`\n${realFile}\n`);
+
+    const result = getAuthoredTestFiles('/fake/worktree', 'src/__tests__');
+
+    expect(result).toContain(realFile);
+  });
+
+  it('retains scratchpadReducer.test.ts — "scratch" is embedded in a compound word, not a standalone label', async () => {
+    const realFile = 'src/__tests__/scratchpadReducer.test.ts';
+
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValue(`\n${realFile}\n`);
+
+    const result = getAuthoredTestFiles('/fake/worktree', 'src/__tests__');
+
+    expect(result).toContain(realFile);
+  });
 });

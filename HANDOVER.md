@@ -54,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 26 — The test agent stops paying twice
+- **Current phase:** 27 — The scratch filter excludes only scratch
 - **State:** `complete`
 - **Last updated:** 2026-09-03
 
@@ -62,7 +62,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*plan.md has no phase 27 yet — next phases pending plan update.*
+*plan.md has no phase 28 yet — next phases pending plan update.*
 
 ---
 
@@ -70,7 +70,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1130 passed across 86 files**, 2026-09-03 |
+| `npm test` (repo root) | passed — **1132 passed across 86 files**, 2026-09-03 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-03 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-03 |
 
@@ -78,102 +78,41 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
-- **Tasks 91/92/93 were already implemented in phase 24 (`657c09e`)** — Phase 24
-  ran out of order before phase 25 was inserted, implementing scratch-file filter
-  (`SCRATCH_FILE_RE`), bff vendored-layer exception, and ABI-specific binary
-  sentinels. Phase 26 verified these and added the remaining new work.
+- **Scratch filter narrowed to standalone-word match (Phase 27)** — `SCRATCH_FILE_RE`
+  changed from `/debug|scratch/i` to `/(?:debug|scratch)(?![a-zA-Z0-9])/i`. The
+  negative lookahead ensures "debug" or "scratch" matches only as a standalone word or
+  terminal camelCase segment (e.g. `debug-clubs.test.js`, `orderCardClubsListDebug.test.js`)
+  but not when embedded in a compound name (`debugPanel.test.ts`, `scratchpadReducer.test.ts`).
+  Defined once at `testJob.ts:73`, applied at `:94` and `:114`.
 
-- **Scratch-file filter: basename-only check (Phase 24/26)** — `SCRATCH_FILE_RE =
-  /debug|scratch/i` is applied via `path.basename(f)` in `getAuthoredTestFilesForTask`
-  (`testJob.ts:94`). Basename-only avoids false-positives from directory names like
-  `test/debug-scenarios/`.
+- **Rewrite measurement follow-up (Phase 27)** — The `## Iterating on test files`
+  prompt block (added Phase 26) instructs the test agent to edit rather than rewrite.
+  Re-measure using `scripts/measure-rewrite-cost.ts` after 3–5 new feature runs complete.
+  The instruction will be considered to have failed if any feature shows ≥10% rewrite
+  share on non-scratch test files. Instruction-only changes have not held before
+  (the node_modules prohibition, the pipe/redirect rules) — if the threshold is crossed,
+  replace with a structural fix (e.g. read-file before write-file enforcement).
+
+- **Scratch-file filter: basename-only check (Phase 24/26)** — Applied via
+  `path.basename(f)` in both `getAuthoredTestFilesForTask` and `getAuthoredTestFiles`
+  (`testJob.ts:94`, `:114`). Basename-only avoids false-positives from directory names.
 
 - **Binary sentinel is ABI-specific (Phase 24/26)** — Both `worldclock-server` and
   `worldclock-web` use `node_modules/@rolldown/binding-linux-arm64-musl/rolldown-binding.linux-arm64-musl.node`.
-  This is the Rolldown native module (vitest 3.x), present only after a correct
-  linux-musl install. The `repo-manifest.example.yaml` shows the Rollup variant
-  (`@rollup/rollup-linux-arm64-musl`) — different package for vitest 1.x–2.x repos.
+  Present only after a correct linux-musl install. `repo-manifest.example.yaml` shows
+  the Rollup variant (`@rollup/rollup-linux-arm64-musl`) for vitest 1.x–2.x repos.
 
-- **Vendored layer exception in bff CLAUDE.md (Phase 24/26)** — `graphql/layers/*/nodejs/node_modules/`
-  in the bff repo contains vendored source (Lambda layers), not installed packages.
-  The "node_modules is off-limits" rule does NOT apply to these paths; stated explicitly
-  in bff's CLAUDE.md under `## Vendored layer dependencies` (read via
-  `git show version11/11.10.0/update-claude-md:CLAUDE.md`).
+- **Parking replaces the one-round cap (Phase 25)** — All failure paths in
+  `taskTestJob.ts` park the task (`status: 'parked'`, no `testsWritten` change) and
+  REDISPATCH retries the test-first path. The old `testTaskAttempts === 0` routing
+  guard in `dispatch.ts:157` was removed.
 
-- **Rewrite cost measurement (Phase 26)** — `scripts/measure-rewrite-cost.ts`
-  (already present from phase 24) was run against the dev DB. Results across 5 features:
+- **`testsWritten` read/write audit (Phase 25)** — Only written in `taskTestJob.ts`
+  success path when `authoredFiles.length > 0`. Any `testsWritten: true` without a
+  committed test file is a bug.
 
-  | feature | output tokens | rewrite tokens | rewrite % | turns | rewritten files |
-  |---|---|---|---|---|---|
-  | `7d1146f5` | 35,077 | 585 | 1.7% | 60 | `__orrery_harness_brief.md`×2 |
-  | `8d4e39dc` | 38,869 | 6,031 | 15.5% | 58 | `countries.test.ts`×2, `country-selector.test.tsx`×3, `debug-render.test.tsx`×5 |
-  | `b2262ace` | 40,251 | 4,472 | 11.1% | 63 | `worldClock.acceptance.test.tsx`×5 |
-  | `07f7ad96` | 15,760 | 0 | 0.0% | 24 | none |
-  | `c1be95c8` | 17,489 | 0 | 0.0% | 29 | none |
-
-  Note: `debug-render.test.tsx` (×5 rewrites in `8d4e39dc`) is a scratch file —
-  filtered from `authoredFiles` by `SCRATCH_FILE_RE`, not visible to the operator.
-  The feature `f78613cd` from the plan spec has no events in the current DB.
-
-- **Rewrite fix: prompt instruction added (Phase 26)** — Measurement showed 2 of 5
-  features with significant rewrite fractions (11–15%). Added `## Iterating on test
-  files` section to `taskContext` in `taskTestJob.ts` (after the harness-brief
-  if/else, before `runTestAgent`). Instructs the agent to read existing file contents
-  first and make targeted edits rather than rewriting from scratch.
-
-- **Parking replaces the one-round cap (Phase 25)** — The old `taskTestJob.ts` catch
-  block wrote `testsWritten: true` on violation or after `testTaskAttempts >= 1`
-  (one-round cap), then dispatched the dev job. This meant `testsWritten` could be
-  `true` with no test files on disk. Now: all failure paths park the task
-  (`status: 'parked'`, no `testsWritten` change) and REDISPATCH retries the test-first
-  path. The `testTaskAttempts === 0` routing guard in `dispatch.ts:157` was the
-  mechanism for the old cap — removed so REDISPATCH re-enters the test job.
-
-- **Zero-file success path parks (Phase 25)** — `taskTestJob.ts` previously wrote
-  `testsWritten: true` even when the agent ran successfully but committed no files
-  (`authoredFiles.length === 0`). Now parks with `parkReason: 'no_tests_authored'`.
-  The DoD says "no code path writes `testsWritten: true` without a test file authored".
-
-- **Mid-run Bedrock error classified in catch block (Phase 25)** — `anthropic.ts`
-  re-throws credential expiry as `'Bedrock credentials expired. ...'`. The catch block
-  now checks `err.message.startsWith('Bedrock credentials expired')` and routes to
-  `parkTaskOnBedrockFailure` with attempt rollback — same treatment as the pre-agent
-  probe path.
-
-- **Dev agent told not to write acceptance tests for covered tasks (Phase 25)** —
-  `coveredByTestPlan: boolean` added to `DevContext`. When true, `buildSystemPrompt`
-  injects a `## Test-first task` block telling the agent the tests already exist and
-  it must not author new ones. Threaded through both `measurePromptSections` and
-  `runDevAgent` calls in `devJob.ts`.
-
-- **`testsWritten` read/write audit (Phase 25):**
-
-  Writes (after fix):
-  | Site | Condition |
-  |---|---|
-  | `taskTestJob.ts` success path | Only when `authoredFiles.length > 0` |
-
-  Reads:
-  | Site | Meaning |
-  |---|---|
-  | `taskTestJob.ts:88` | Idempotency gate — skip if already written |
-  | `dispatch.ts` | Route to test-task if `!testsWritten` (no `testTaskAttempts` guard after fix) |
-  | `taskReconciler.ts` | Orphan counter selection — `testTaskAttempts` vs `attemptCount` |
-  | `devJob.ts:873` | Noop-success → `awaiting_tests` |
-  | `devJob.ts:945` | Gate for per-task acceptance test run |
-  | `devJob.ts:1010` | Post-commit guard → `awaiting_tests` |
-  | `featureTasks.ts` | API serialization |
-  | `eventFold.ts:76` | Test agent display → `'done'` |
-  | `TaskTable.tsx` | "TDD ✓ tests" badge |
-
-- **Finding identity is composite (featureId, specRev, id)** — model-assigned finding
-  ids (`f1`, `f2`) recur in every review cycle. Lookups must use the composite key; a
-  plain `where: { id }` is always a bug.
-
-- **Task-derived agent status applied after event-sourced fold; skip `working → done`
-  override** — the feature-level test job emits `agent.status(working)` after task rows
-  show `testsWritten: true`. Merging must not override an existing `'working'` with
-  task-derived `'done'`.
+- **Finding identity is composite (featureId, specRev, id)** — Model-assigned ids
+  (`f1`, `f2`) recur across cycles. A plain `where: { id }` on findings is always a bug.
 
 - **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — CLAUDE.md
   prose-inference fallback removed. Any active full-path repo without `probe_command`
@@ -229,6 +168,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 24 | The test agent stops paying twice (tasks 91–93) | `657c09e` | 2026-09-01 |
 | 25 | Tests exist before code, and the flag says so | `f2a30d4` | 2026-09-02 |
 | 26 | The test agent stops paying twice (measurement + prompt fix) | `d55a601` | 2026-09-03 |
+| 27 | The scratch filter excludes only scratch | pending | 2026-09-03 |
 
 ---
 

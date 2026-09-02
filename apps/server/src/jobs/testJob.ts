@@ -70,7 +70,9 @@ function pushBranch(worktreePath: string, branch: string): void {
 const TEST_FILE_RE = /\.(test|spec)\./;
 // Excludes debug/scratch files created by agents as temporary investigation aids.
 // Checked against the basename only to avoid false-positives from directory names.
-const SCRATCH_FILE_RE = /debug|scratch/i;
+// Negative lookahead ensures "debug" or "scratch" is a standalone word or terminal camelCase
+// segment, not a prefix in a compound name (e.g. debugPanel or scratchpadReducer are real files).
+const SCRATCH_FILE_RE = /(?:debug|scratch)(?![a-zA-Z0-9])/i;
 
 export function getAuthoredTestFilesForTask(
   worktreePath: string,
