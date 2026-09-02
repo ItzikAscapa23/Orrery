@@ -285,6 +285,13 @@ export async function runTaskTestJob(
         `Do not re-read the files listed above — this brief already captures what you need.`;
     }
 
+    taskContext +=
+      `\n\n## Iterating on test files\n` +
+      `If you need to update a test file you have already written in this session, ` +
+      `read its current contents first and make targeted edits with write_file rather ` +
+      `than writing the whole file from scratch. Rewriting from scratch loses the ` +
+      `red→green iteration context and spends turns on unchanged boilerplate.`;
+
     const existingTestFiles = getExistingTestFilesWithDescribes(worktreePath, testDir);
     await runTestAgent(
       featureId,

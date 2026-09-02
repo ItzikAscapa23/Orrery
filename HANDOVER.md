@@ -54,15 +54,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 25 — Tests exist before code, and the flag says so
+- **Current phase:** 26 — The test agent stops paying twice
 - **State:** `complete`
-- **Last updated:** 2026-09-02
+- **Last updated:** 2026-09-03
 
 ---
 
 ## Current phase progress
 
-*plan.md has no phase 26 yet — next phases pending plan update.*
+*plan.md has no phase 27 yet — next phases pending plan update.*
 
 ---
 
@@ -70,13 +70,56 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1130 passed across 86 files** (+5 new tests), 2026-09-02 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-02 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-02 |
+| `npm test` (repo root) | passed — **1130 passed across 86 files**, 2026-09-03 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-03 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-03 |
 
 ---
 
 ## Decisions
+
+- **Tasks 91/92/93 were already implemented in phase 24 (`657c09e`)** — Phase 24
+  ran out of order before phase 25 was inserted, implementing scratch-file filter
+  (`SCRATCH_FILE_RE`), bff vendored-layer exception, and ABI-specific binary
+  sentinels. Phase 26 verified these and added the remaining new work.
+
+- **Scratch-file filter: basename-only check (Phase 24/26)** — `SCRATCH_FILE_RE =
+  /debug|scratch/i` is applied via `path.basename(f)` in `getAuthoredTestFilesForTask`
+  (`testJob.ts:94`). Basename-only avoids false-positives from directory names like
+  `test/debug-scenarios/`.
+
+- **Binary sentinel is ABI-specific (Phase 24/26)** — Both `worldclock-server` and
+  `worldclock-web` use `node_modules/@rolldown/binding-linux-arm64-musl/rolldown-binding.linux-arm64-musl.node`.
+  This is the Rolldown native module (vitest 3.x), present only after a correct
+  linux-musl install. The `repo-manifest.example.yaml` shows the Rollup variant
+  (`@rollup/rollup-linux-arm64-musl`) — different package for vitest 1.x–2.x repos.
+
+- **Vendored layer exception in bff CLAUDE.md (Phase 24/26)** — `graphql/layers/*/nodejs/node_modules/`
+  in the bff repo contains vendored source (Lambda layers), not installed packages.
+  The "node_modules is off-limits" rule does NOT apply to these paths; stated explicitly
+  in bff's CLAUDE.md under `## Vendored layer dependencies` (read via
+  `git show version11/11.10.0/update-claude-md:CLAUDE.md`).
+
+- **Rewrite cost measurement (Phase 26)** — `scripts/measure-rewrite-cost.ts`
+  (already present from phase 24) was run against the dev DB. Results across 5 features:
+
+  | feature | output tokens | rewrite tokens | rewrite % | turns | rewritten files |
+  |---|---|---|---|---|---|
+  | `7d1146f5` | 35,077 | 585 | 1.7% | 60 | `__orrery_harness_brief.md`×2 |
+  | `8d4e39dc` | 38,869 | 6,031 | 15.5% | 58 | `countries.test.ts`×2, `country-selector.test.tsx`×3, `debug-render.test.tsx`×5 |
+  | `b2262ace` | 40,251 | 4,472 | 11.1% | 63 | `worldClock.acceptance.test.tsx`×5 |
+  | `07f7ad96` | 15,760 | 0 | 0.0% | 24 | none |
+  | `c1be95c8` | 17,489 | 0 | 0.0% | 29 | none |
+
+  Note: `debug-render.test.tsx` (×5 rewrites in `8d4e39dc`) is a scratch file —
+  filtered from `authoredFiles` by `SCRATCH_FILE_RE`, not visible to the operator.
+  The feature `f78613cd` from the plan spec has no events in the current DB.
+
+- **Rewrite fix: prompt instruction added (Phase 26)** — Measurement showed 2 of 5
+  features with significant rewrite fractions (11–15%). Added `## Iterating on test
+  files` section to `taskContext` in `taskTestJob.ts` (after the harness-brief
+  if/else, before `runTestAgent`). Instructs the agent to read existing file contents
+  first and make targeted edits rather than rewriting from scratch.
 
 - **Parking replaces the one-round cap (Phase 25)** — The old `taskTestJob.ts` catch
   block wrote `testsWritten: true` on violation or after `testTaskAttempts >= 1`
@@ -103,10 +146,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   it must not author new ones. Threaded through both `measurePromptSections` and
   `runDevAgent` calls in `devJob.ts`.
 
-- **Park reason values (Phase 25):** `'no_tests_authored'`, `'allowlist_violation'`,
-  `'test_agent_failed'` — all `final: false` (recoverable by REDISPATCH). No schema
-  change needed; `parkReason` is a free-text string column.
-
 - **`testsWritten` read/write audit (Phase 25):**
 
   Writes (after fix):
@@ -126,13 +165,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   | `featureTasks.ts` | API serialization |
   | `eventFold.ts:76` | Test agent display → `'done'` |
   | `TaskTable.tsx` | "TDD ✓ tests" badge |
-
-- **Test mock pollution fix (Phase 25)** — `taskTestJob.test.ts` `beforeEach` now
-  restores `execFileSync` to the default git-dispatching implementation before each
-  test. Two tests (`git helper maxBuffer` and `git ENOBUFS`) used `mockImplementation`
-  without cleanup, polluting the R-25 `bullJobId` test. Also clears
-  `dispatchUnblockedTasks` call history so `not.toHaveBeenCalled()` assertions are
-  isolated.
 
 - **Finding identity is composite (featureId, specRev, id)** — model-assigned finding
   ids (`f1`, `f2`) recur in every review cycle. Lookups must use the composite key; a
@@ -194,8 +226,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 21 | Orrery is neutral; organisational policy is operator config | pending | 2026-08-31 |
 | 22 | Recovery is one click, and failures say why | `593dc75` | 2026-09-01 |
 | 23 | Config validation that fits reality | `48f540f` | 2026-09-01 |
-| 24 | The test agent stops paying twice | `657c09e` | 2026-09-01 |
+| 24 | The test agent stops paying twice (tasks 91–93) | `657c09e` | 2026-09-01 |
 | 25 | Tests exist before code, and the flag says so | `f2a30d4` | 2026-09-02 |
+| 26 | The test agent stops paying twice (measurement + prompt fix) | pending | 2026-09-03 |
 
 ---
 
