@@ -212,8 +212,12 @@ describe('checkTestBashAllowed — test-agent bash enforcement', () => {
     expect(() => checkTestBashAllowed('grep foo src/')).toThrow(TestAllowlistViolationError);
   });
 
-  it('rejects pipe metacharacter', () => {
-    expect(() => checkTestBashAllowed('npm test | head -20')).toThrow(TestMetacharViolationError);
+  it('rejects non-exempt pipe metacharacter', () => {
+    expect(() => checkTestBashAllowed('npm test | grep error')).toThrow(TestMetacharViolationError);
+  });
+
+  it('allows trailing | head -N (output-shaping exemption, same as dev agent)', () => {
+    expect(() => checkTestBashAllowed('npm test | head -20')).not.toThrow();
   });
 
   it('accepts "npx jest --ci ... 2>&1" — 2>&1 must not trigger metachar', () => {

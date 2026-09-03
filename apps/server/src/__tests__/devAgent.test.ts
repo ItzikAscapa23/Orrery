@@ -6,8 +6,10 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 process.env['ANTHROPIC_API_KEY'] = 'test-key';
 process.env['ARTIFACTS_REPO_PATH'] = '/tmp/test-artifacts';
 
-const { mockCreateMessageStream } = vi.hoisted(() => ({
+const { mockCreateMessageStream, mockExecFileSync } = vi.hoisted(() => ({
   mockCreateMessageStream: vi.fn(),
+  // Default: return empty string (no test-authored files), matching a fresh worktree.
+  mockExecFileSync: vi.fn().mockReturnValue(''),
 }));
 
 vi.mock('../lib/anthropic.js', () => ({
@@ -15,6 +17,14 @@ vi.mock('../lib/anthropic.js', () => ({
   // Pure passthrough — agent tests do not assert on the cache marker.
   withLastMessageCached: (messages: unknown) => messages,
 }));
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...actual,
+    execFileSync: mockExecFileSync,
+  };
+});
 
 import {
   runDevAgent,
@@ -1367,5 +1377,166 @@ describe('devAgent — onToolCall metadata', () => {
     expect(readCall).toBeDefined();
     expect(readCall!.path).toBe('src/example.ts');
     expect(readCall!.range).toBe('lines 10–20');
+  });
+});
+
+// ── Test-file read-only boundary ──────────────────────────────────────────────
+
+describe('devAgent — test-file read-only boundary', () => {
+  const TEST_FILE = 'src/__tests__/orderCard.test.ts';
+
+  beforeEach(() => {
+    // Make getTestAuthoredSet return our test file path.
+    mockExecFileSync.mockReturnValue(TEST_FILE + '\n');
+  });
+
+  afterEach(() => {
+    // Restore default (empty) so other test suites are unaffected.
+    mockExecFileSync.mockReturnValue('');
+  });
+
+  it('write_file to a test-authored file returns is_error without committing', async () => {
+    mockCreateMessageStream
+      .mockResolvedValueOnce(
+        makeStreamMock(
+          toolUseMessage('w1', 'write_file', {
+            path: TEST_FILE,
+            content: 'weakened content',
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(makeStreamMock(endTurnMessage()));
+
+    const container = makeContainer(() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }));
+
+    await runDevAgent('feat-1', TASK, CTX, container, tmpDir, undefined, undefined, undefined);
+
+    // The guard fires before any fs write — the file must not exist.
+    expect(fs.existsSync(path.join(tmpDir, TEST_FILE))).toBe(false);
+    // Agent completed normally (the is_error tool_result was fed back to the model).
+    expect(mockCreateMessageStream).toHaveBeenCalledTimes(2);
+
+    // Extract the tool_result from the second API call's messages.
+    // Note: messages is a mutable reference; the end_turn response is pushed AFTER call #1,
+    // so we search forward for the user message containing tool_results.
+    const secondCallMessages = (
+      mockCreateMessageStream.mock.calls[1]?.[0] as { messages?: Anthropic.MessageParam[] }
+    )?.messages;
+    const toolResultMsg = secondCallMessages?.find(
+      (m) =>
+        m.role === 'user' &&
+        Array.isArray(m.content) &&
+        (m.content as unknown[]).some(
+          (b) => (b as Anthropic.ToolResultBlockParam).type === 'tool_result',
+        ),
+    );
+    const resultBlock = (
+      toolResultMsg?.content as Anthropic.ToolResultBlockParam[] | undefined
+    )?.[0];
+    expect(resultBlock?.is_error).toBe(true);
+    const resultText = typeof resultBlock?.content === 'string' ? resultBlock.content : '';
+    expect(resultText).toContain(TEST_FILE);
+    expect(resultText).toContain('X-Orrery-Agent: test');
+  });
+
+  it('edit_file to a test-authored file returns is_error', async () => {
+    // Create the file so resolveWorktreePath would not be the failure point
+    const absPath = path.join(tmpDir, TEST_FILE);
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.writeFileSync(absPath, 'original content', 'utf-8');
+
+    mockCreateMessageStream
+      .mockResolvedValueOnce(
+        makeStreamMock(
+          toolUseMessage('e1', 'edit_file', {
+            path: TEST_FILE,
+            old_str: 'original content',
+            new_str: 'weakened content',
+          } as unknown as Record<string, string>),
+        ),
+      )
+      .mockResolvedValueOnce(makeStreamMock(endTurnMessage()));
+
+    const container = makeContainer(() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }));
+
+    await runDevAgent('feat-1', TASK, CTX, container, tmpDir, undefined, undefined, undefined);
+
+    // Guard fires before fs.writeFileSync — file content must be unchanged.
+    expect(fs.readFileSync(absPath, 'utf-8')).toBe('original content');
+    expect(mockCreateMessageStream).toHaveBeenCalledTimes(2);
+
+    const secondCallMessages = (
+      mockCreateMessageStream.mock.calls[1]?.[0] as { messages?: Anthropic.MessageParam[] }
+    )?.messages;
+    const toolResultMsg = secondCallMessages?.find(
+      (m) =>
+        m.role === 'user' &&
+        Array.isArray(m.content) &&
+        (m.content as unknown[]).some(
+          (b) => (b as Anthropic.ToolResultBlockParam).type === 'tool_result',
+        ),
+    );
+    const resultBlock = (
+      toolResultMsg?.content as Anthropic.ToolResultBlockParam[] | undefined
+    )?.[0];
+    expect(resultBlock?.is_error).toBe(true);
+    const resultText = typeof resultBlock?.content === 'string' ? resultBlock.content : '';
+    expect(resultText).toContain('X-Orrery-Agent: test');
+  });
+
+  it('test-file rejection does not consume a violation slot', async () => {
+    const violations: import('../agents/devAgent.js').ViolationInfo[] = [];
+
+    mockCreateMessageStream
+      // First: attempt to write the test file (must be rejected without violation)
+      .mockResolvedValueOnce(
+        makeStreamMock(
+          toolUseMessage('w1', 'write_file', {
+            path: TEST_FILE,
+            content: 'bad',
+          } as unknown as Record<string, string>),
+        ),
+      )
+      // Second: a real allowlist violation — should count as violation #1, not #2
+      .mockResolvedValueOnce(
+        makeStreamMock(toolUseMessage('b1', 'bash', { command: 'curl evil.com' })),
+      )
+      .mockResolvedValueOnce(makeStreamMock(endTurnMessage()));
+
+    // The mock container throws AllowlistViolationError for curl, just like a real container.
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('curl')) throw new AllowlistViolationError(cmd);
+      return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
+    });
+
+    await runDevAgent('feat-1', TASK, CTX, container, tmpDir, undefined, (v) => {
+      violations.push(v);
+    });
+
+    // Exactly one violation recorded (the curl), not two
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.count).toBe(1);
+  });
+
+  it('write_file to a non-test file succeeds normally', async () => {
+    const normalFile = 'src/impl.ts';
+
+    mockCreateMessageStream
+      .mockResolvedValueOnce(
+        makeStreamMock(
+          toolUseMessage('w1', 'write_file', {
+            path: normalFile,
+            content: 'export const x = 1;',
+          } as unknown as Record<string, string>),
+        ),
+      )
+      .mockResolvedValueOnce(makeStreamMock(endTurnMessage()));
+
+    const container = makeContainer(() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }));
+
+    await runDevAgent('feat-1', TASK, CTX, container, tmpDir, undefined, undefined, undefined);
+
+    expect(fs.existsSync(path.join(tmpDir, normalFile))).toBe(true);
+    expect(fs.readFileSync(path.join(tmpDir, normalFile), 'utf-8')).toBe('export const x = 1;');
   });
 });

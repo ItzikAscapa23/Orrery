@@ -242,6 +242,41 @@ describe('container — distinct error messages', () => {
     const c = startContainer('/tmp/fake', 'test-task');
     await expect(c.exec('node script.js')).resolves.not.toThrow();
   });
+
+  it('allows trailing | head -N (output-shaping no-op)', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('npm test | head -20')).resolves.not.toThrow();
+  });
+
+  it('allows trailing | tail -N (output-shaping no-op)', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('npm test | tail -5')).resolves.not.toThrow();
+  });
+
+  it('allows trailing | head -n N (POSIX form)', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('npm test | head -n 10')).resolves.not.toThrow();
+  });
+
+  it('allows trailing | tail N (bare number)', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('npm test | tail 50')).resolves.not.toThrow();
+  });
+
+  it('rejects bare | head with no numeric argument', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('npm test | head')).rejects.toThrow(MetacharViolationError);
+  });
+
+  it('rejects | grep (non-head/tail pipe)', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('npm test | grep error')).rejects.toThrow(MetacharViolationError);
+  });
+
+  it('rejects mid-command pipe (not trailing)', async () => {
+    const c = startContainer('/tmp/fake', 'test-task');
+    await expect(c.exec('cat log | head -5 | tail -1')).rejects.toThrow(MetacharViolationError);
+  });
 });
 
 // ── metaCharGuidance ─────────────────────────────────────────────────────────
@@ -260,6 +295,11 @@ describe('metaCharGuidance', () => {
   it('"|" guidance confirms 2>&1 is permitted', () => {
     const msg = metaCharGuidance('|');
     expect(msg).toContain('2>&1');
+  });
+
+  it('"|" guidance mentions head/tail exemption', () => {
+    const msg = metaCharGuidance('|');
+    expect(msg).toMatch(/head.*tail|tail.*head/i);
   });
 });
 

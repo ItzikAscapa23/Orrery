@@ -99,8 +99,11 @@ export async function summarizeBashTestRun(
 ): Promise<string | null> {
   // Bail out for commands with shell metachars — they must go through
   // container.exec so the MetacharViolationError path fires normally.
-  // Strip 2>&1 first (same exemption as container.ts:114).
-  const sanitized = command.trim().replace(/2>&1/g, '');
+  // Strip the same exemptions as checkMetachar: trailing | head/tail -N and 2>&1.
+  const sanitized = command
+    .trim()
+    .replace(/\s*\|\s*(?:head|tail)\s+(?:-n\s+)?-?\d+\s*$/i, '')
+    .replace(/2>&1/g, '');
   if (SHELL_METACHAR_RE.test(sanitized)) return null;
   if (!isTestCommand(command)) return null;
 

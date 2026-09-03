@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import type Anthropic from '@anthropic-ai/sdk';
 import { createMessageStream, withLastMessageCached } from '../lib/anthropic.js';
 import type { UsageRecord } from '../lib/anthropic.js';
@@ -11,6 +12,39 @@ import {
   metaCharGuidance,
 } from '../lib/container.js';
 import { summarizeBashTestRun } from '../lib/testOutputSummary.js';
+
+// ── Test-file authorship guard ────────────────────────────────────────────────
+
+/**
+ * Returns the set of repo-relative file paths that were committed with the
+ * X-Orrery-Agent: test trailer (i.e. authored by the test agent).
+ * Returns an empty set when git fails or no such commits exist yet.
+ */
+export function getTestAuthoredSet(worktreePath: string): Set<string> {
+  try {
+    const out = execFileSync(
+      'git',
+      [
+        '-C',
+        worktreePath,
+        'log',
+        '--grep=^X-Orrery-Agent: test',
+        '--diff-filter=A',
+        '--name-only',
+        '--pretty=format:',
+      ],
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+    );
+    return new Set(
+      out
+        .trim()
+        .split('\n')
+        .filter((f) => f.trim() !== ''),
+    );
+  } catch {
+    return new Set();
+  }
+}
 
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
@@ -424,6 +458,8 @@ export async function runDevAgent(
   const maxTurns = ctx.maxTurns ?? MAX_TURNS;
   const budgetWarningTurn = maxTurns - 9; // warn when 10 turns remain (including current)
 
+  const testAuthoredFiles = getTestAuthoredSet(worktreePath);
+
   let turn = 0;
   let violationCount = 0;
 
@@ -536,6 +572,18 @@ export async function runDevAgent(
             };
             callPath = filePath;
             callContentLength = content.length;
+            if (testAuthoredFiles.has(filePath)) {
+              const errContent =
+                `${filePath} is read-only: authored by the test agent ` +
+                `(X-Orrery-Agent: test). The dev agent must not modify acceptance tests.`;
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: block.id,
+                is_error: true,
+                content: errContent,
+              });
+              continue;
+            }
             const absPath = resolveWorktreePath(worktreePath, filePath);
             fs.mkdirSync(path.dirname(absPath), { recursive: true });
             fs.writeFileSync(absPath, content, 'utf-8');
@@ -560,6 +608,18 @@ export async function runDevAgent(
             callPath = filePath;
             callOldStrLength = old_str.length;
             callNewStrLength = new_str.length;
+            if (testAuthoredFiles.has(filePath)) {
+              const errContent =
+                `${filePath} is read-only: authored by the test agent ` +
+                `(X-Orrery-Agent: test). The dev agent must not modify acceptance tests.`;
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: block.id,
+                is_error: true,
+                content: errContent,
+              });
+              continue;
+            }
             const absPath = resolveWorktreePath(worktreePath, filePath);
             const current = fs.readFileSync(absPath, 'utf-8');
             const matchCount = countOccurrences(current, old_str);
@@ -845,6 +905,8 @@ export async function runLightDevAgent(
   const maxTurns = maxTurnsOverride ?? MAX_TURNS;
   const budgetWarningTurn = maxTurns - 9;
 
+  const testAuthoredFiles = getTestAuthoredSet(worktreePath);
+
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: initialUserMessage }];
 
   let turn = 0;
@@ -906,6 +968,18 @@ export async function runLightDevAgent(
               path?: string;
               content?: string;
             };
+            if (testAuthoredFiles.has(filePath)) {
+              result =
+                `${filePath} is read-only: authored by the test agent ` +
+                `(X-Orrery-Agent: test). The dev agent must not modify acceptance tests.`;
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: block.id,
+                is_error: true,
+                content: result,
+              });
+              continue;
+            }
             const absPath = resolveWorktreePath(worktreePath, filePath);
             fs.mkdirSync(path.dirname(absPath), { recursive: true });
             fs.writeFileSync(absPath, content, 'utf-8');
@@ -927,6 +1001,18 @@ export async function runLightDevAgent(
               old_str = '',
               new_str = '',
             } = block.input as { path?: string; old_str?: string; new_str?: string };
+            if (testAuthoredFiles.has(filePath)) {
+              result =
+                `${filePath} is read-only: authored by the test agent ` +
+                `(X-Orrery-Agent: test). The dev agent must not modify acceptance tests.`;
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: block.id,
+                is_error: true,
+                content: result,
+              });
+              continue;
+            }
             const absPath = resolveWorktreePath(worktreePath, filePath);
             const current = fs.readFileSync(absPath, 'utf-8');
             const matchCount = countOccurrences(current, old_str);

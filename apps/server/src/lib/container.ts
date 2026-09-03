@@ -104,6 +104,10 @@ export interface ContainerHandle {
 export function checkMetachar(command: string): void {
   const sanitized = command
     .trim()
+    // Trailing | head/tail -N and | head/tail N are output-shaping no-ops: the exec
+    // environment captures stdout via sh -c regardless; head/tail just truncates it.
+    // Require a numeric argument so bare `| head` (no number) is still rejected.
+    .replace(/\s*\|\s*(?:head|tail)\s+(?:-n\s+)?-?\d+\s*$/i, '')
     .replace(/2>&1/g, '')
     .replace(/2>\/dev\/null/g, '');
   const metaMatch = SHELL_METACHAR_RE.exec(sanitized);
@@ -141,6 +145,7 @@ export function metaCharGuidance(char: string): string {
       `  grep/regex alternation: use \\| instead — it is already permitted. ` +
       `Example: grep "pat1\\|pat2" file\n` +
       `  stderr merge: 2>&1 and 2>/dev/null are permitted (both are no-ops).\n` +
+      `  output shaping: a trailing | head -N or | tail -N is permitted.\n` +
       `One command per call.`
     );
   }

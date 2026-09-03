@@ -29,6 +29,7 @@ import { parkFeatureAgentOnBedrockFailure } from '../lib/bedrockPark.js';
 import { readClaudeMdFromDefaultBranch, routeInstall } from './devJob.js';
 import { createWorktree } from '../lib/worktree.js';
 import { formatTestSummary } from '../lib/testOutputSummary.js';
+import { detectVacuousAssertions } from '../lib/vacuousAssertions.js';
 import type { TestFinding, TestRow } from '@orrery/shared';
 import { usageEventPayload } from '../lib/usageEvent.js';
 import { scopeSpecByRefs, scopeContract } from '../lib/promptScope.js';
@@ -961,12 +962,16 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
       return;
     }
 
+    const vacuousWarnings =
+      authoredFiles.length > 0 ? detectVacuousAssertions(worktreePath, authoredFiles) : [];
+
     await _advanceTestPass(featureId, specRev, {
       passed: authoredParsed.passed,
       tests: authoredParsed.tests,
       authoredPassed: authoredParsed.authoredPassed,
       authoredFailed: authoredParsed.authoredFailed,
       ...(authoredParsed.parseError !== undefined && { parseError: authoredParsed.parseError }),
+      warnings: vacuousWarnings,
     });
   } catch (err: unknown) {
     const isPolicyViolation =
@@ -1014,6 +1019,7 @@ async function _advanceTestPass(
     authoredPassed?: number;
     authoredFailed?: number;
     parseError?: string;
+    warnings?: TestFinding[];
   },
 ): Promise<void> {
   await appendEvent(getPrisma(), featureId, {
@@ -1022,7 +1028,7 @@ async function _advanceTestPass(
     spec_rev: specRev,
     passed: counts.passed,
     failed: 0,
-    findings: [],
+    findings: counts.warnings ?? [],
     ...(counts.tests && counts.tests.length > 0 ? { tests: counts.tests } : {}),
     ...(counts.authoredPassed !== undefined ? { authored_passed: counts.authoredPassed } : {}),
     ...(counts.authoredFailed !== undefined ? { authored_failed: counts.authoredFailed } : {}),
