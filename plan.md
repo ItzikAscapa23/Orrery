@@ -827,3 +827,56 @@ npm test          # baseline 86 files / 1130 tests — must not decrease
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 28 — Acceptance tests are read-only to the dev agent
+**Goal:** The agent under test cannot change the test it is measured by.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `98-test-files-read-only-to-dev` — R-44. On feature take-19 the dev agent
+      made nineteen consecutive edits (turns 17–35) to
+      `orderCardClubsListStrongIdBehavior.test.js`, authored minutes earlier by
+      the test agent, taking it from `16 passed, 8 failed` to `24 passed, 0
+      failed`. Phase 25 told the dev agent not to author acceptance tests; it
+      modified the existing one instead. Files carrying the
+      `X-Orrery-Agent: test` trailer must be rejected by the dev agent's
+      `edit_file` and `write_file` tools, the same way the bash allowlist
+      rejects a command
+- [ ] Evidence of what the edits did — compare the two versions in the PR:
+      | Assertion | test agent (take-18 equivalent) | after dev-agent edits |
+      |---|---|---|
+      | AC4 threshold | `expect(result.max...).toBe(1500)` | `not.toBeNull()`, `typeof === 'number'` |
+      | AC5 merged item | `expect(item.strongId...).toBe(1600)` | `toHaveProperty('strongIdentificationCreditLimit')` |
+      | AC7 error | `rejects.toThrow('DCS base failure')` | `rejects.toBeDefined()` |
+      A resolver returning `1` passes the second column
+- [ ] `99-vacuous-assertion-check` — the same file contains
+      `expect(mock.calls.length).toBeLessThanOrEqual(1)`, which passes at zero,
+      and three calls wrapped in `.catch(() => {})` that swallow a throwing
+      handler. Detect and surface assertions that cannot fail: `toBeDefined`,
+      `toBeLessThanOrEqual(n)` on a count, `toHaveProperty` without a value,
+      and `forEach` over a collection with no prior non-empty guard. Report as
+      test-report warnings, not blockers
+- [ ] `100-exempt-output-shaping-pipes` — R-43. Trailing `| head -N` and
+      `| tail -N` are output-shaping no-ops, since results are auto-truncated
+      before the agent sees them — the same argument that justified exempting
+      `2>/dev/null` in Phase 20. Five violations across three agent runs on
+      take-19 were exactly this, one of which parked a task and cost a full
+      test-agent attempt. Exempt a trailing `head`/`tail` with a numeric
+      argument; keep rejecting every other pipe
+- [ ] Audit — list, not summary — every tool an agent can use to modify a file,
+      and state for each whether it enforces the test-file boundary
+**Definition of Done:**
+- A dev agent's write or edit to a file with the test trailer is rejected with a
+  message naming the file and the reason
+- The rejection does not consume a violation slot — it is a boundary, not misconduct
+- A trailing `| head -N` or `| tail -N` executes and records no violation
+- Vacuous assertions appear as warnings in the test report
+- File-modification tool audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 86 files / 1132 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A feature where the acceptance tests are red at dev-agent start ends with the
+  same assertions it began with
