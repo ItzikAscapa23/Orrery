@@ -54,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 27 — The scratch filter excludes only scratch
+- **Current phase:** 28 — Acceptance tests are read-only to the dev agent
 - **State:** `complete`
 - **Last updated:** 2026-09-03
 
@@ -62,7 +62,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*plan.md has no phase 28 yet — next phases pending plan update.*
+*Next phase tasks — all unticked.*
+
+- [ ] Plan the next phase per plan.md
 
 ---
 
@@ -70,7 +72,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1132 passed across 86 files**, 2026-09-03 |
+| `npm test` (repo root) | passed — **1155 passed across 87 files**, 2026-09-03 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-03 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-03 |
 
@@ -78,45 +80,42 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **Test-file boundary: tool-handler enforcement, not prompt-only (Phase 28)** —
+  `write_file` and `edit_file` in `runDevAgent` and `runLightDevAgent` now call
+  `getTestAuthoredSet(worktreePath)` once at agent startup and reject any path in
+  the returned set with `is_error: true`. Rejection does NOT consume a violation
+  slot — it is a boundary, not misconduct. The authoritative set is any file added
+  in a commit carrying the `X-Orrery-Agent: test` trailer (`git log --grep`).
+  Location: `apps/server/src/agents/devAgent.ts`.
+
+- **`| head -N` / `| tail -N` exempted from metachar check (Phase 28)** —
+  `checkMetachar()` in `container.ts` now strips a trailing `| head/tail [-n] N`
+  before the regex, identical to the existing `2>&1` strip. Matches `-N`, `N`,
+  and `-n N` forms; bare `| head` (no number) still throws. Same strip applied in
+  `summarizeBashTestRun()` in `testOutputSummary.ts`. Root cause: 5 false
+  violations across 3 agent runs on feature take-19.
+
+- **Vacuous assertion detection: warning findings in test.report (Phase 28)** —
+  `detectVacuousAssertions()` in `lib/vacuousAssertions.ts` regex-scans
+  test-agent-authored files after a green test run and emits `warning`-severity
+  `TestFinding` entries for `.toBeDefined()` and `.toHaveProperty(key)` without a
+  value argument. Wired into `_advanceTestPass` in `testJob.ts`; warnings appear
+  in the `test.report` event findings array (not blockers, no bounce-back).
+
 - **Scratch filter narrowed to standalone-word match (Phase 27)** — `SCRATCH_FILE_RE`
-  changed from `/debug|scratch/i` to `/(?:debug|scratch)(?![a-zA-Z0-9])/i`. The
-  negative lookahead ensures "debug" or "scratch" matches only as a standalone word or
-  terminal camelCase segment (e.g. `debug-clubs.test.js`, `orderCardClubsListDebug.test.js`)
-  but not when embedded in a compound name (`debugPanel.test.ts`, `scratchpadReducer.test.ts`).
-  Defined once at `testJob.ts:73`, applied at `:94` and `:114`.
-
-- **Rewrite measurement follow-up (Phase 27)** — The `## Iterating on test files`
-  prompt block (added Phase 26) instructs the test agent to edit rather than rewrite.
-  Re-measure using `scripts/measure-rewrite-cost.ts` after 3–5 new feature runs complete.
-  The instruction will be considered to have failed if any feature shows ≥10% rewrite
-  share on non-scratch test files. Instruction-only changes have not held before
-  (the node_modules prohibition, the pipe/redirect rules) — if the threshold is crossed,
-  replace with a structural fix (e.g. read-file before write-file enforcement).
-
-- **Scratch-file filter: basename-only check (Phase 24/26)** — Applied via
-  `path.basename(f)` in both `getAuthoredTestFilesForTask` and `getAuthoredTestFiles`
-  (`testJob.ts:94`, `:114`). Basename-only avoids false-positives from directory names.
-
-- **Binary sentinel is ABI-specific (Phase 24/26)** — Both `worldclock-server` and
-  `worldclock-web` use `node_modules/@rolldown/binding-linux-arm64-musl/rolldown-binding.linux-arm64-musl.node`.
-  Present only after a correct linux-musl install. `repo-manifest.example.yaml` shows
-  the Rollup variant (`@rollup/rollup-linux-arm64-musl`) for vitest 1.x–2.x repos.
+  is `/(?:debug|scratch)(?![a-zA-Z0-9])/i`. Defined at `testJob.ts:73`,
+  applied at `:94` and `:114`.
 
 - **Parking replaces the one-round cap (Phase 25)** — All failure paths in
-  `taskTestJob.ts` park the task (`status: 'parked'`, no `testsWritten` change) and
-  REDISPATCH retries the test-first path. The old `testTaskAttempts === 0` routing
-  guard in `dispatch.ts:157` was removed.
-
-- **`testsWritten` read/write audit (Phase 25)** — Only written in `taskTestJob.ts`
-  success path when `authoredFiles.length > 0`. Any `testsWritten: true` without a
-  committed test file is a bug.
+  `taskTestJob.ts` park the task and REDISPATCH retries the test-first path. The
+  old `testTaskAttempts === 0` routing guard in `dispatch.ts:157` was removed.
 
 - **Finding identity is composite (featureId, specRev, id)** — Model-assigned ids
   (`f1`, `f2`) recur across cycles. A plain `where: { id }` on findings is always a bug.
 
-- **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — CLAUDE.md
-  prose-inference fallback removed. Any active full-path repo without `probe_command`
-  fails at the first `detectJsonCommand` call.
+- **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — Any
+  active full-path repo without `probe_command` fails at the first
+  `detectJsonCommand` call.
 
 ---
 
@@ -140,6 +139,21 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 ## PRD conflicts
 
 - none
+
+---
+
+## File-modification tool audit (Phase 28 DoD)
+
+| Tool | Agent | Enforces test-file boundary? |
+|---|---|---|
+| `write_file` | `runDevAgent` | ✓ — `getTestAuthoredSet` check before any fs write |
+| `edit_file` | `runDevAgent` | ✓ — same check before `fs.readFileSync` |
+| `write_file` | `runLightDevAgent` | ✓ — same check |
+| `edit_file` | `runLightDevAgent` | ✓ — same check |
+| `bash` | `runDevAgent` | n/a — git absent from allowlist; cp/mv absent too |
+| `read_file` | `runDevAgent` | n/a — read-only |
+| `write_file` | `testAgent` | path-scoped to testDir only (since phase 5) |
+| `edit_file` | `testAgent` | path-scoped to testDir only |
 
 ---
 
@@ -169,6 +183,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 25 | Tests exist before code, and the flag says so | `f2a30d4` | 2026-09-02 |
 | 26 | The test agent stops paying twice (measurement + prompt fix) | `d55a601` | 2026-09-03 |
 | 27 | The scratch filter excludes only scratch | `bbfef4b` | 2026-09-03 |
+| 28 | Acceptance tests are read-only to the dev agent | `c2e9fae` | 2026-09-03 |
 
 ---
 
@@ -182,3 +197,5 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
 - A restart mid-dispatch produces exactly one container.
 - A feature whose test agent fails parks without the dev agent running.
+- A feature where acceptance tests are red at dev-agent start ends with the same
+  assertions it began with.
