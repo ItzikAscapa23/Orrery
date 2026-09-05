@@ -85,6 +85,8 @@ export const GateOpenedPayloadSchema = z.object({
   turns: z.number().int().nonnegative().optional(),
   jobCount: z.number().int().nonnegative().optional(),
   threshold: z.number().int().nonnegative().optional(),
+  // spec_approval fields — unanswered questions at gate-open time.
+  question_count: z.number().int().nonnegative().optional(),
 });
 
 export const GateResolvedPayloadSchema = z.object({
@@ -319,6 +321,23 @@ export const LightDevCompletedPayloadSchema = z.object({
   commit_sha: z.string().optional(),
 });
 
+// ── Phase 29 payload schemas ────────────────────────────────────────────────
+
+// spec.questions — emitted when the spec agent calls save_spec with structured questions.
+export const SpecQuestionsPayloadSchema = z.object({
+  type: z.literal('spec.questions'),
+  spec_rev: z.number().int().nonnegative(),
+  questions: z.array(z.object({ id: z.string(), text: z.string() })),
+});
+
+// spec.question_answered — emitted when the operator answers an open question.
+export const SpecQuestionAnsweredPayloadSchema = z.object({
+  type: z.literal('spec.question_answered'),
+  spec_rev: z.number().int().nonnegative(),
+  question_id: z.string(),
+  answer: z.string(),
+});
+
 // ── Union ───────────────────────────────────────────────────────────────────
 
 export const EventPayloadSchema = z.discriminatedUnion('type', [
@@ -348,6 +367,8 @@ export const EventPayloadSchema = z.discriminatedUnion('type', [
   TestPlanProposedPayloadSchema,
   TaskTestsWrittenPayloadSchema,
   LightDevCompletedPayloadSchema,
+  SpecQuestionsPayloadSchema,
+  SpecQuestionAnsweredPayloadSchema,
 ]);
 
 export type EventPayload = z.infer<typeof EventPayloadSchema>;
@@ -383,6 +404,8 @@ export type TestPlanCoverageEntry = z.infer<typeof TestPlanCoverageEntrySchema>;
 export type TestPlanProposedPayload = z.infer<typeof TestPlanProposedPayloadSchema>;
 export type TaskTestsWrittenPayload = z.infer<typeof TaskTestsWrittenPayloadSchema>;
 export type LightDevCompletedPayload = z.infer<typeof LightDevCompletedPayloadSchema>;
+export type SpecQuestionsPayload = z.infer<typeof SpecQuestionsPayloadSchema>;
+export type SpecQuestionAnsweredPayload = z.infer<typeof SpecQuestionAnsweredPayloadSchema>;
 
 // ── Full event row (as returned from the DB / SSE stream) ───────────────────
 

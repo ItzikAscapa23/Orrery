@@ -121,9 +121,9 @@ describe('POST /features/:id/messages event emission', () => {
         _slug: string,
         _msgs: unknown,
         _onToken: unknown,
-        onSpecProposed: (s: string) => Promise<void>,
+        onSpecProposed: (s: string, q: Array<{ id: string; text: string }>) => Promise<void>,
       ) => {
-        await onSpecProposed(specMarkdown);
+        await onSpecProposed(specMarkdown, []);
         return { role: 'assistant', content: assistantContent };
       },
     );
@@ -161,9 +161,9 @@ describe('POST /features/:id/messages event emission', () => {
         _slug: string,
         _msgs: unknown,
         _onToken: unknown,
-        onSpecProposed: (s: string) => Promise<void>,
+        onSpecProposed: (s: string, q: Array<{ id: string; text: string }>) => Promise<void>,
       ) => {
-        await onSpecProposed(specMarkdown);
+        await onSpecProposed(specMarkdown, []);
         return { role: 'assistant', content: assistantContent };
       },
     );

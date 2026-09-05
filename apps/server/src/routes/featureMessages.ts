@@ -18,6 +18,7 @@ import { applyTransition } from '../lib/orchestrator.js';
 import { dispatchJob } from '../lib/dispatch.js';
 import { resolveCharterPath } from '../lib/charterResolver.js';
 import { submitSpecSkip } from '../lib/specSubmit.js';
+import { persistSpecQuestions } from '../lib/specQuestions.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { usageEventPayload } from '../lib/usageEvent.js';
 
@@ -159,7 +160,7 @@ export async function featureMessagesRoutes(app: FastifyInstance): Promise<void>
         feature.slug,
         [...history, userMessage],
         (text) => sseWrite(raw, { type: 'token', text }),
-        async (specMarkdown) => {
+        async (specMarkdown, questions) => {
           specProposed = true;
 
           // Commit spec.md to the artifacts repo immediately on write (not at approval).
@@ -179,11 +180,21 @@ export async function featureMessagesRoutes(app: FastifyInstance): Promise<void>
             throw err;
           }
 
+          // Persist structured questions for this revision and emit spec.questions.
+          await persistSpecQuestions(feature.id, rev, questions);
+          if (questions.length > 0) {
+            await appendEvent(getPrisma(), feature.id, {
+              type: 'spec.questions',
+              spec_rev: rev,
+              questions,
+            });
+          }
+
           const charterPath = resolveCharterPath(feature.repos);
 
           if (!charterPath) {
             // No charter configured — skip AWS review, go directly to AWAITING_APPROVAL.
-            await submitSpecSkip(feature.id, specMarkdown, specCommitResult, rev);
+            await submitSpecSkip(feature.id, specMarkdown, specCommitResult, rev, questions.length);
             await appendEvent(getPrisma(), feature.id, {
               type: 'agent.log',
               agent: 'orchestrator',

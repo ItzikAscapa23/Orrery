@@ -10,6 +10,7 @@ import { runSpecAgentTurn } from '../agents/specAgent.js';
 import { dispatchForState, dispatchJob } from '../lib/dispatch.js';
 import { resolveCharterPath } from '../lib/charterResolver.js';
 import { submitSpecSkip } from '../lib/specSubmit.js';
+import { persistSpecQuestions, getUnansweredQuestionCount } from '../lib/specQuestions.js';
 import { gateOpenedCount } from '../lib/reviewCycle.js';
 import type { FeatureStatus } from '@prisma/client';
 import { usageEventPayload } from '../lib/usageEvent.js';
@@ -52,6 +53,13 @@ export async function featureApproveRoutes(app: FastifyInstance): Promise<void> 
     if (unresolvedBlockers > 0) {
       return reply.status(409).send({
         error: `${unresolvedBlockers} blocker finding(s) must be resolved before approval`,
+      });
+    }
+
+    const unansweredQuestions = await getUnansweredQuestionCount(feature.id, currentCycleRev);
+    if (unansweredQuestions > 0) {
+      return reply.status(409).send({
+        error: `${unansweredQuestions} open question(s) must be answered before approval`,
       });
     }
 
@@ -171,7 +179,7 @@ export async function featureApproveRoutes(app: FastifyInstance): Promise<void> 
         feature.slug,
         [...history, { role: 'user', content: [{ type: 'text', text: comment }] }],
         (text) => sseWrite(raw, { type: 'token', text }),
-        async (specMarkdown) => {
+        async (specMarkdown, questions) => {
           specProposed = true;
 
           // Commit spec.md on write (same pattern as featureMessages — ruling: artifacts
@@ -190,11 +198,21 @@ export async function featureApproveRoutes(app: FastifyInstance): Promise<void> 
             throw err;
           }
 
+          // Persist structured questions for this revision and emit spec.questions.
+          await persistSpecQuestions(feature.id, rev, questions);
+          if (questions.length > 0) {
+            await appendEvent(getPrisma(), feature.id, {
+              type: 'spec.questions',
+              spec_rev: rev,
+              questions,
+            });
+          }
+
           const charterPath = resolveCharterPath(feature.repos);
 
           if (!charterPath) {
             // No charter configured — skip AWS review, go directly to AWAITING_APPROVAL.
-            await submitSpecSkip(feature.id, specMarkdown, specCommitResult, rev);
+            await submitSpecSkip(feature.id, specMarkdown, specCommitResult, rev, questions.length);
             await appendEvent(getPrisma(), feature.id, {
               type: 'agent.log',
               agent: 'orchestrator',

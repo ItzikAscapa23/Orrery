@@ -10,6 +10,7 @@ import type {
   SpendGateState,
   PrLink,
   FindingEntry,
+  QuestionEntry,
   TestReportState,
 } from '../types/ui.js';
 import { ChatBubble } from './ChatBubble.js';
@@ -111,6 +112,7 @@ interface MissionControlProps {
   amendmentGateOpen: AmendmentGateState | null;
   spendGates: SpendGateState[];
   findings: FindingEntry[];
+  questions: QuestionEntry[];
   prLinks: PrLink[];
   testReport: TestReportState | null;
   sseError: string | null;
@@ -130,6 +132,7 @@ export function MissionControl({
   amendmentGateOpen,
   spendGates,
   findings,
+  questions,
   prLinks,
   testReport,
   sseError,
@@ -346,6 +349,7 @@ export function MissionControl({
             featureId={featureId}
             gate={gateOpen}
             findings={findings}
+            questions={questions}
             onAction={onGateAction}
             {...(onViewArtifact ? { onViewArtifact } : {})}
           />

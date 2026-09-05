@@ -49,13 +49,29 @@ const SAVE_SPEC_TOOL: Anthropic.Tool = {
         description:
           'The complete feature specification in markdown following the required template.',
       },
+      questions: {
+        type: 'array',
+        description:
+          'Structured open questions from the ## Open questions section. Each entry has a stable id (e.g. "q1") and the question text. Omit or pass [] when there are no open questions.',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            text: { type: 'string' },
+          },
+          required: ['id', 'text'],
+        },
+      },
     },
     required: ['spec_markdown'],
   },
 };
 
+const SpecQuestionInputSchema = z.object({ id: z.string(), text: z.string() });
+
 const SaveSpecInputSchema = z.object({
   spec_markdown: z.string().min(100, 'spec_markdown must be at least 100 characters'),
+  questions: z.array(SpecQuestionInputSchema).optional().default([]),
 });
 
 export async function runSpecAgentTurn(
@@ -65,7 +81,10 @@ export async function runSpecAgentTurn(
   slug: string,
   messages: Anthropic.MessageParam[],
   onToken: (text: string) => void,
-  onSpecProposed: (specMarkdown: string) => Promise<void>,
+  onSpecProposed: (
+    specMarkdown: string,
+    questions: Array<{ id: string; text: string }>,
+  ) => Promise<void>,
   onUsage?: (u: UsageRecord) => void | Promise<void>,
   featurePath?: 'FULL' | 'LIGHT',
 ): Promise<{ role: 'assistant'; content: Anthropic.ContentBlock[] }> {
@@ -128,7 +147,7 @@ export async function runSpecAgentTurn(
     if (toolUseBlock) {
       const parsed = SaveSpecInputSchema.parse(toolUseBlock.input);
       specCalled = true;
-      await onSpecProposed(parsed.spec_markdown);
+      await onSpecProposed(parsed.spec_markdown, parsed.questions);
     }
   }
 

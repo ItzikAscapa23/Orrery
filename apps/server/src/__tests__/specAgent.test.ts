@@ -121,7 +121,7 @@ describe('runSpecAgentTurn', () => {
       onSpecProposed,
     );
 
-    expect(onSpecProposed).toHaveBeenCalledWith(specMarkdown);
+    expect(onSpecProposed).toHaveBeenCalledWith(specMarkdown, []);
   });
 
   it('passes feature name and requirement as the first message to the model', async () => {

@@ -53,10 +53,11 @@ model Feature {
   // Set to true when review.skipped fires (non-credential error), surfaced in UI
   reviewSkipped Boolean     @default(false) @map("review_skipped")
 
-  messages Message[]
-  events   Event[]
-  findings Finding[]
-  tasks    Task[]
+  messages      Message[]
+  events        Event[]
+  findings      Finding[]
+  specQuestions SpecQuestion[]
+  tasks         Task[]
 
   @@map("features")
 }
@@ -106,6 +107,21 @@ model Finding {
 
   @@id([featureId, specRev, id])
   @@map("findings")
+}
+
+model SpecQuestion {
+  id         String
+  featureId  String   @map("feature_id")
+  specRev    Int      @map("spec_rev")
+  text       String
+  resolution String?  // null | 'answered'
+  answer     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@id([featureId, specRev, id])
+  @@map("spec_questions")
 }
 
 model ModelRate {

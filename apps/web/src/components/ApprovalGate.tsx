@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import type { GateState, FindingEntry } from '../types/ui.js';
+import type { GateState, FindingEntry, QuestionEntry } from '../types/ui.js';
 import type { ArtifactKind } from '@orrery/shared';
 
 interface ApprovalGateProps {
   featureId: string;
   gate: GateState;
   findings?: FindingEntry[];
+  questions?: QuestionEntry[];
   onAction: () => void; // called after approve/request-changes completes
   onViewArtifact?: (kind: ArtifactKind) => void;
 }
@@ -252,10 +253,169 @@ function FindingRow({
   );
 }
 
+function QuestionRow({
+  featureId,
+  question,
+  onAnswered,
+}: {
+  featureId: string;
+  question: QuestionEntry;
+  onAnswered: () => void;
+}) {
+  const [answer, setAnswer] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const answered = question.resolution === 'answered';
+
+  async function handleAnswer() {
+    if (!answer.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/features/${featureId}/questions/${question.id}/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answer: answer.trim() }),
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        throw new Error(body.error ?? `Answer failed: ${res.status}`);
+      }
+      // Drain SSE body
+      const reader = res.body?.getReader();
+      if (reader) {
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      }
+      setAnswer('');
+      onAnswered();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        borderLeft: '2px solid #7eb8f7',
+        paddingLeft: 8,
+        marginBottom: 10,
+        opacity: answered ? 0.45 : 1,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 8,
+            color: '#7eb8f7',
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            flexShrink: 0,
+          }}
+        >
+          question
+        </span>
+        {answered && (
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 8,
+              color: 'var(--text-muted)',
+              marginLeft: 'auto',
+              flexShrink: 0,
+            }}
+          >
+            answered
+          </span>
+        )}
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-ui)',
+          fontSize: 11,
+          color: '#d9dcec',
+          lineHeight: 1.45,
+          marginBottom: answered ? 0 : 6,
+        }}
+      >
+        {question.text}
+      </div>
+      {answered && question.answer && (
+        <div
+          style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: 10,
+            color: 'var(--text-secondary)',
+            fontStyle: 'italic',
+          }}
+        >
+          {question.answer}
+        </div>
+      )}
+      {!answered && (
+        <div>
+          <textarea
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            placeholder="Your answer…"
+            rows={2}
+            style={{
+              width: '100%',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 'var(--r-input)',
+              padding: '6px 8px',
+              fontSize: 11,
+              color: 'var(--text-primary)',
+              resize: 'vertical',
+              marginBottom: 6,
+              fontFamily: 'var(--font-ui)',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => void handleAnswer()}
+              disabled={loading || !answer.trim()}
+              style={{
+                padding: '3px 8px',
+                borderRadius: 3,
+                background: 'rgba(126,184,247,0.15)',
+                border: '1px solid rgba(126,184,247,0.35)',
+                color: '#7eb8f7',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 8,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                opacity: loading || !answer.trim() ? 0.4 : 1,
+              }}
+            >
+              {loading ? '…' : 'Answer'}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <div
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#ff5b45', marginTop: 4 }}
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ApprovalGate({
   featureId,
   gate,
   findings = [],
+  questions = [],
   onAction,
   onViewArtifact,
 }: ApprovalGateProps) {
@@ -263,6 +423,7 @@ export function ApprovalGate({
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasUnansweredQuestions = questions.some((q) => q.resolution === null);
 
   async function handleApprove() {
     setLoading(true);
@@ -385,6 +546,28 @@ export function ApprovalGate({
         </button>
       )}
 
+      {/* Open questions — must all be answered before approval */}
+      {questions.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 8,
+              color: 'var(--text-secondary)',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              marginBottom: 8,
+            }}
+          >
+            Open questions ({questions.filter((q) => q.resolution === null).length} unanswered)
+          </div>
+          {questions.map((q) => (
+            <QuestionRow key={q.id} featureId={featureId} question={q} onAnswered={onAction} />
+          ))}
+          <div style={{ borderBottom: '1px solid var(--border-faint)', marginBottom: 10 }} />
+        </div>
+      )}
+
       {/* Findings from the AWS review agent */}
       {findings.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -449,7 +632,10 @@ export function ApprovalGate({
           <>
             <button
               onClick={() => void handleApprove()}
-              disabled={loading}
+              disabled={loading || hasUnansweredQuestions}
+              title={
+                hasUnansweredQuestions ? 'Answer all open questions before approving' : undefined
+              }
               style={{
                 flex: 1,
                 padding: 9,
@@ -460,7 +646,7 @@ export function ApprovalGate({
                 fontWeight: 700,
                 fontSize: 10,
                 boxShadow: '0 0 14px rgba(255,91,69,0.4)',
-                opacity: loading ? 0.6 : 1,
+                opacity: loading || hasUnansweredQuestions ? 0.6 : 1,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}

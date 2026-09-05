@@ -177,9 +177,9 @@ describe('POST /features/:id/messages', () => {
         _slug: string,
         _msgs: Anthropic.MessageParam[],
         _onToken: (t: string) => void,
-        onSpecProposed: (s: string) => Promise<void>,
+        onSpecProposed: (s: string, q: Array<{ id: string; text: string }>) => Promise<void>,
       ) => {
-        await onSpecProposed(specMarkdown);
+        await onSpecProposed(specMarkdown, []);
         return { role: 'assistant', content: assistantContent };
       },
     );

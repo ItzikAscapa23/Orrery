@@ -177,6 +177,7 @@ export function App() {
             spendGates={runState.spendGates}
             showRedispatch={showRedispatch}
             findings={runState.findings}
+            questions={runState.questions}
             prLinks={runState.prLinks}
             testReport={runState.testReport}
             sseError={sseError}

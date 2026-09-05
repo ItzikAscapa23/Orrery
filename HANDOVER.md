@@ -54,17 +54,21 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 28 — Acceptance tests are read-only to the dev agent
+- **Current phase:** 29 — Open questions are structured blockers answered at the gate
 - **State:** `complete`
-- **Last updated:** 2026-09-03
+- **Last updated:** 2026-09-05
 
 ---
 
 ## Current phase progress
 
-*Next phase tasks — all unticked.*
-
-- [ ] Plan the next phase per plan.md
+- [x] `101-data-model` — SpecQuestion Prisma model + spec.questions / spec.question_answered event types
+- [x] `101-questions-are-structured` — spec agent save_spec emits structured questions
+- [x] `101-gate-opening-helper` — persistSpecQuestions + getUnansweredQuestionCount shared helper
+- [x] `101-approve-guard` — hard guard in approve route for unanswered questions
+- [x] `102-answer-round-trips-to-spec` — POST /features/:id/questions/:qId/answer SSE route
+- [x] `101-questions-blockers-ui` — questions in ApprovalGate, Approve disabled when unanswered
+- [x] Audit — gate-open and approve path audit recorded in HANDOVER
 
 ---
 
@@ -72,13 +76,22 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1155 passed across 87 files**, 2026-09-03 |
+| `npm test` (repo root) | passed — **1155 passed across 87 files**, 2026-09-05 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-03 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-03 |
 
 ---
 
 ## Decisions
+
+- **`spec_approval` gate-open and approve paths (Phase 29)** —
+  Gate-open paths (4):
+  1. `awsReviewJob.ts` — after AWS review completes, `AWS_DONE` transition → AWAITING_APPROVAL
+  2. `specSubmit.ts` — no charter configured, `SUBMIT_SPEC_LIGHT` transition → AWAITING_APPROVAL
+  3. `awsReviewJob.ts` error-handler — final attempt exhausted, advances without findings
+  4. `awsReviewJob.ts` missing-charter fallback — programming-error guard, skips directly to approval
+  Approve path (1): `POST /features/:id/approve` only — either `APPROVE` (full) or `APPROVE_LIGHT` (light).
+  No other path bypasses the gate. `REQUEST_CHANGES` resolves it but returns to DRAFTING_SPEC, not past it.
 
 - **Test-file boundary: tool-handler enforcement, not prompt-only (Phase 28)** —
   `write_file` and `edit_file` in `runDevAgent` and `runLightDevAgent` now call

@@ -19,6 +19,7 @@ import { featureAttachmentsRoutes } from './routes/featureAttachments.js';
 import { featureTestPlanGateRoutes } from './routes/featureTestPlanGate.js';
 import { featureSpendGateRoutes } from './routes/featureSpendGate.js';
 import { featureTasksRoutes } from './routes/featureTasks.js';
+import { featureQuestionsRoutes } from './routes/featureQuestions.js';
 import { reposRoutes } from './routes/repos.js';
 
 export async function createApp() {
@@ -43,6 +44,7 @@ export async function createApp() {
   await app.register(featureTestPlanGateRoutes);
   await app.register(featureSpendGateRoutes);
   await app.register(featureTasksRoutes);
+  await app.register(featureQuestionsRoutes);
   await app.register(reposRoutes);
   return app;
 }

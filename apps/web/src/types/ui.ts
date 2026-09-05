@@ -111,6 +111,14 @@ export interface FindingEntry extends Finding {
   duration_ms?: number | undefined;
 }
 
+/** An open question from the spec agent, with its current resolution state. */
+export interface QuestionEntry {
+  id: string;
+  text: string;
+  resolution: 'answered' | null;
+  answer: string | null;
+}
+
 /** Derived state from the most-recent test.report event in the stream. */
 export interface TestReportState {
   passed: number | null;
@@ -141,6 +149,8 @@ export interface RunState {
   prLinks: PrLink[];
   /** Active findings from the most-recent review.findings event in the current gate cycle */
   findings: FindingEntry[];
+  /** Open questions from the spec agent in the current gate cycle */
+  questions: QuestionEntry[];
   /** Derived state from the most-recent test.report event; null until first test run */
   testReport: TestReportState | null;
   /** Artifact kinds that have been committed at least once (derived from artifact.committed events) */

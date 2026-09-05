@@ -15,6 +15,7 @@ export async function submitSpecSkip(
   specMarkdown: string,
   specCommitResult: { path: string; commit: string; message: string },
   rev: number,
+  questionCount = 0,
 ): Promise<void> {
   await getPrisma().$transaction(async (tx) => {
     await appendEvent(tx, featureId, {
@@ -43,6 +44,7 @@ export async function submitSpecSkip(
       revision: rev,
       counts: { blockers: 0, warnings: 0, suggestions: 0 },
       spec_commit: specCommitResult.commit,
+      ...(questionCount > 0 ? { question_count: questionCount } : {}),
     });
   });
 }

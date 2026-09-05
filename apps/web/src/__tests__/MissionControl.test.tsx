@@ -18,6 +18,7 @@ const baseProps = {
   spendGates: [],
   showRedispatch: false,
   findings: [],
+  questions: [],
   prLinks: [],
   testReport: null,
   sseError: null,

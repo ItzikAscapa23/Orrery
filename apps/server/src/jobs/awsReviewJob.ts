@@ -5,6 +5,7 @@ import { runAwsReview } from '../agents/awsAgent.js';
 import { getAnyRepoEntry } from './devJob.js';
 import { gateOpenedCount } from '../lib/reviewCycle.js';
 import { persistFindings } from '../lib/persistFindings.js';
+import { getUnansweredQuestionCount } from '../lib/specQuestions.js';
 import { usageEventPayload } from '../lib/usageEvent.js';
 
 export interface JobAttemptContext {
@@ -127,6 +128,7 @@ export async function runAwsReviewJob(
     });
 
     const summary = feature.proposedSpec.slice(0, 200);
+    const questionCount = await getUnansweredQuestionCount(featureId, specRev);
 
     // Atomic: gate.opened + transition + phase.changed
     await getPrisma().$transaction(async (tx) => {
@@ -137,6 +139,7 @@ export async function runAwsReviewJob(
         revision: specRev,
         counts: { blockers, warnings, suggestions },
         spec_commit: specCommit,
+        ...(questionCount > 0 ? { question_count: questionCount } : {}),
       });
       const next = await applyTransition(tx, featureId, 'AWS_REVIEW', 'AWS_DONE');
       if (next) {

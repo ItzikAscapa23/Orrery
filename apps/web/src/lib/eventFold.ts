@@ -14,6 +14,7 @@ import type {
   TaskFailureEntry,
   PrLink,
   FindingEntry,
+  QuestionEntry,
   TestReportState,
 } from '../types/ui.js';
 
@@ -32,6 +33,7 @@ const EMPTY_STATE: RunState = {
   taskFailures: [],
   prLinks: [],
   findings: [],
+  questions: [],
   testReport: null,
   committedKinds: [],
 };
@@ -104,6 +106,7 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
   const taskFailures: TaskFailureEntry[] = [];
   const prLinks: PrLink[] = [];
   let findings: FindingEntry[] = [];
+  let questions: QuestionEntry[] = [];
   let testReport: TestReportState | null = null;
   const committedKindSet = new Set<ArtifactKind>();
   let inputTokens = 0;
@@ -210,9 +213,13 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
           spendGates = spendGates.filter((sg) => sg.taskId !== resolvedTaskId);
         } else {
           gateOpen = null;
-          // Clear findings on cycle exit (not entry) so AWS findings remain visible
-          // while the spec-approval gate is open. Next cycle starts from a clean slate.
-          if (resolvedGate === 'spec_approval') findings = [];
+          // Clear findings and questions on cycle exit (not entry) so AWS findings
+          // remain visible while the spec-approval gate is open. Next cycle starts
+          // from a clean slate.
+          if (resolvedGate === 'spec_approval') {
+            findings = [];
+            questions = [];
+          }
         }
         break;
       }
@@ -368,6 +375,22 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
         break;
       }
 
+      case 'spec.questions':
+        // Replace the question set with fresh structured data from the spec agent.
+        // question_answered events below mutate resolution state in-place.
+        questions = p.questions.map((q) => ({ ...q, resolution: null, answer: null }));
+        break;
+
+      case 'spec.question_answered': {
+        const qi = questions.findIndex((q) => q.id === p.question_id);
+        if (qi !== -1) {
+          questions = questions.map((q, i) =>
+            i === qi ? { ...q, resolution: 'answered' as const, answer: p.answer } : q,
+          );
+        }
+        break;
+      }
+
       // task.started, task.completed — no derived state needed
     }
   }
@@ -449,6 +472,7 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
     taskFailures,
     prLinks,
     findings,
+    questions,
     testReport,
     committedKinds: [...committedKindSet],
   };
