@@ -197,6 +197,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 26 | The test agent stops paying twice (measurement + prompt fix) | `d55a601` | 2026-09-03 |
 | 27 | The scratch filter excludes only scratch | `bbfef4b` | 2026-09-03 |
 | 28 | Acceptance tests are read-only to the dev agent | `c2e9fae` | 2026-09-03 |
+| 29 | Open questions are structured blockers answered at the gate | `aa04bb3` | 2026-09-05 |
 
 ---
 
