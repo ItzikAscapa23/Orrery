@@ -46,15 +46,13 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   tests, and an acceptance block.
 - **Backlog entries in `docs/phase-6.md` are deleted on close, not annotated.**
   The phase commit is the evidence for each closed item, reachable via the phase
-  log table below. Do not add `✅ DONE` or `Items closed in Phase N` lines —
-  delete the entry outright once its fix is committed and the phase passes
-  verification.
+  log table below.
 
 ---
 
 ## Status
 
-- **Current phase:** 29 — Open questions are structured blockers answered at the gate
+- **Current phase:** 30 — Cover what Phase 29 shipped
 - **State:** `complete`
 - **Last updated:** 2026-09-05
 
@@ -62,13 +60,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] `101-data-model` — SpecQuestion Prisma model + spec.questions / spec.question_answered event types
-- [x] `101-questions-are-structured` — spec agent save_spec emits structured questions
-- [x] `101-gate-opening-helper` — persistSpecQuestions + getUnansweredQuestionCount shared helper
-- [x] `101-approve-guard` — hard guard in approve route for unanswered questions
-- [x] `102-answer-round-trips-to-spec` — POST /features/:id/questions/:qId/answer SSE route
-- [x] `101-questions-blockers-ui` — questions in ApprovalGate, Approve disabled when unanswered
-- [x] Audit — gate-open and approve path audit recorded in HANDOVER
+*Phase 31 not yet written to plan.md — write the next spec before starting.*
 
 ---
 
@@ -76,13 +68,20 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1155 passed across 87 files**, 2026-09-05 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-03 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-03 |
+| `npm test` (repo root) | passed — **1180 passed across 89 files**, 2026-09-05 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-05 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-05 |
 
 ---
 
 ## Decisions
+
+- **Phase 30: 25 tests added across 3 files for Phase 29's 4 DoD criteria** —
+  `featureApprove.test.ts` +10: tasks 103 (unanswered blocks), 105 (resolved passes),
+  106 (markdown prose doesn't block). Fail-first: commenting out `featureApprove.ts:59-64`
+  turned 3 tests red. `featureQuestions.test.ts` (new, 11): route coverage — happy path,
+  SSE, 404/409, stale specRev, 104-answer-round-trips. `specQuestions.test.ts` (new, 8):
+  lib-only coverage of `persistSpecQuestions` and `getUnansweredQuestionCount`.
 
 - **`spec_approval` gate-open and approve paths (Phase 29)** —
   Gate-open paths (4):
@@ -102,33 +101,21 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   Location: `apps/server/src/agents/devAgent.ts`.
 
 - **`| head -N` / `| tail -N` exempted from metachar check (Phase 28)** —
-  `checkMetachar()` in `container.ts` now strips a trailing `| head/tail [-n] N`
-  before the regex, identical to the existing `2>&1` strip. Matches `-N`, `N`,
-  and `-n N` forms; bare `| head` (no number) still throws. Same strip applied in
-  `summarizeBashTestRun()` in `testOutputSummary.ts`. Root cause: 5 false
-  violations across 3 agent runs on feature take-19.
+  `checkMetachar()` strips `| head/tail [-n] N` before the regex; bare `| head` still throws.
 
-- **Vacuous assertion detection: warning findings in test.report (Phase 28)** —
-  `detectVacuousAssertions()` in `lib/vacuousAssertions.ts` regex-scans
-  test-agent-authored files after a green test run and emits `warning`-severity
-  `TestFinding` entries for `.toBeDefined()` and `.toHaveProperty(key)` without a
-  value argument. Wired into `_advanceTestPass` in `testJob.ts`; warnings appear
-  in the `test.report` event findings array (not blockers, no bounce-back).
+- **Vacuous assertion detection (Phase 28)** — `detectVacuousAssertions()` emits `warning`
+  findings for `.toBeDefined()` / `.toHaveProperty(key)` with no value. Wired into `_advanceTestPass`.
 
-- **Scratch filter narrowed to standalone-word match (Phase 27)** — `SCRATCH_FILE_RE`
-  is `/(?:debug|scratch)(?![a-zA-Z0-9])/i`. Defined at `testJob.ts:73`,
-  applied at `:94` and `:114`.
+- **Scratch filter (Phase 27)** — `SCRATCH_FILE_RE` is `/(?:debug|scratch)(?![a-zA-Z0-9])/i`.
 
-- **Parking replaces the one-round cap (Phase 25)** — All failure paths in
-  `taskTestJob.ts` park the task and REDISPATCH retries the test-first path. The
-  old `testTaskAttempts === 0` routing guard in `dispatch.ts:157` was removed.
+- **Parking replaces one-round cap (Phase 25)** — All failure paths in `taskTestJob.ts`
+  park and REDISPATCH retries the test-first path.
 
 - **Finding identity is composite (featureId, specRev, id)** — Model-assigned ids
   (`f1`, `f2`) recur across cycles. A plain `where: { id }` on findings is always a bug.
 
 - **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — Any
-  active full-path repo without `probe_command` fails at the first
-  `detectJsonCommand` call.
+  active full-path repo without `probe_command` fails at the first `detectJsonCommand` call.
 
 ---
 
@@ -198,6 +185,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 27 | The scratch filter excludes only scratch | `bbfef4b` | 2026-09-03 |
 | 28 | Acceptance tests are read-only to the dev agent | `c2e9fae` | 2026-09-03 |
 | 29 | Open questions are structured blockers answered at the gate | `aa04bb3` | 2026-09-05 |
+| 30 | Cover what Phase 29 shipped | pending | 2026-09-05 |
 
 ---
 
@@ -213,3 +201,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - A feature whose test agent fails parks without the dev agent running.
 - A feature where acceptance tests are red at dev-agent start ends with the same
   assertions it began with.
+- A feature whose spec has an unanswered question is demonstrably unapprovable.

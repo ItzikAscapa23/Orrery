@@ -261,6 +261,101 @@ describe('POST /features/:id/approve-spec (removed)', () => {
   });
 });
 
+// ── Phase 29 DoD: unanswered questions gate the approve route ─────────────────
+
+async function seedGateOpen(fId: string): Promise<void> {
+  await getPrisma().$transaction((tx) =>
+    appendEvent(tx, fId, {
+      type: 'gate.opened',
+      gate: 'spec_approval',
+      summary: SPEC.slice(0, 200),
+      revision: 0,
+      counts: { blockers: 0, warnings: 0, suggestions: 0 },
+      spec_commit: 'abc0000',
+    }),
+  );
+}
+
+// 103-unanswered-blocks-approval
+describe('approve guard: unanswered questions block approval', () => {
+  it('returns 409 when a question for the current specRev is unanswered', async () => {
+    await seedGateOpen(featureId);
+    await getPrisma().specQuestion.create({
+      data: { id: 'q1', featureId, specRev: 0, text: 'What is the scope?' },
+    });
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve` });
+    expect(res.statusCode).toBe(409);
+    expect(res.json<{ error: string }>()['error']).toMatch(/question/i);
+  });
+
+  it('returns 409 when multiple questions are unanswered', async () => {
+    await seedGateOpen(featureId);
+    await getPrisma().specQuestion.createMany({
+      data: [
+        { id: 'q1', featureId, specRev: 0, text: 'Question one?' },
+        { id: 'q2', featureId, specRev: 0, text: 'Question two?' },
+      ],
+    });
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve` });
+    expect(res.statusCode).toBe(409);
+    expect(res.json<{ error: string }>()['error']).toMatch(/2 open question/i);
+  });
+});
+
+// 105-resolved-is-not-a-blocker
+describe('approve guard: answered questions do not block approval', () => {
+  it('returns 200 when all questions are answered', async () => {
+    await seedGateOpen(featureId);
+    await getPrisma().specQuestion.createMany({
+      data: [
+        { id: 'q1', featureId, specRev: 0, text: 'Q1', resolution: 'answered', answer: 'a1' },
+        { id: 'q2', featureId, specRev: 0, text: 'Q2', resolution: 'answered', answer: 'a2' },
+      ],
+    });
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve` });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('returns 200 when no questions exist for current rev', async () => {
+    await seedGateOpen(featureId);
+    // No SpecQuestion rows — count is 0, guard does not fire
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve` });
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+// 106-questions-are-not-parsed
+describe('approve guard: spec markdown prose does not produce blockers', () => {
+  it('returns 200 when spec has ## Open questions markdown but no structured DB questions', async () => {
+    await seedGateOpen(featureId);
+    const specWithOpenQuestionsSection =
+      '# My Feature\n\n## Overview\nDoes stuff.\n\n## Open questions\n- ~~What is the scope?~~ **Resolved: out of scope**\n- ~~Who are the users?~~ **Resolved: admins**\n\n## Acceptance criteria\n- AC1';
+    await getPrisma().feature.update({
+      where: { id: featureId },
+      data: { proposedSpec: specWithOpenQuestionsSection },
+    });
+    // No SpecQuestion rows inserted — guard reads DB, not markdown
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve` });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('returns 409 only when a structured DB question is unanswered (not from markdown)', async () => {
+    await seedGateOpen(featureId);
+    const specWithStrikethrough =
+      '# Feature\n\n## Open questions\n- ~~What is the scope?~~ **Resolved: limited**\n';
+    await getPrisma().feature.update({
+      where: { id: featureId },
+      data: { proposedSpec: specWithStrikethrough },
+    });
+    // Markdown has struck-through (resolved) questions — but a real unanswered DB row blocks
+    await getPrisma().specQuestion.create({
+      data: { id: 'q1', featureId, specRev: 0, text: 'A genuine open question' },
+    });
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve` });
+    expect(res.statusCode).toBe(409);
+  });
+});
+
 // ── SSE event emission via appendEvent (verify seq integrity) ─────────────────
 
 describe('approve event seq integrity', () => {
