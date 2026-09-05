@@ -924,3 +924,50 @@ npm run lint      # must stay clean (exit 0)
 **Entry conditions for next phase:**
 - A feature whose spec has an open question reaches the gate showing it, and
   cannot be approved until answered
+---
+## Phase 30 — Cover what Phase 29 shipped
+**Goal:** The approval gate's new behaviour is verified, not assumed.
+**PRD refs:** §3 R4
+**Tasks:**
+- [ ] Report first: enumerate what Phase 29 (`aa04bb3`) added and what covers it.
+      679 insertions across 21 files, including `routes/featureQuestions.ts` at
+      277 new lines, `lib/specQuestions.ts` at 25, `routes/featureApprove.ts`
+      +22, and `components/ApprovalGate.tsx` +192. The only test file touched was
+      `MissionControl.test.tsx`, one line. Suite went 1155 → 1155. State which of
+      the four DoD criteria have a test today
+- [ ] `103-unanswered-blocks-approval` — a feature with an unanswered structured
+      question cannot be approved. This is the guard in `featureApprove.ts`; if
+      it fails permissively, unanswered questions silently stop blocking and
+      nothing surfaces — the same shape as R-15 and R-20. Fail-first: show the
+      test red before the guard, green after
+- [ ] `104-answer-round-trips` — answering at the gate produces a new spec
+      revision with the answer recorded, and the gate reopens against the new
+      `specRev`. Cover the id-recurrence case: findings key on
+      `(featureId, specRev, id)` because model-assigned ids repeat per cycle;
+      questions must not collide across revisions
+- [ ] `105-resolved-is-not-a-blocker` — a question with an answer does not appear
+      as a blocker, and a spec with every question answered approves normally
+- [ ] `106-questions-are-not-parsed` — questions are read from the structured
+      record only. A spec whose markdown contains `~~struck-through~~` text or a
+      `## Open questions` section must not produce blockers from that prose
+- [ ] `routes/featureQuestions.ts` is 277 lines with no test file. Cover its
+      routes at the same level as the other route modules — at minimum the happy
+      path, an unknown feature id, and an answer submitted against a stale
+      `specRev`
+- [ ] Audit — list, not summary — every path that opens the spec approval gate
+      and every path that can approve past it. This was a Phase 29 task and was
+      not reported
+**Definition of Done:**
+- Each of the four Phase 29 DoD criteria has a named test
+- `featureQuestions.ts` has a test file
+- Fail-first red output shown for `103` and `106`
+- Gate-open and approve path audit recorded in HANDOVER.md
+- Suite count stated explicitly against the 1155 baseline, from the repo root
+**Verification:**
+```bash
+npm test          # baseline 87 files / 1155 tests — must increase
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A feature whose spec has an unanswered question is demonstrably unapprovable
