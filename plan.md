@@ -880,3 +880,47 @@ npm run lint      # must stay clean (exit 0)
 **Entry conditions for next phase:**
 - A feature where the acceptance tests are red at dev-agent start ends with the
   same assertions it began with
+---
+## Phase 29 — Open questions are structured blockers answered at the gate
+**Goal:** No spec is approved with an unanswered question.
+**PRD refs:** §3 R1, R4
+**Tasks:**
+- [ ] `101-questions-are-structured` — the spec agent currently emits open
+      questions as markdown prose, resolved by strikethrough and a
+      `**Resolved: ...**` suffix. That is prose inference in a project whose rule
+      is declared over inferred. Emit questions as structured data alongside the
+      spec, with a stable id, the question text, and a resolution field —
+      the same treatment findings already get
+- [ ] Unanswered questions surface on the spec approval gate as blockers. An
+      answered question does not surface. Evidence: on feature take-19 the spec
+      carried three questions, all resolved, visible only by scrolling to the
+      bottom of the SPEC tab — the genuinely-open case would have been invisible
+      at the moment of approval
+- [ ] `102-answer-round-trips-to-spec` — answering at the gate is an input, not
+      a dismissal. The answer goes to the spec agent, which rewrites the spec and
+      re-commits it. The gate then reopens against the new spec revision.
+      Findings already key on `(featureId, specRev, id)` because model-assigned
+      ids recur per cycle; questions need the same
+- [ ] Approval is blocked while any question is unanswered. State whether this is
+      a hard guard on the approve route or an advisory blocker like a dismissible
+      finding — and implement one, not both
+- [ ] The gate-opening logic lives in two places: `awsReviewJob.ts` opens it with
+      AWS findings, and `specSubmit.ts` opens it directly when no charter applies
+      (Phase 21). The question-blocker logic must live in one function both call
+- [ ] Audit — list, not summary — every path that opens the spec approval gate
+      and every path that can approve past it
+**Definition of Done:**
+- A spec with an unanswered question cannot be approved
+- Answering at the gate produces a new spec revision with the answer recorded
+- A resolved question does not appear as a blocker
+- Questions are read from structured data, never parsed from spec markdown
+- Gate-open and approve path audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 87 files / 1155 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A feature whose spec has an open question reaches the gate showing it, and
+  cannot be approved until answered
