@@ -258,7 +258,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 33 | An agent that is not progressing stops | `4273e44` | 2026-09-06 |
 | 34 | Verification means what it says | `72bc51e` | 2026-09-06 |
 | 35 | The orchestrator is not bound by the agent's allowlist | `c208689` | 2026-09-06 |
-| 36 | Test output can be trusted | pending | 2026-09-06 |
+| 36 | Test output can be trusted | `260a95a` | 2026-09-06 |
 
 ---
 
