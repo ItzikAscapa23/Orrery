@@ -1380,3 +1380,51 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - Orientation turns fall below 44% on the next real feature
+---
+## Phase 39 — A write does not excuse a loop
+**Goal:** An edit-run-edit-run loop is caught, and shared test infrastructure is not changed silently.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] `130-write-does-not-reset-the-buffer` — R-52. Phase 33 resets the
+      non-progress ring buffer on any `write_file`/`edit_file`, added to avoid
+      false positives. It is defeated by the commonest loop shape. On take-24 the
+      test agent ran turns 40–77 as edit-run-edit-run against a self-created
+      probe file: 17 runs of `orderCardClubsListUrlDiscover.test.js`, with turns
+      46, 48, 50, 52, 55, 57, 59 and 62 all returning exactly 619 chars and 65,
+      67, 69 returning 618. It ended at the 80-turn cap having produced a 129-char
+      stub. Reset only when the file written is not the file being run, or count
+      identical results in a sliding window that writes do not clear. Note Phase
+      37's false positive was three *different* commands returning the same
+      summary, which the command-hash fix already covers — the write reset is
+      now doing no work the hash does not already do
+- [ ] Cost of the loop, for the report: 37 of 80 turns, roughly half the test
+      agent's $2.27
+- [ ] `131-shared-mock-changes-are-visible` — R-53. The test agent modified
+      `test/__mocks__/axios.js`, shared by every test in the repo, adding
+      queue-based per-URL responses and call introspection (38-line diff). The
+      change is defensible — the feature makes two calls to one URL that must
+      return different payloads, and the existing `getByUrl` map cannot express
+      that — but nothing flagged it. Phase 28 protects test-agent-authored files
+      from the dev agent; nothing constrains an agent editing pre-existing shared
+      infrastructure. Surface such edits as a distinct event and in the test
+      report, so they are reviewed rather than folded into a feature's test work
+- [ ] `132-orientation-answers-the-url-question` — R-54. The 37-turn loop existed
+      because the agent had no way to learn which URL the handler calls except by
+      writing a probe and running it. The answer is derivable from
+      `creditCards.js` and `setup-env-vars.js`, both of which it had already read.
+      Report whether the Phase 38 orientation additions can carry a DCS
+      endpoint/URL map, and what it would cost in block size
+**Definition of Done:**
+- An edit-run loop returning identical results stops before the turn cap
+- Phase 37's three-different-commands case still does not trigger a stop
+- An agent edit to a file under `test/__mocks__/` or equivalent shared path is
+  surfaced as its own event
+- URL-map feasibility reported in HANDOVER.md with a size figure
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1225 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A test agent completes within its turn cap on the bff repo
