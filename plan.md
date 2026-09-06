@@ -1037,3 +1037,82 @@ npm run lint      # must stay clean (exit 0)
 **Entry conditions for next phase:**
 - A test report with eight vacuous findings shows `8`, not `0`
 - Restart the worker before the next run — `testJob.ts` changed
+---
+## Phase 31 — An agent that is not progressing stops
+**Goal:** No agent spends its budget repeating an identical failure.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] `107-detect-non-progress` — R-45. On feature `d4fd9d4f` the feature-level
+      test agent ran turns 23–80 as a single loop: edit `orderCardClubsList-debug.test.js`,
+      run it, receive a byte-identical 337-char result, repeat. Twenty-seven
+      consecutive identical results over 45 minutes, ending at the 80-turn safety
+      cap having authored nothing. Hash each tool result; when the same result
+      recurs N times consecutively (N=3 is a reasonable start), stop the agent
+      and surface the repeated result. This is a budget guard, not a violation —
+      it must not consume a violation slot
+- [ ] The stop must be legible. The failure event names the repeated command and
+      the first line of the repeated result, so the operator sees why it stopped
+      rather than "hit the safety cap". Evidence: the cap message on `d4fd9d4f`
+      said only `Test Agent hit 80-turn safety cap without completing`, and the
+      actual cause — a missing `bff-utils` mock — took a manual code read to find
+- [ ] `108-fixture-shape-is-asserted` — R-46. Agent-authored tests keep writing
+      `result.clubItems ?? result.clubsItems ?? []`, which cannot distinguish
+      "handler returned nothing" from "test is exercising the wrong branch". On
+      `d4fd9d4f` all six failures came from the test never mocking
+      `isClientVersionSupported`, so execution took the `!isVersionSupported`
+      branch and filtered on `companyCode`/`brand` fields the fixtures did not
+      set. The `?? []` made an empty array look like ordinary wrong data. State
+      in the target repo's `CLAUDE.md` that a test asserts one response shape
+      and does not accommodate alternatives. Third feature running with this
+      pattern
+- [ ] `109-turn-timestamps-in-ui` — O-22. Activity tab turn rows carry no
+      timestamp, so per-turn duration is invisible in the UI and the 45-minute
+      stall was only measurable by querying the events table directly
+- [ ] Audit — list, not summary — every cap that can stop an agent (turn cap,
+      spend guard, violation cap, and this one), and state for each what the
+      operator sees when it fires
+**Definition of Done:**
+- Three consecutive identical tool results stop the agent
+- The stop event names the command and the repeated result's first line
+- The stop does not consume a violation slot
+- Turn rows show a timestamp
+- Agent-stop cap audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 89 files / 1180 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- An agent looping on an identical result stops before its turn cap
+---
+## Phase 32 — Artifact tabs are copyable
+**Goal:** Any artifact can be lifted into a brief or a ticket in one click.
+**PRD refs:** §3 R3
+**Tasks:**
+- [ ] `110-copy-artifact` — add a Copy control to the artifact tabs
+      (REQUIREMENT, SPEC, PLAN, CONTRACT, TEST PLAN). All five render through
+      `ArtifactPanel.tsx`, so this is one component change, not five
+- [ ] Copy the raw artifact source, not the rendered text — the artifacts are
+      markdown and YAML, and the common destination is a brief, a ticket, or a
+      chat message where the source is what is wanted
+- [ ] The control confirms visibly on click. A clipboard write with no feedback
+      reads as broken
+- [ ] State whether TEST REPORT and ACTIVITY are in scope. They render through
+      different components with structured rather than document content; if they
+      are excluded, say so rather than leaving it ambiguous
+- [ ] `navigator.clipboard` requires a secure context. The app runs on
+      `http://localhost:5173`, which browsers treat as secure, but state what
+      happens if the clipboard API is unavailable rather than failing silently
+**Definition of Done:**
+- Each of the five artifact tabs has a working Copy control
+- The copied content is the raw source
+- A successful copy is visibly confirmed
+- An unavailable clipboard API surfaces rather than failing silently
+- TEST REPORT and ACTIVITY scope decision recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 89 files / 1180 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
