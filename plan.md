@@ -1271,3 +1271,61 @@ npm run lint      # must stay clean (exit 0)
 **Entry conditions for next phase:**
 - A filtered test command and a full-suite command produce visibly different
   summaries
+---
+## Phase 37 — Agents keep their flags, and blockers do not vanish quietly
+**Goal:** A filtered run filters, a re-review re-checks, and an unfixable finding says so.
+**PRD refs:** §3 R4, R7
+**Tasks:**
+- [ ] `124-preserve-agent-flags` — R-51. `toJsonReporterCommand`
+      (`testOutputSummary.ts:46-61`) keeps only `extractPositionalArgs`, which
+      filters out every token starting with `--`. So `--testPathPattern`,
+      `--listTests`, `--showConfig`, `--verbose` and `--no-coverage` are all
+      discarded and the agent's command becomes a bare full-suite run. Evidence
+      from feature `00d548a1`: turns 38, 42, 44 and 45 issued four distinct
+      commands and received byte-identical 9209-char output. Phase 36 documented
+      and logged this; it did not change it. Strip only the flags the summariser
+      replaces — `--json`, `--outputFile`, `--reporter`. `extractProbeFlags`
+      (same file, line 21) already does precisely this for the probe command and
+      can be reused
+- [ ] Cost note for the report: an agent filtering to one file currently runs the
+      full BFF suite (~38s, 2192 tests) on every verification turn. Twelve
+      verification turns per test job. State the wall-time saving measured
+- [ ] `125-blocked-by-protected-test` — the fix agent has no way to say a finding
+      is unfixable. On `00d548a1`, review blocker f3 said base-only club items
+      must carry `strongIdentificationCreditLimit = 0` per spec AC5. The test
+      agent had pinned `toBeNull()` at lines 340, 374 and 605 of a file carrying
+      the `X-Orrery-Agent: test` trailer. Fix-job turn 13 grepped that exact file
+      for `toBeNull|toBe(0`, saw what was pinned, and left the code alone —
+      correct under Phase 28's read-only rule — then completed the task as though
+      the finding were addressed. The blocker was re-raised and dismissed by
+      hand, and the wrong behaviour shipped. Add a `blocked_by_protected_test`
+      park: the fix agent emits the finding id, the file, and the conflicting
+      assertion quoted, and does not complete
+- [ ] `126-re-review-checks-prior-findings` — round 2 of the code review did not
+      re-raise round-1 blocker f4, which had been masked rather than fixed. The
+      fix added an early return that fires only when the merged list is empty;
+      the non-empty path still returns no `cardsBasic`/`cardsClub` and never
+      applies the `!isVersionSupported` filter, so every 11.5.0+ client sending
+      the flag with any clubs receives `undefined` for both fields the schema
+      directs it to read. Feed the previous round's findings into the re-review
+      as an explicit checklist: each must be marked fixed, still-present, or
+      withdrawn with a reason
+- [ ] Audit — list, not summary — every transformation applied to an agent's
+      command between issue and execution, across the summariser, the probe path
+      and the allowlist, and state what the agent can no longer express
+**Definition of Done:**
+- `npx jest --testPathPattern=X` runs only files matching X
+- `--listTests` and a test run produce visibly different output
+- A fix agent that cannot satisfy a finding without editing a protected test
+  parks with the conflicting assertion quoted, and does not complete
+- A re-review states, per prior finding, whether it is fixed, still present, or
+  withdrawn
+- Command-transformation audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1214 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A test agent's filtered run completes in seconds, not the full-suite duration
