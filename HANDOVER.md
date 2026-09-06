@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 34 — Verification means what it says
+- **Current phase:** 35 — The orchestrator is not bound by the agent's allowlist
 - **State:** `complete`
 - **Last updated:** 2026-09-06
 
@@ -64,7 +64,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*(Phase 35 not yet written in plan.md — write the next spec before starting.)*
+*(Phase 36 not yet written in plan.md — write the next spec before starting.)*
 
 ---
 
@@ -72,7 +72,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1210 passed across 92 files**, 2026-09-06 |
+| `npm test` (repo root) | passed — **1211 passed across 92 files**, 2026-09-06 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
 
@@ -80,50 +80,62 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **Phase 35: per-invocation path replaces `rm -f` (`117-118`)** — `summarizeBashTestRun`
+  now generates `/tmp/test-report-<timestamp>-<random>.json` per call. `rm` is not in
+  `ALLOWED_PREFIXES` and must not be added (`mv`/`cp` cannot destroy; `rm` can, and
+  Phase 28 made acceptance tests read-only to the dev agent). A fresh path is a
+  structural guarantee — the file cannot exist before the command runs, so no stale read
+  is possible. The 9 other `TEST_REPORT_FILE` sites (devJob.ts lines 629/851/898/958,
+  testJob.ts line 724) each run their own test command and are not downstream consumers
+  of `summarizeBashTestRun`; they continue using the constant unchanged.
+
+- **Phase 35: orchestrator-injected allowlist audit** — Every command `summarizeBashTestRun`
+  injects into the container on the agent's behalf, post-fix:
+
+  | Injected command | Allowlist result |
+  |---|---|
+  | `npx vitest run --reporter=json --outputFile=<path>` | passes (`npx vitest` prefix) |
+  | `npx jest --json --outputFile=<path> [args]` | passes (`npx jest` prefix) |
+  | `cat <invocationPath>` | passes (`cat ` prefix) |
+
+  No orchestrator-injected command is rejected by the allowlist.
+
+- **Phase 35: `isViolation` corrects the class hierarchy (`119`)** — The test agent
+  uses `TestAllowlistViolationError extends Error` (not `AllowlistViolationError` from
+  container.ts). `taskTestJob.ts` and `testJob.ts` violation classifiers previously
+  checked `AllowlistViolationError`, which in the test flow is only ever thrown by
+  orchestrator-injected code (never the agent). Fixed to check
+  `TestAllowlistViolationError` so genuine agent violations are classified as violations
+  and orchestrator errors are not. `MetacharViolationError` is unchanged: since
+  `TestMetacharViolationError extends MetacharViolationError`, the existing
+  `instanceof MetacharViolationError` check already covers test-agent metachar violations.
+
 - **Phase 34: stale report pre-delete (`114-npm-test-is-not-scoped`)** — Root cause:
   `toJsonReporterCommand` rewrites `npm test` → `npx vitest run`. In a jest repo
   vitest fails silently; the report file from the previous scoped jest run is stale-read
-  by `cat`, returning 9 tests when the suite has 2191. Fix: `rm -f ${reportFilePath}`
-  before every `toJsonReporterCommand` exec in `summarizeBashTestRun`. If the rewritten
-  command fails, `cat` returns empty → `parseError` → raw fallback to agent.
+  by `cat`, returning 9 tests when the suite has 2191. Fixed in Phase 34 by `rm -f`
+  before every `toJsonReporterCommand` exec; replaced in Phase 35 with per-invocation
+  path (structural, not procedural).
 
 - **Phase 34: command included in non-progress hash (`115-verification-is-not-non-progress`)** —
-  Three distinct commands (`npx jest test/…`, `npm test --no-coverage`, `npm test`) all
-  collapse to `TESTS: 97 passed, 0 failed`. Under Phase 33's hash-result-only scheme,
-  they filled the ring buffer with identical hashes and killed a task whose fix had
-  already landed. Fix: hash `{ command, results }` so distinct commands never count as
-  repetition. Added separately: a passing test result (zero failures) clears the ring
-  buffer — repeated green verification runs are progress, not a stuck loop.
+  Three distinct commands all collapsing to `TESTS: 97 passed, 0 failed` filled the ring
+  buffer with identical hashes and killed a task whose fix had already landed. Fix: hash
+  `{ command, results }` so distinct commands never count as repetition. A passing test
+  result clears the ring buffer.
 
 - **Phase 34: `isEnvironmentalBedrockError` is the single predicate (`116-proxy-block-is-environmental`)** —
   A `503 File Blocked` HTML page from the corporate proxy was classified as an agent
-  failure and consumed an attempt. `isEnvironmentalBedrockError(err)` in `lib/bedrockPark.ts`
-  covers credential expiry (`'Bedrock credentials expired'`), pre-probe unreachable
-  (`'Bedrock unreachable'`), and proxy 503 (`status === 503 && msg.includes('file blocked')`).
-  Cited from devJob.ts catch block (new) and taskTestJob.ts (replaced inline check).
-  `rethrowIfExpiredToken` in `anthropic.ts` now detects proxy 503 and rethrows with
-  `'Bedrock unreachable — ...'` so the predicate matches.
-
-- **Phase 34: output-rewriting audit** — Every site that rewrites test output before an
-  agent sees it:
-
-  | Site | What is rewritten | What agent cannot distinguish |
-  |---|---|---|
-  | `summarizeBashTestRun` (testOutputSummary.ts:94) | Full output → `TESTS: X passed, Y failed` + FAILURES block | Which files ran; individual duration; runner errors vs test failures |
-  | `toJsonReporterCommand` (testOutputSummary.ts:46) | Agent's command gets `--json`/`--reporter=json` grafted on | Agent cannot tell the rewrite happened; wrong-runner failure looks like test failure |
-  | `testJob.ts` bash intercept | Same summariser path | Same as above, applies to the feature-level test agent |
-  | `formatTestSummary` (testOutputSummary.ts:69) | Per-test durations and suite metadata dropped | Agent cannot see which tests are slow or which suites hold failures |
-  | Phase 33 ring buffer (nonProgressError.ts:41) | Hashes the summarised string | Two runs with different failure sets but identical TESTS: line would collide (fixed in Phase 34 by including the command) |
+  failure and consumed an attempt. Covered by `isEnvironmentalBedrockError` in
+  `lib/bedrockPark.ts`.
 
 - **Phase 33: ring buffer resets on write_file/edit_file** — An agent editing
-  source files between test runs legitimately produces identical test output (e.g.
-  `TESTS: 22 passed` three turns in a row while the resolver is being fixed).
-  Without the reset, that's a false positive. The buffer only accumulates during
-  read/bash-only turns; any write or edit clears it.
+  source files between test runs legitimately produces identical test output. Without
+  the reset, that's a false positive. The buffer only accumulates during read/bash-only
+  turns; any write or edit clears it.
 
-- **Phase 33: `checkNonProgress()` extracted to `nonProgressError.ts`** — The
-  hash + ring-buffer logic is a pure function testable without mocking the Anthropic
-  API. Both `devAgent.ts` and `testAgent.ts` call it; unit tests cover it directly.
+- **Phase 33: `checkNonProgress()` extracted to `nonProgressError.ts`** — Pure function
+  testable without mocking the Anthropic API. Both `devAgent.ts` and `testAgent.ts`
+  call it; unit tests cover it directly.
 
 - **Phase 33: all five agent-stop caps** (audit, R-45 sub-item):
 
@@ -210,6 +222,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 32 | Artifact tabs are copyable | `85592bf` | 2026-09-06 |
 | 33 | An agent that is not progressing stops | `4273e44` | 2026-09-06 |
 | 34 | Verification means what it says | `72bc51e` | 2026-09-06 |
+| 35 | The orchestrator is not bound by the agent's allowlist | pending | 2026-09-06 |
 
 ---
 
@@ -230,3 +243,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - An agent running the full suite sees the full suite count (not a scoped result).
 - Three different commands returning identical summaries do not trigger the non-progress stop.
 - A proxy 503 from the corporate proxy parks a task without consuming an attempt slot.
+- A test agent completes a run on the bff repo without an allowlist error.

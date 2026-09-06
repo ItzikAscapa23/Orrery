@@ -90,11 +90,13 @@ export function formatTestSummary(parsed: ParsedTestOutput): string {
  * Returns null when `command` is not a test runner command (caller should run normally).
  * Returns a fallback string prefixed with [raw output — JSON summary unavailable]
  * if the JSON report cannot be parsed.
+ *
+ * Each call uses a fresh per-invocation path so no prior run's report can be
+ * read as current. rm is not in the agent allowlist and must not be injected.
  */
 export async function summarizeBashTestRun(
   command: string,
   container: ContainerHandle,
-  reportFilePath: string = TEST_REPORT_FILE,
   probeCommand?: string,
 ): Promise<string | null> {
   // Bail out for commands with shell metachars — they must go through
@@ -107,19 +109,17 @@ export async function summarizeBashTestRun(
   if (SHELL_METACHAR_RE.test(sanitized)) return null;
   if (!isTestCommand(command)) return null;
 
-  const jsonCmd = toJsonReporterCommand(command, reportFilePath, probeCommand);
-
-  // Pre-delete the report file so a stale result from a prior run is never
-  // returned. If the rewritten command fails (e.g. wrong runner for this repo),
-  // `cat` will return empty and parseTestOutput fires parseError → raw fallback.
-  await container.exec(`rm -f ${reportFilePath}`);
+  // Fresh path per invocation — the file doesn't exist before the command runs,
+  // so a stale read is structurally impossible without any rm.
+  const invocationPath = `/tmp/test-report-${Date.now()}-${Math.random().toString(36).slice(2)}.json`;
+  const jsonCmd = toJsonReporterCommand(command, invocationPath, probeCommand);
 
   // Run the JSON-reporter variant; stdout may be dirty (interleaved app output)
   // so we read the report file separately — same two-exec pattern as testJob.ts.
   const execResult = await container.exec(jsonCmd);
   const rawCombined = [execResult.stdout, execResult.stderr].filter(Boolean).join('\n');
 
-  const catResult = await container.exec(`cat ${reportFilePath}`);
+  const catResult = await container.exec(`cat ${invocationPath}`);
   const parsed = parseTestOutput(catResult.stdout, '');
 
   if (parsed.parseError) {

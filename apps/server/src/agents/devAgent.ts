@@ -545,12 +545,7 @@ export async function runDevAgent(
           if (block.name === 'bash') {
             const { command = '' } = block.input as { command?: string };
             callCommand = command.slice(0, 120);
-            const summary = await summarizeBashTestRun(
-              command,
-              container,
-              undefined,
-              ctx.probeCommand,
-            );
+            const summary = await summarizeBashTestRun(command, container, ctx.probeCommand);
             if (summary !== null) {
               result = summary;
             } else {

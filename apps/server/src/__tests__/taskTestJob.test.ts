@@ -53,6 +53,7 @@ const {
 vi.mock('../agents/testAgent.js', () => ({
   runTestAgent: mockRunTestAgent,
   TestViolationInfo: class {},
+  TestAllowlistViolationError: class extends Error {},
   measurePromptSections: vi
     .fn()
     .mockReturnValue({ total: 100, claudeMd: 10, contract: 30, spec: 50, rules: 10 }),
@@ -337,9 +338,9 @@ describe('runTaskTestJob', () => {
   });
 
   it('parks with allowlist_violation on policy violation (no testsWritten, no dispatch)', async () => {
-    const { AllowlistViolationError } = await import('../lib/container.js');
+    const { TestAllowlistViolationError } = await import('../agents/testAgent.js');
     const { dispatchUnblockedTasks: mockDispatch } = await import('../lib/dispatch.js');
-    mockRunTestAgent.mockRejectedValueOnce(new AllowlistViolationError('bash: rm -rf /'));
+    mockRunTestAgent.mockRejectedValueOnce(new TestAllowlistViolationError('bash: rm -rf /'));
     await runTaskTestJob(featureId, taskId, 'job-viol', 'server');
     const task = await getPrisma().task.findUnique({ where: { id: taskId } });
     expect(task?.testsWritten).toBe(false);

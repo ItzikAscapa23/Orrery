@@ -25,6 +25,7 @@ const {
 
 vi.mock('../agents/testAgent.js', () => ({
   runTestAgent: mockRunTestAgent,
+  TestAllowlistViolationError: class extends Error {},
   measurePromptSections: () => ({
     claudeMd: 0,
     contract: 0,

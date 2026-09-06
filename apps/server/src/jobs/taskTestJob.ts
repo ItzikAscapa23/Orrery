@@ -5,12 +5,7 @@ import { getPrisma } from '../lib/prisma.js';
 import { appendEvent } from '../lib/events.js';
 import { checkSpendGuard } from '../lib/spendGuard.js';
 import { readArtifact, commitArtifact } from '../lib/artifacts.js';
-import {
-  startContainer,
-  AllowlistViolationError,
-  MetacharViolationError,
-  EXEC_MAX_BUFFER,
-} from '../lib/container.js';
+import { startContainer, MetacharViolationError, EXEC_MAX_BUFFER } from '../lib/container.js';
 import { dispatchUnblockedTasks } from '../lib/dispatch.js';
 import { checkBedrockWithRetry } from '../lib/connectivity.js';
 import { parkTaskOnBedrockFailure, isEnvironmentalBedrockError } from '../lib/bedrockPark.js';
@@ -25,6 +20,7 @@ import {
 import {
   runTestAgent,
   TestViolationInfo,
+  TestAllowlistViolationError,
   measurePromptSections as measureTestPromptSections,
 } from '../agents/testAgent.js';
 import type { ToolCallInfo } from '../agents/devAgent.js';
@@ -440,7 +436,7 @@ export async function runTaskTestJob(
     console.error(JSON.stringify({ event: 'task_test_job_error', featureId, taskId, error: msg }));
 
     const isViolation =
-      err instanceof AllowlistViolationError ||
+      err instanceof TestAllowlistViolationError ||
       err instanceof MetacharViolationError ||
       err instanceof NonProgressError;
     // Credential expiry or Bedrock outage during the agent run — same canonical

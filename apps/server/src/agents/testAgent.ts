@@ -628,12 +628,7 @@ export async function runTestAgent(
             // the narrower metachar set before the shared container.exec check.
             checkTestBashAllowed(command);
             // After allowlist check passes, attempt JSON-reporter intercept.
-            const summary = await summarizeBashTestRun(
-              command,
-              container,
-              undefined,
-              ctx.probeCommand,
-            );
+            const summary = await summarizeBashTestRun(command, container, ctx.probeCommand);
             if (summary !== null) {
               result = summary;
             } else {

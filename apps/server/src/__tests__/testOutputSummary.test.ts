@@ -239,7 +239,6 @@ describe('summarizeBashTestRun', () => {
   it('returns compact passing summary for a clean run', async () => {
     const reportJson = makePassingJson(5);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx vitest run --reporter=json'))
         return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
@@ -258,7 +257,6 @@ describe('summarizeBashTestRun', () => {
       { name: 'rejects missing body', message: 'TypeError: Cannot read property id' },
     ]);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx vitest run --reporter=json'))
         return { exitCode: 1, stdout: '', stderr: 'FAIL' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
@@ -275,7 +273,6 @@ describe('summarizeBashTestRun', () => {
 
   it('falls back to raw output with label when JSON is unparseable', async () => {
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx vitest run --reporter=json'))
         return { exitCode: 1, stdout: 'FAIL 3 tests\n', stderr: 'some error' };
       if (cmd.startsWith('cat ')) return { exitCode: 1, stdout: 'not json garbage', stderr: '' };
@@ -293,7 +290,6 @@ describe('summarizeBashTestRun', () => {
       { name: 'fails B', message: 'TypeError: Cannot read property id' },
     ]);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx vitest run --reporter=json'))
         return { exitCode: 1, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
@@ -311,20 +307,18 @@ describe('summarizeBashTestRun', () => {
     const execCmds: string[] = [];
     const container = makeContainer((cmd) => {
       execCmds.push(cmd);
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx jest --json')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
     await summarizeBashTestRun('npx jest --ci', container);
-    // rm -f is called first; the second call is the rewritten jest command
-    expect(execCmds[1]).toContain('npx jest --json');
+    // First call is the rewritten jest command; second is cat
+    expect(execCmds[0]).toContain('npx jest --json');
   });
 
   it('summarises npm test 2>&1 (2>&1 is not a metachar violation)', async () => {
     const reportJson = makePassingJson(3);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx vitest run --reporter=json'))
         return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
@@ -340,7 +334,6 @@ describe('summarizeBashTestRun', () => {
     const execCmds: string[] = [];
     const container = makeContainer((cmd) => {
       execCmds.push(cmd);
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx jest --json')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
@@ -348,13 +341,12 @@ describe('summarizeBashTestRun', () => {
     const result = await summarizeBashTestRun('npx jest foo.test.js 2>&1', container);
     expect(result).not.toBeNull();
     expect(result).toContain('1 passed');
-    expect(execCmds[1]).toContain('npx jest --json');
+    expect(execCmds[0]).toContain('npx jest --json');
   });
 
   it("returns raw output labeled 'zero tests reported' when JSON reports zero total", async () => {
     const reportJson = makePassingJson(0);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx vitest run --reporter=json'))
         return { exitCode: 0, stdout: 'some runner output', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
@@ -380,21 +372,15 @@ describe('summarizeBashTestRun', () => {
     const execCmds: string[] = [];
     const container = makeContainer((cmd) => {
       execCmds.push(cmd);
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx jest')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
-    await summarizeBashTestRun(
-      'npx jest foo.test.js',
-      container,
-      undefined,
-      'npm test -- --maxWorkers=2',
-    );
-    expect(execCmds[1]).toContain('--maxWorkers=2');
-    expect(execCmds[1]).toContain('foo.test.js');
-    expect(execCmds[1]).toMatch(/^npx jest\b/);
-    expect(execCmds[1]).toContain('--json');
+    await summarizeBashTestRun('npx jest foo.test.js', container, 'npm test -- --maxWorkers=2');
+    expect(execCmds[0]).toContain('--maxWorkers=2');
+    expect(execCmds[0]).toContain('foo.test.js');
+    expect(execCmds[0]).toMatch(/^npx jest\b/);
+    expect(execCmds[0]).toContain('--json');
   });
 
   it('npm test with no probe_command is unaffected (no --maxWorkers injected)', async () => {
@@ -402,13 +388,12 @@ describe('summarizeBashTestRun', () => {
     const execCmds: string[] = [];
     const container = makeContainer((cmd) => {
       execCmds.push(cmd);
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx vitest run')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
     await summarizeBashTestRun('npm test', container);
-    expect(execCmds[1]).not.toContain('--maxWorkers');
+    expect(execCmds[0]).not.toContain('--maxWorkers');
   });
 
   it('preserves positional path arg from npx jest foo.test.js without probe_command', async () => {
@@ -416,43 +401,46 @@ describe('summarizeBashTestRun', () => {
     const execCmds: string[] = [];
     const container = makeContainer((cmd) => {
       execCmds.push(cmd);
-      if (cmd.startsWith('rm -f ')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('npx jest')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
     await summarizeBashTestRun('npx jest foo.test.js', container);
-    expect(execCmds[1]).toContain('foo.test.js');
-    expect(execCmds[1]).toContain('npx jest --json');
+    expect(execCmds[0]).toContain('foo.test.js');
+    expect(execCmds[0]).toContain('npx jest --json');
   });
 
-  it('stale report from prior jest run is not returned — pre-delete prevents false all-clear', async () => {
-    // Simulate: a prior jest run left a 9-test report on disk.
-    // npm test rewrites to npx vitest run, which fails (wrong runner for this repo).
-    // After the rm -f, cat returns empty → parse error → raw fallback, not stale data.
-    const staleJestReport = makePassingJson(9);
-    let reportDeleted = false;
+  it('stale report from prior run is not returned — per-invocation path prevents false all-clear', async () => {
+    // A vitest run fails (wrong runner). The per-invocation path was never written,
+    // so cat returns empty → parse error → raw fallback. No stale data possible.
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('rm -f ')) {
-        reportDeleted = true;
-        return { exitCode: 0, stdout: '', stderr: '' };
-      }
       if (cmd.startsWith('npx vitest run --reporter=json'))
         return { exitCode: 1, stdout: 'vitest: command not found\n', stderr: '' };
-      if (cmd.startsWith('cat ')) {
-        // After the delete, report no longer exists
-        return reportDeleted
-          ? { exitCode: 1, stdout: '', stderr: 'No such file or directory' }
-          : { exitCode: 0, stdout: staleJestReport, stderr: '' };
-      }
+      if (cmd.startsWith('cat '))
+        return { exitCode: 1, stdout: '', stderr: 'No such file or directory' };
       throw new Error(`unexpected command: ${cmd}`);
     });
     const result = await summarizeBashTestRun('npm test', container);
     expect(result).not.toBeNull();
-    // Must NOT return 9 passed (stale data)
-    expect(result).not.toContain('9 passed');
-    // Must return raw fallback indicating the runner failed
+    expect(result).not.toContain('passed');
     expect(result).toContain('[raw output — JSON summary unavailable]');
     expect(result).toContain('vitest: command not found');
+  });
+
+  it('per-invocation paths are distinct across successive calls', async () => {
+    const reportJson = makePassingJson(1);
+    const catPaths: string[] = [];
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('npx vitest run')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('cat ')) {
+        catPaths.push(cmd.split(' ')[1]!);
+        return { exitCode: 0, stdout: reportJson, stderr: '' };
+      }
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    await summarizeBashTestRun('npm test', container);
+    await summarizeBashTestRun('npm test', container);
+    expect(catPaths).toHaveLength(2);
+    expect(catPaths[0]).not.toBe(catPaths[1]);
   });
 });

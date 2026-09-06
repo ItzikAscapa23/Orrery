@@ -13,17 +13,13 @@ import { getTestRound } from '../lib/reviewCycle.js';
 import {
   runTestAgent,
   TestViolationInfo,
+  TestAllowlistViolationError,
   measurePromptSections as measureTestPromptSections,
 } from '../agents/testAgent.js';
 import type { ToolCallInfo } from '../agents/devAgent.js';
 import { getRepoEntry } from './devJob.js';
 import { createSyntheticFixTasks } from '../lib/syntheticTasks.js';
-import {
-  startContainer,
-  AllowlistViolationError,
-  MetacharViolationError,
-  EXEC_MAX_BUFFER,
-} from '../lib/container.js';
+import { startContainer, MetacharViolationError, EXEC_MAX_BUFFER } from '../lib/container.js';
 import { checkBedrockWithRetry } from '../lib/connectivity.js';
 import { parkFeatureAgentOnBedrockFailure } from '../lib/bedrockPark.js';
 import { readClaudeMdFromDefaultBranch, routeInstall } from './devJob.js';
@@ -979,7 +975,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     });
   } catch (err: unknown) {
     const isPolicyViolation =
-      err instanceof AllowlistViolationError || err instanceof MetacharViolationError;
+      err instanceof TestAllowlistViolationError || err instanceof MetacharViolationError;
     const msg = err instanceof Error ? err.message : String(err);
     const isBedrock403 = msg.includes('403') || msg.includes('security token');
 
