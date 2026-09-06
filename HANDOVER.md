@@ -32,6 +32,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
 - `apps/web/src/lib/activityFold.ts` — activity-tab rows folded from events + task rows
+- `apps/web/public/` — static assets; favicon.svg is the canonical brand mark
 - `packages/shared/` — event payload schemas
 - `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 18)
 - `docs/agents/repo-manifest.yaml` — operator config, gitignored, example committed
@@ -52,15 +53,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 30 — Cover what Phase 29 shipped
+- **Current phase:** 31 — Test report cubes and brand mark
 - **State:** `complete`
-- **Last updated:** 2026-09-05
+- **Last updated:** 2026-09-06
 
 ---
 
 ## Current phase progress
 
-*Phase 31 not yet written to plan.md — write the next spec before starting.*
+*Phase 32 not yet written to plan.md — write the next spec before starting.*
 
 ---
 
@@ -68,20 +69,33 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1180 passed across 89 files**, 2026-09-05 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-05 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-05 |
+| `npm test` (repo root) | passed — **1191 passed across 91 files**, 2026-09-06 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
 
 ---
 
 ## Decisions
 
-- **Phase 30: 25 tests added across 3 files for Phase 29's 4 DoD criteria** —
-  `featureApprove.test.ts` +10: tasks 103 (unanswered blocks), 105 (resolved passes),
-  106 (markdown prose doesn't block). Fail-first: commenting out `featureApprove.ts:59-64`
-  turned 3 tests red. `featureQuestions.test.ts` (new, 11): route coverage — happy path,
-  SSE, 404/409, stale specRev, 104-answer-round-trips. `specQuestions.test.ts` (new, 8):
-  lib-only coverage of `persistSpecQuestions` and `getUnansweredQuestionCount`.
+- **Phase 31: favicon.svg designed to match the existing CSS sphere** — user
+  opted to design rather than supply an asset. SVG uses `radialGradient`
+  replicating `TopBar.tsx` sphere colors (`#ffd9a0 → #ff5b45 → #a01f12`).
+  PNGs rendered via `@resvg/resvg-js` (added as devDep to `apps/web`; generation
+  script deleted after use). One asset, one source of truth; TopBar `<img>` points
+  to `/favicon.svg`.
+
+- **Phase 31: wall_time_ms measures container exec + cat only** — not install,
+  not agent turns, not report parsing. Timer starts at `container.exec(jsonCmd)`
+  and ends immediately after `container.exec(cat ...)`. Sites A and D (early-exit
+  and no-authored-tests synthetic failures) omit the field; Sites B and C carry it.
+
+- **Phase 31: cube clickability keyed on value > 0; zero and inert render as
+  `role="region"`, nonzero as `role="button"`** — this makes ARIA semantics match
+  affordance: a button that does nothing when clicked (zero-count) is misleading.
+
+- **Phase 31: `deriveAgent()` switch was missing `spec.questions` and
+  `spec.question_answered`** — both added by Phase 29 but not added to the switch,
+  causing a pre-existing TS2366 typecheck failure. Fixed in the task 107 commit.
 
 - **`spec_approval` gate-open and approve paths (Phase 29)** —
   Gate-open paths (4):
@@ -90,32 +104,24 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   3. `awsReviewJob.ts` error-handler — final attempt exhausted, advances without findings
   4. `awsReviewJob.ts` missing-charter fallback — programming-error guard, skips directly to approval
   Approve path (1): `POST /features/:id/approve` only — either `APPROVE` (full) or `APPROVE_LIGHT` (light).
-  No other path bypasses the gate. `REQUEST_CHANGES` resolves it but returns to DRAFTING_SPEC, not past it.
 
 - **Test-file boundary: tool-handler enforcement, not prompt-only (Phase 28)** —
   `write_file` and `edit_file` in `runDevAgent` and `runLightDevAgent` now call
   `getTestAuthoredSet(worktreePath)` once at agent startup and reject any path in
   the returned set with `is_error: true`. Rejection does NOT consume a violation
-  slot — it is a boundary, not misconduct. The authoritative set is any file added
-  in a commit carrying the `X-Orrery-Agent: test` trailer (`git log --grep`).
-  Location: `apps/server/src/agents/devAgent.ts`.
+  slot. Authoritative set: any file added in a commit carrying `X-Orrery-Agent: test`.
 
 - **`| head -N` / `| tail -N` exempted from metachar check (Phase 28)** —
   `checkMetachar()` strips `| head/tail [-n] N` before the regex; bare `| head` still throws.
 
-- **Vacuous assertion detection (Phase 28)** — `detectVacuousAssertions()` emits `warning`
-  findings for `.toBeDefined()` / `.toHaveProperty(key)` with no value. Wired into `_advanceTestPass`.
+- **Vacuous assertion detection (Phase 28)** — `detectVacuousAssertions()` emits
+  `warning` findings for `.toBeDefined()` / `.toHaveProperty(key)` with no value.
+  Wired into `_advanceTestPass`. Test report renders vacuous count in a cube.
 
 - **Scratch filter (Phase 27)** — `SCRATCH_FILE_RE` is `/(?:debug|scratch)(?![a-zA-Z0-9])/i`.
 
-- **Parking replaces one-round cap (Phase 25)** — All failure paths in `taskTestJob.ts`
-  park and REDISPATCH retries the test-first path.
-
 - **Finding identity is composite (featureId, specRev, id)** — Model-assigned ids
   (`f1`, `f2`) recur across cycles. A plain `where: { id }` on findings is always a bug.
-
-- **`detectJsonCommand` throws when `probe_command` is absent (Phase 19)** — Any
-  active full-path repo without `probe_command` fails at the first `detectJsonCommand` call.
 
 ---
 
@@ -186,6 +192,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 28 | Acceptance tests are read-only to the dev agent | `c2e9fae` | 2026-09-03 |
 | 29 | Open questions are structured blockers answered at the gate | `aa04bb3` | 2026-09-05 |
 | 30 | Cover what Phase 29 shipped | `848f40b` | 2026-09-05 |
+| 31 | Test report cubes and brand mark | `41a8e1d` | 2026-09-06 |
 
 ---
 
@@ -202,3 +209,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - A feature where acceptance tests are red at dev-agent start ends with the same
   assertions it began with.
 - A feature whose spec has an unanswered question is demonstrably unapprovable.
+- A test report with eight vacuous findings shows `8` in the vacuous cube.
