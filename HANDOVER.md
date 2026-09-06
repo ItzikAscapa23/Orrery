@@ -209,7 +209,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 31 | Test report cubes and brand mark | `41a8e1d` | 2026-09-06 |
 | 32 | Artifact tabs are copyable | `85592bf` | 2026-09-06 |
 | 33 | An agent that is not progressing stops | `4273e44` | 2026-09-06 |
-| 34 | Verification means what it says | pending | 2026-09-06 |
+| 34 | Verification means what it says | `72bc51e` | 2026-09-06 |
 
 ---
 
