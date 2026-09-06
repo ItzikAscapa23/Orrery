@@ -972,7 +972,7 @@ npm run lint      # must stay clean (exit 0)
 **Entry conditions for next phase:**
 - A feature whose spec has an unanswered question is demonstrably unapprovable
 ---
-## Phase 30 — Test report cubes and brand mark
+## Phase 31 — Test report cubes and brand mark
 **Goal:** The test report shows what it already measured, and the app carries its own mark.
 **PRD refs:** §5 R2
 **Tasks:**
@@ -1038,54 +1038,6 @@ npm run lint      # must stay clean (exit 0)
 - A test report with eight vacuous findings shows `8`, not `0`
 - Restart the worker before the next run — `testJob.ts` changed
 ---
-## Phase 31 — An agent that is not progressing stops
-**Goal:** No agent spends its budget repeating an identical failure.
-**PRD refs:** §3 R6
-**Tasks:**
-- [ ] `107-detect-non-progress` — R-45. On feature `d4fd9d4f` the feature-level
-      test agent ran turns 23–80 as a single loop: edit `orderCardClubsList-debug.test.js`,
-      run it, receive a byte-identical 337-char result, repeat. Twenty-seven
-      consecutive identical results over 45 minutes, ending at the 80-turn safety
-      cap having authored nothing. Hash each tool result; when the same result
-      recurs N times consecutively (N=3 is a reasonable start), stop the agent
-      and surface the repeated result. This is a budget guard, not a violation —
-      it must not consume a violation slot
-- [ ] The stop must be legible. The failure event names the repeated command and
-      the first line of the repeated result, so the operator sees why it stopped
-      rather than "hit the safety cap". Evidence: the cap message on `d4fd9d4f`
-      said only `Test Agent hit 80-turn safety cap without completing`, and the
-      actual cause — a missing `bff-utils` mock — took a manual code read to find
-- [ ] `108-fixture-shape-is-asserted` — R-46. Agent-authored tests keep writing
-      `result.clubItems ?? result.clubsItems ?? []`, which cannot distinguish
-      "handler returned nothing" from "test is exercising the wrong branch". On
-      `d4fd9d4f` all six failures came from the test never mocking
-      `isClientVersionSupported`, so execution took the `!isVersionSupported`
-      branch and filtered on `companyCode`/`brand` fields the fixtures did not
-      set. The `?? []` made an empty array look like ordinary wrong data. State
-      in the target repo's `CLAUDE.md` that a test asserts one response shape
-      and does not accommodate alternatives. Third feature running with this
-      pattern
-- [ ] `109-turn-timestamps-in-ui` — O-22. Activity tab turn rows carry no
-      timestamp, so per-turn duration is invisible in the UI and the 45-minute
-      stall was only measurable by querying the events table directly
-- [ ] Audit — list, not summary — every cap that can stop an agent (turn cap,
-      spend guard, violation cap, and this one), and state for each what the
-      operator sees when it fires
-**Definition of Done:**
-- Three consecutive identical tool results stop the agent
-- The stop event names the command and the repeated result's first line
-- The stop does not consume a violation slot
-- Turn rows show a timestamp
-- Agent-stop cap audit recorded in HANDOVER.md
-**Verification:**
-```bash
-npm test          # baseline 89 files / 1180 tests — must not decrease
-npm run typecheck
-npm run lint      # must stay clean (exit 0)
-```
-**Entry conditions for next phase:**
-- An agent looping on an identical result stops before its turn cap
----
 ## Phase 32 — Artifact tabs are copyable
 **Goal:** Any artifact can be lifted into a brief or a ticket in one click.
 **PRD refs:** §3 R3
@@ -1116,3 +1068,51 @@ npm test          # baseline 89 files / 1180 tests — must not decrease
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 33 — An agent that is not progressing stops
+**Goal:** No agent spends its budget repeating an identical failure.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] `111-detect-non-progress` — R-45. On feature `d4fd9d4f` the feature-level
+      test agent ran turns 23–80 as a single loop: edit
+      `orderCardClubsList-debug.test.js`, run it, receive a byte-identical
+      337-char result, repeat. Twenty-seven consecutive identical results over
+      45 minutes, ending at the 80-turn safety cap having authored nothing. Hash
+      each tool result; when the same result recurs N times consecutively (N=3
+      is a reasonable start), stop the agent and surface the repeated result.
+      This is a budget guard, not a violation — it must not consume a violation
+      slot
+- [ ] The stop must be legible. The failure event names the repeated command and
+      the first line of the repeated result, so the operator sees why it stopped
+      rather than "hit the safety cap". Evidence: the cap message on `d4fd9d4f`
+      said only `Test Agent hit 80-turn safety cap without completing`, and the
+      actual cause — a missing `bff-utils` mock — took a manual code read to find
+- [ ] `112-fixture-shape-is-asserted` — R-46. Agent-authored tests keep writing
+      `result.clubItems ?? result.clubsItems ?? []`, which cannot distinguish
+      "handler returned nothing" from "test is exercising the wrong branch". On
+      `d4fd9d4f` all six failures came from the test never mocking
+      `isClientVersionSupported`, so execution took the `!isVersionSupported`
+      branch and filtered on `companyCode`/`brand` fields the fixtures did not
+      set. The `?? []` made an empty array look like ordinary wrong data. State
+      in the target repo's `CLAUDE.md` that a test asserts one response shape and
+      does not accommodate alternatives. Third feature running with this pattern
+- [ ] `113-turn-timestamps-in-ui` — O-22. Activity tab turn rows carry no
+      timestamp, so per-turn duration is invisible in the UI and the 45-minute
+      stall was only measurable by querying the events table directly
+- [ ] Audit — list, not summary — every cap that can stop an agent (turn cap,
+      spend guard, violation cap, and this one), and state for each what the
+      operator sees when it fires
+**Definition of Done:**
+- Three consecutive identical tool results stop the agent
+- The stop event names the command and the repeated result's first line
+- The stop does not consume a violation slot
+- Turn rows show a timestamp
+- Agent-stop cap audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 91 files / 1199 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- An agent looping on an identical result stops before its turn cap
