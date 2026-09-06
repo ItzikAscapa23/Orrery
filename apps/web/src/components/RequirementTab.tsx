@@ -1,6 +1,8 @@
-import type { CSSProperties } from 'react';
+import { useState, useCallback, type CSSProperties } from 'react';
 import type { RepoEntry } from '../hooks/useFeature.js';
 import type { PhaseId, PrLink } from '../types/ui.js';
+
+type CopyState = 'idle' | 'copied' | 'error';
 
 interface RequirementTabProps {
   requirement: string;
@@ -43,6 +45,19 @@ export function RequirementTab({
 }: RequirementTabProps) {
   const repoMetaById = Object.fromEntries(repoMeta.map((r) => [r.id, r]));
   const prByRepo = Object.fromEntries(prLinks.map((p) => [p.repo, p]));
+  const [copyState, setCopyState] = useState<CopyState>('idle');
+
+  const handleCopy = useCallback(async () => {
+    try {
+      if (!navigator.clipboard) throw new Error('Clipboard API not available');
+      await navigator.clipboard.writeText(requirement);
+      setCopyState('copied');
+      setTimeout(() => setCopyState('idle'), 1500);
+    } catch {
+      setCopyState('error');
+      setTimeout(() => setCopyState('idle'), 2500);
+    }
+  }, [requirement]);
 
   return (
     <div
@@ -59,14 +74,44 @@ export function RequirementTab({
       <section>
         <div
           style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            color: 'var(--text-muted)',
-            letterSpacing: '0.08em',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
             marginBottom: 8,
           }}
         >
-          REQUIREMENT
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              letterSpacing: '0.08em',
+            }}
+          >
+            REQUIREMENT
+          </span>
+          <button
+            onClick={() => void handleCopy()}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              letterSpacing: '0.1em',
+              padding: '2px 7px',
+              background: 'none',
+              border: '1px solid var(--border-faint)',
+              borderRadius: 3,
+              color:
+                copyState === 'copied'
+                  ? '#4caf50'
+                  : copyState === 'error'
+                    ? '#ff5b45'
+                    : 'var(--text-muted)',
+              cursor: 'pointer',
+              transition: 'color 0.1s',
+            }}
+          >
+            {copyState === 'copied' ? 'COPIED' : copyState === 'error' ? 'COPY ERROR' : 'COPY'}
+          </button>
         </div>
         <pre
           style={{

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { vi, describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { ArtifactTabBar } from '../components/ArtifactTabBar.js';
 import { ArtifactViewer } from '../components/ArtifactPanel.js';
@@ -166,5 +166,102 @@ describe('ArtifactViewer', () => {
 
     rerender(<ArtifactViewer featureId="feat-1" kind="spec" artifactCommittedCount={1} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+});
+
+// ── ArtifactViewer — copy button ──────────────────────────────────────────────
+
+describe('ArtifactViewer — copy button', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('renders a COPY button once content is loaded', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ content: '# spec', sha: 'abc', filename: 'spec.md' }),
+      }),
+    );
+
+    render(<ArtifactViewer featureId="feat-1" kind="spec" artifactCommittedCount={0} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^copy$/i })).toBeInTheDocument(),
+    );
+  });
+
+  it('calls navigator.clipboard.writeText with the raw content on click', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      writable: true,
+      configurable: true,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ content: '# spec content', sha: 'abc', filename: 'spec.md' }),
+      }),
+    );
+
+    render(<ArtifactViewer featureId="feat-1" kind="spec" artifactCommittedCount={0} />);
+    const btn = await screen.findByRole('button', { name: /^copy$/i });
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('# spec content'));
+  });
+
+  it('shows COPIED confirmation after a successful copy', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      writable: true,
+      configurable: true,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ content: '# spec', sha: 'abc', filename: 'spec.md' }),
+      }),
+    );
+
+    render(<ArtifactViewer featureId="feat-1" kind="spec" artifactCommittedCount={0} />);
+    const btn = await screen.findByRole('button', { name: /^copy$/i });
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /copied/i })).toBeInTheDocument(),
+    );
+  });
+
+  it('shows COPY ERROR when clipboard API is unavailable', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ content: '# spec', sha: 'abc', filename: 'spec.md' }),
+      }),
+    );
+
+    render(<ArtifactViewer featureId="feat-1" kind="spec" artifactCommittedCount={0} />);
+    const btn = await screen.findByRole('button', { name: /^copy$/i });
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /copy error/i })).toBeInTheDocument(),
+    );
   });
 });

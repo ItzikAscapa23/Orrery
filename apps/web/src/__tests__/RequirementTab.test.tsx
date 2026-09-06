@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { vi, describe, it, expect, afterEach } from 'vitest';
 import { RequirementTab } from '../components/RequirementTab.js';
 import type { RepoEntry } from '../hooks/useFeature.js';
 import type { PrLink } from '../types/ui.js';
@@ -71,5 +71,69 @@ describe('RequirementTab', () => {
     const link = screen.getByRole('link', { name: /#42/ });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute('href', 'https://dev.azure.com/org/repo/pullrequest/42');
+  });
+});
+
+// ── RequirementTab — copy button ──────────────────────────────────────────────
+
+describe('RequirementTab — copy button', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('renders a COPY button in the requirement section', () => {
+    render(<RequirementTab {...BASE_PROPS} />);
+    expect(screen.getByRole('button', { name: /^copy$/i })).toBeInTheDocument();
+  });
+
+  it('calls navigator.clipboard.writeText with the requirement text on click', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      writable: true,
+      configurable: true,
+    });
+
+    render(<RequirementTab {...BASE_PROPS} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
+    });
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith('Add a logout button to the header.'),
+    );
+  });
+
+  it('shows COPIED confirmation after a successful copy', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      writable: true,
+      configurable: true,
+    });
+
+    render(<RequirementTab {...BASE_PROPS} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /copied/i })).toBeInTheDocument(),
+    );
+  });
+
+  it('shows COPY ERROR when clipboard API is unavailable', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+
+    render(<RequirementTab {...BASE_PROPS} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /copy error/i })).toBeInTheDocument(),
+    );
   });
 });

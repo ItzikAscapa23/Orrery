@@ -53,7 +53,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 31 — Test report cubes and brand mark
+- **Current phase:** 32 — Artifact tabs are copyable
 - **State:** `complete`
 - **Last updated:** 2026-09-06
 
@@ -61,7 +61,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 32 not yet written to plan.md — write the next spec before starting.*
+*Phase 33 not yet written to plan.md — write the next spec before starting.*
 
 ---
 
@@ -69,7 +69,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1191 passed across 91 files**, 2026-09-06 |
+| `npm test` (repo root) | passed — **1199 passed across 91 files**, 2026-09-06 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
 
@@ -77,42 +77,38 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
-- **Phase 31: favicon.svg designed to match the existing CSS sphere** — user
-  opted to design rather than supply an asset. SVG uses `radialGradient`
-  replicating `TopBar.tsx` sphere colors (`#ffd9a0 → #ff5b45 → #a01f12`).
-  PNGs rendered via `@resvg/resvg-js` (added as devDep to `apps/web`; generation
-  script deleted after use). One asset, one source of truth; TopBar `<img>` points
-  to `/favicon.svg`.
+- **Phase 32: TEST REPORT and ACTIVITY excluded from copy scope** — both render
+  structured/folded content, not raw source. Only the five source-document tabs
+  (REQUIREMENT, SPEC, PLAN, CONTRACT, TEST PLAN) carry a Copy button.
 
-- **Phase 31: wall_time_ms measures container exec + cat only** — not install,
-  not agent turns, not report parsing. Timer starts at `container.exec(jsonCmd)`
-  and ends immediately after `container.exec(cat ...)`. Sites A and D (early-exit
-  and no-authored-tests synthetic failures) omit the field; Sites B and C carry it.
+- **Phase 32: clipboard unavailability surfaces as COPY ERROR** — handler throws
+  if `navigator.clipboard` is falsy or `writeText` rejects; button shows `COPY ERROR`
+  for 2.5 s then resets. No `execCommand` fallback — deprecated, unreliable return value.
+  `localhost:5173` is a secure context in all modern browsers, so this is the rare path.
 
-- **Phase 31: cube clickability keyed on value > 0; zero and inert render as
-  `role="region"`, nonzero as `role="button"`** — this makes ARIA semantics match
-  affordance: a button that does nothing when clicked (zero-count) is misleading.
-
-- **Phase 31: `deriveAgent()` switch was missing `spec.questions` and
-  `spec.question_answered`** — both added by Phase 29 but not added to the switch,
-  causing a pre-existing TS2366 typecheck failure. Fixed in the task 107 commit.
+- **Phase 32: REQUIREMENT uses `RequirementTab.tsx`, not `ArtifactPanel.tsx`** —
+  plan spec said all five tabs share one component; REQUIREMENT renders the raw
+  `requirement` string prop via a separate component. Copy added to both; behavior
+  identical.
 
 - **`spec_approval` gate-open and approve paths (Phase 29)** —
   Gate-open paths (4):
-  1. `awsReviewJob.ts` — after AWS review completes, `AWS_DONE` transition → AWAITING_APPROVAL
-  2. `specSubmit.ts` — no charter configured, `SUBMIT_SPEC_LIGHT` transition → AWAITING_APPROVAL
+  1. `awsReviewJob.ts` — after AWS review completes, `AWS_DONE` → AWAITING_APPROVAL
+  2. `specSubmit.ts` — no charter, `SUBMIT_SPEC_LIGHT` → AWAITING_APPROVAL
   3. `awsReviewJob.ts` error-handler — final attempt exhausted, advances without findings
-  4. `awsReviewJob.ts` missing-charter fallback — programming-error guard, skips directly to approval
-  Approve path (1): `POST /features/:id/approve` only — either `APPROVE` (full) or `APPROVE_LIGHT` (light).
+  4. `awsReviewJob.ts` missing-charter fallback — programming-error guard
+  Approve path (1): `POST /features/:id/approve` only — `APPROVE` or `APPROVE_LIGHT`.
 
 - **Test-file boundary: tool-handler enforcement, not prompt-only (Phase 28)** —
-  `write_file` and `edit_file` in `runDevAgent` and `runLightDevAgent` now call
-  `getTestAuthoredSet(worktreePath)` once at agent startup and reject any path in
-  the returned set with `is_error: true`. Rejection does NOT consume a violation
-  slot. Authoritative set: any file added in a commit carrying `X-Orrery-Agent: test`.
+  `write_file` and `edit_file` in `runDevAgent` / `runLightDevAgent` call
+  `getTestAuthoredSet(worktreePath)` at startup and reject any path in the returned
+  set with `is_error: true`. Rejection does NOT consume a violation slot. Authoritative
+  set: any file added in a commit carrying `X-Orrery-Agent: test`. `testAgent` is
+  path-scoped to testDir. The full tool audit is in the Phase 28 commit.
 
 - **`| head -N` / `| tail -N` exempted from metachar check (Phase 28)** —
-  `checkMetachar()` strips `| head/tail [-n] N` before the regex; bare `| head` still throws.
+  `checkMetachar()` strips `| head/tail [-n] N` before the regex; bare `| head` still
+  throws. `2>/dev/null` also exempted (Phase 20 — no-op in the container).
 
 - **Vacuous assertion detection (Phase 28)** — `detectVacuousAssertions()` emits
   `warning` findings for `.toBeDefined()` / `.toHaveProperty(key)` with no value.
@@ -148,21 +144,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ---
 
-## File-modification tool audit (Phase 28 DoD)
-
-| Tool | Agent | Enforces test-file boundary? |
-|---|---|---|
-| `write_file` | `runDevAgent` | ✓ — `getTestAuthoredSet` check before any fs write |
-| `edit_file` | `runDevAgent` | ✓ — same check before `fs.readFileSync` |
-| `write_file` | `runLightDevAgent` | ✓ — same check |
-| `edit_file` | `runLightDevAgent` | ✓ — same check |
-| `bash` | `runDevAgent` | n/a — git absent from allowlist; cp/mv absent too |
-| `read_file` | `runDevAgent` | n/a — read-only |
-| `write_file` | `testAgent` | path-scoped to testDir only (since phase 5) |
-| `edit_file` | `testAgent` | path-scoped to testDir only |
-
----
-
 ## Phase log
 
 | Phase | Title | Commit | Date |
@@ -193,6 +174,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 29 | Open questions are structured blockers answered at the gate | `aa04bb3` | 2026-09-05 |
 | 30 | Cover what Phase 29 shipped | `848f40b` | 2026-09-05 |
 | 31 | Test report cubes and brand mark | `41a8e1d` | 2026-09-06 |
+| 32 | Artifact tabs are copyable | pending | 2026-09-06 |
 
 ---
 
