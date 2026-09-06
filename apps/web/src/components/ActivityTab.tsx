@@ -133,6 +133,16 @@ function JobSection({
                   wordBreak: 'break-all',
                 }}
               >
+                {row.createdAt && (
+                  <span style={{ color: 'var(--text-muted)', opacity: 0.5, marginRight: 6 }}>
+                    {new Date(row.createdAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false,
+                    })}
+                  </span>
+                )}
                 {row.kind === 'violation' ? '⚠ ' : ''}
                 {row.text}
               </div>

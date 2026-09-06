@@ -28,6 +28,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 **Key directories:**
 - `apps/server/src/lib/` — orchestrator, events, container, anthropic, spendGuard
+- `apps/server/src/lib/nonProgressError.ts` — `NonProgressError` class + `checkNonProgress()` helper
 - `apps/server/src/jobs/` — devJob, testJob, taskTestJob, createAdoPrJob, agentWorker
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
@@ -53,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 32 — Artifact tabs are copyable
+- **Current phase:** 33 — An agent that is not progressing stops
 - **State:** `complete`
 - **Last updated:** 2026-09-06
 
@@ -61,7 +62,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 33 not yet written to plan.md — write the next spec before starting.*
+*Phase 34 not yet written to plan.md — plan.md ends at phase 33. Write the next
+spec before starting.*
 
 ---
 
@@ -69,13 +71,51 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1199 passed across 91 files**, 2026-09-06 |
+| `npm test` (repo root) | passed — **1204 passed across 92 files**, 2026-09-06 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
 
 ---
 
 ## Decisions
+
+- **Phase 33: ring buffer resets on write_file/edit_file** — An agent editing
+  source files between test runs legitimately produces identical test output (e.g.
+  `TESTS: 22 passed` three turns in a row while the resolver is being fixed).
+  Without the reset, that's a false positive. The buffer only accumulates during
+  read/bash-only turns; any write or edit clears it.
+
+- **Phase 33: `checkNonProgress()` extracted to `nonProgressError.ts`** — The
+  hash + ring-buffer logic is a pure function testable without mocking the Anthropic
+  API. Both `devAgent.ts` and `testAgent.ts` call it; unit tests cover it directly.
+
+- **Phase 33: task 112 added to test agent system prompt, not an external repo** —
+  The `?? []` fixture fallback prohibition is a universal rule that should apply to
+  every target repo. Adding it to a specific external repo's CLAUDE.md would only
+  fix one repo. The rule now lives in `testAgent.ts`'s `## Rules` block so every
+  future test-writing run inherits it.
+
+- **Phase 33: `NonProgressError` parks immediately (added to `isPolicyViolation`
+  in `devJob.ts` and `isViolation` in `taskTestJob.ts`)** — Retrying a non-progress
+  stop is deterministic failure: the agent would loop again on the same condition.
+  Parking immediately on the first occurrence matches the semantics of
+  `AgentNoopError`. The error message names the command and first result line so
+  the operator can read the cause without opening the container logs.
+
+- **Phase 33: `createdAt` was already in the SSE event payload** — `EventRow`
+  already carries `createdAt: z.string().datetime()` and the `featureEvents` route
+  serialises the whole row via `JSON.stringify(row)`. No server route changes were
+  needed; only `activityFold.ts` and `ActivityTab.tsx` needed updating.
+
+- **Phase 33: all five agent-stop caps** (audit, R-45 sub-item):
+
+  | Cap | File | Default threshold | Operator-visible outcome |
+  |---|---|---|---|
+  | Turn cap (dev) | `devAgent.ts` `MAX_TURNS` | 40 | "Agent hit N-turn safety cap" — task failed/parked |
+  | Turn cap (test) | `testAgent.ts` `MAX_TURNS` (fallback); overridden by `repoEntry.max_turns` in `repo-manifest.yaml` — `bff` repo uses 80 | 30 default, per-repo manifest override | "Test Agent hit N-turn safety cap" |
+  | Spend guard | `spendGuard.ts` `SPEND_GUARD_MAX_TURNS` | 150 cumulative | task parked, `gate.spend_guard` event, orange badge in UI |
+  | Violation cap | `devAgent.ts` `MAX_VIOLATIONS` = 3 | 3 | "too many violations" — `MetacharViolationError` or `AllowlistViolationError` thrown, task parked |
+  | Non-progress (Phase 33) | `devAgent.ts`, `testAgent.ts` `NON_PROGRESS_THRESHOLD` env var | 3 | "Non-progress stop: '<command>' returned the same result 3 times. First line: <firstLine>" — task parked |
 
 - **Phase 32: TEST REPORT and ACTIVITY excluded from copy scope** — both render
   structured/folded content, not raw source. Only the five source-document tabs
@@ -102,19 +142,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **Test-file boundary: tool-handler enforcement, not prompt-only (Phase 28)** —
   `write_file` and `edit_file` in `runDevAgent` / `runLightDevAgent` call
   `getTestAuthoredSet(worktreePath)` at startup and reject any path in the returned
-  set with `is_error: true`. Rejection does NOT consume a violation slot. Authoritative
-  set: any file added in a commit carrying `X-Orrery-Agent: test`. `testAgent` is
-  path-scoped to testDir. The full tool audit is in the Phase 28 commit.
+  set with `is_error: true`. Rejection does NOT consume a violation slot.
 
 - **`| head -N` / `| tail -N` exempted from metachar check (Phase 28)** —
   `checkMetachar()` strips `| head/tail [-n] N` before the regex; bare `| head` still
-  throws. `2>/dev/null` also exempted (Phase 20 — no-op in the container).
-
-- **Vacuous assertion detection (Phase 28)** — `detectVacuousAssertions()` emits
-  `warning` findings for `.toBeDefined()` / `.toHaveProperty(key)` with no value.
-  Wired into `_advanceTestPass`. Test report renders vacuous count in a cube.
-
-- **Scratch filter (Phase 27)** — `SCRATCH_FILE_RE` is `/(?:debug|scratch)(?![a-zA-Z0-9])/i`.
+  throws. `2>/dev/null` also exempted (Phase 20).
 
 - **Finding identity is composite (featureId, specRev, id)** — Model-assigned ids
   (`f1`, `f2`) recur across cycles. A plain `where: { id }` on findings is always a bug.
@@ -175,6 +207,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 30 | Cover what Phase 29 shipped | `848f40b` | 2026-09-05 |
 | 31 | Test report cubes and brand mark | `41a8e1d` | 2026-09-06 |
 | 32 | Artifact tabs are copyable | `85592bf` | 2026-09-06 |
+| 33 | An agent that is not progressing stops | `pending` | 2026-09-06 |
 
 ---
 
@@ -192,3 +225,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   assertions it began with.
 - A feature whose spec has an unanswered question is demonstrably unapprovable.
 - A test report with eight vacuous findings shows `8` in the vacuous cube.
+- An agent that issues the same bash/read result N consecutive times (default N=3)
+  stops with a message naming the command and the first line of the repeated result.
+- Turn rows in the Activity tab show a wall-clock timestamp (HH:MM:SS).

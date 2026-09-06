@@ -7,6 +7,8 @@ import { MetacharViolationError, checkMetachar, metaCharGuidance } from '../lib/
 import type { ContainerHandle } from '../lib/container.js';
 import type { ToolCallInfo } from './devAgent.js';
 import { summarizeBashTestRun } from '../lib/testOutputSummary.js';
+import { checkNonProgress } from '../lib/nonProgressError.js';
+import { env } from '../lib/env.js';
 
 // ── Own resolveWorktreePath (decoupled from serverDevAgent) ───────────────────
 
@@ -448,6 +450,7 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     '- The container working directory is /workspace — run commands directly. Never prefix with `cd /workspace &&` or any `cd <path> &&`.',
     "- Use edit_file to modify existing test files. Use write_file only to create new files or when replacing most of a file's content. Rewriting a whole file to change a few lines wastes context and slows every later turn.",
     '- Before calling end_turn, delete any debug or scratch test files you created (files whose names contain "debug" or "scratch") — they must not reach the commit.',
+    '- A test asserts exactly one response shape. Do not write `result.fieldA ?? result.fieldB` or `result.items ?? []` as fixture fallbacks — they mask the wrong-branch case where execution took an unexpected path and the field is absent. Assert the exact field the handler returns; let the test fail loudly if it is absent.',
     '',
     '## Tools',
     '',
@@ -543,6 +546,8 @@ export async function runTestAgent(
 
   let turn = 0;
   let violationCount = 0;
+  const nonProgressThreshold = env.NON_PROGRESS_THRESHOLD;
+  const recentToolHashes: string[] = [];
 
   while (turn < maxTurns) {
     turn++;
@@ -894,6 +899,34 @@ export async function runTestAgent(
             ...(callNewStrLength !== undefined && { newStrLength: callNewStrLength }),
           });
       }
+
+      // Non-progress guard: reset on write/edit; detect N consecutive identical results.
+      const hadWrite = assistantContent.some(
+        (b) => b.type === 'tool_use' && (b.name === 'write_file' || b.name === 'edit_file'),
+      );
+      const lastToolBlock = assistantContent.find((b) => b.type === 'tool_use');
+      const cmdName = lastToolBlock?.type === 'tool_use' ? lastToolBlock.name : 'unknown';
+      const lastResult = toolResults[toolResults.length - 1];
+      const rawContent = lastResult?.content;
+      const resultText =
+        typeof rawContent === 'string'
+          ? rawContent
+          : Array.isArray(rawContent)
+            ? rawContent
+                .filter((b): b is { type: 'text'; text: string } => b?.type === 'text')
+                .map((b) => b.text)
+                .join('\n')
+            : '';
+      const firstLine = resultText.split('\n').find((l) => l.trim()) ?? resultText.slice(0, 120);
+      const npErr = checkNonProgress(
+        recentToolHashes,
+        toolResults,
+        hadWrite,
+        nonProgressThreshold,
+        cmdName,
+        firstLine,
+      );
+      if (npErr) throw npErr;
 
       messages.push({ role: 'user', content: toolResults });
       continue;

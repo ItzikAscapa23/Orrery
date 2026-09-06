@@ -14,6 +14,7 @@ import {
 import { dispatchUnblockedTasks } from '../lib/dispatch.js';
 import { checkBedrockWithRetry } from '../lib/connectivity.js';
 import { parkTaskOnBedrockFailure } from '../lib/bedrockPark.js';
+import { NonProgressError } from '../lib/nonProgressError.js';
 import { readClaudeMdFromDefaultBranch, getRepoEntry, routeInstall } from './devJob.js';
 import { createWorktree } from '../lib/worktree.js';
 import {
@@ -439,7 +440,9 @@ export async function runTaskTestJob(
     console.error(JSON.stringify({ event: 'task_test_job_error', featureId, taskId, error: msg }));
 
     const isViolation =
-      err instanceof AllowlistViolationError || err instanceof MetacharViolationError;
+      err instanceof AllowlistViolationError ||
+      err instanceof MetacharViolationError ||
+      err instanceof NonProgressError;
     // Credential expiry or Bedrock outage during the agent run — same canonical
     // handler as the pre-agent probe, with attempt rollback so the retry goes
     // back through the test-task path instead of skipping to dev.

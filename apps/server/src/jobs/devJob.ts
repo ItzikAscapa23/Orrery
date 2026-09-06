@@ -41,6 +41,7 @@ import {
   ToolCallInfo,
   measurePromptSections,
 } from '../agents/devAgent.js';
+import { NonProgressError } from '../lib/nonProgressError.js';
 import yaml from 'js-yaml';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -1035,7 +1036,8 @@ export async function runDevJob(
     const isPolicyViolation =
       err instanceof AllowlistViolationError ||
       err instanceof MetacharViolationError ||
-      err instanceof AgentNoopError;
+      err instanceof AgentNoopError ||
+      err instanceof NonProgressError;
     const isCommitStep = err instanceof CommitStepError;
     const isInstall = err instanceof InstallError;
     // PushError: work is committed but push failed — retrying the full agent job

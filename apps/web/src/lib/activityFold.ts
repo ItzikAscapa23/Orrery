@@ -17,6 +17,7 @@ export interface ActivityRow {
   kind: 'turn' | 'violation';
   seq: number;
   text: string;
+  createdAt?: string;
 }
 
 export interface ActivityJob {
@@ -176,7 +177,7 @@ export function foldActivityEvents(events: EventRow[], tasks: TaskLike[]): Activ
       if (e.payload.type === 'agent.log' && e.payload.agent === taskInfo.side) {
         const kind: 'turn' | 'violation' = e.payload.severity === 'action' ? 'violation' : 'turn';
         const bucket = jobRows.get(currentJobId);
-        if (bucket) bucket.push({ kind, seq: e.seq, text: e.payload.text });
+        if (bucket) bucket.push({ kind, seq: e.seq, text: e.payload.text, createdAt: e.createdAt });
       }
     }
 
@@ -302,7 +303,9 @@ export function foldActivityEvents(events: EventRow[], tasks: TaskLike[]): Activ
         currentSectionIdByAgent.set(agent, sectionId);
       }
       const kind: 'turn' | 'violation' = p.severity === 'action' ? 'violation' : 'turn';
-      sectionData.get(sectionId)!.rows.push({ kind, seq: ev.seq, text: p.text });
+      sectionData
+        .get(sectionId)!
+        .rows.push({ kind, seq: ev.seq, text: p.text, createdAt: ev.createdAt });
     }
   }
 

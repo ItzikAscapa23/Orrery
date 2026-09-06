@@ -18,6 +18,11 @@ const EnvSchema = z
     DATABASE_URL: z.string().min(1),
     REDIS_URL: z.string().default('redis://localhost:6379'),
     PORT: z.string().default('3001'),
+    NON_PROGRESS_THRESHOLD: z
+      .string()
+      .optional()
+      .transform((v) => (v !== undefined ? parseInt(v, 10) : 3))
+      .pipe(z.number().int().min(2)),
   })
   .superRefine((data, ctx) => {
     if (data.ANTHROPIC_PROVIDER === 'anthropic') {

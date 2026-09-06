@@ -12,6 +12,8 @@ import {
   metaCharGuidance,
 } from '../lib/container.js';
 import { summarizeBashTestRun } from '../lib/testOutputSummary.js';
+import { checkNonProgress } from '../lib/nonProgressError.js';
+import { env } from '../lib/env.js';
 
 // ── Test-file authorship guard ────────────────────────────────────────────────
 
@@ -462,6 +464,8 @@ export async function runDevAgent(
 
   let turn = 0;
   let violationCount = 0;
+  const nonProgressThreshold = env.NON_PROGRESS_THRESHOLD;
+  const recentToolHashes: string[] = [];
 
   while (turn < maxTurns) {
     turn++;
@@ -861,6 +865,34 @@ export async function runDevAgent(
           });
       }
 
+      // Non-progress guard: reset on write/edit; detect N consecutive identical results.
+      const hadWrite = assistantContent.some(
+        (b) => b.type === 'tool_use' && (b.name === 'write_file' || b.name === 'edit_file'),
+      );
+      const lastToolBlock = assistantContent.find((b) => b.type === 'tool_use');
+      const cmdName = lastToolBlock?.type === 'tool_use' ? lastToolBlock.name : 'unknown';
+      const lastResult = toolResults[toolResults.length - 1];
+      const rawContent = lastResult?.content;
+      const resultText =
+        typeof rawContent === 'string'
+          ? rawContent
+          : Array.isArray(rawContent)
+            ? rawContent
+                .filter((b): b is { type: 'text'; text: string } => b?.type === 'text')
+                .map((b) => b.text)
+                .join('\n')
+            : '';
+      const firstLine = resultText.split('\n').find((l) => l.trim()) ?? resultText.slice(0, 120);
+      const npErr = checkNonProgress(
+        recentToolHashes,
+        toolResults,
+        hadWrite,
+        nonProgressThreshold,
+        cmdName,
+        firstLine,
+      );
+      if (npErr) throw npErr;
+
       messages.push({ role: 'user', content: toolResults });
       continue;
     }
@@ -908,6 +940,9 @@ export async function runLightDevAgent(
   const testAuthoredFiles = getTestAuthoredSet(worktreePath);
 
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: initialUserMessage }];
+
+  const nonProgressThreshold = env.NON_PROGRESS_THRESHOLD;
+  const recentToolHashes: string[] = [];
 
   let turn = 0;
 
@@ -1132,6 +1167,36 @@ export async function runLightDevAgent(
           continue;
         }
       }
+
+      // Non-progress guard (light agent only has write/edit/read — reset on write/edit).
+      const hadWriteLight = assistantContent.some(
+        (b) => b.type === 'tool_use' && (b.name === 'write_file' || b.name === 'edit_file'),
+      );
+      const lastToolBlockLight = assistantContent.find((b) => b.type === 'tool_use');
+      const cmdNameLight =
+        lastToolBlockLight?.type === 'tool_use' ? lastToolBlockLight.name : 'unknown';
+      const lastResultLight = toolResults[toolResults.length - 1];
+      const rawContentLight = lastResultLight?.content;
+      const resultTextLight =
+        typeof rawContentLight === 'string'
+          ? rawContentLight
+          : Array.isArray(rawContentLight)
+            ? rawContentLight
+                .filter((b): b is { type: 'text'; text: string } => b?.type === 'text')
+                .map((b) => b.text)
+                .join('\n')
+            : '';
+      const firstLineLight =
+        resultTextLight.split('\n').find((l) => l.trim()) ?? resultTextLight.slice(0, 120);
+      const npErrLight = checkNonProgress(
+        recentToolHashes,
+        toolResults,
+        hadWriteLight,
+        nonProgressThreshold,
+        cmdNameLight,
+        firstLineLight,
+      );
+      if (npErrLight) throw npErrLight;
 
       messages.push({ role: 'user', content: toolResults });
       continue;
