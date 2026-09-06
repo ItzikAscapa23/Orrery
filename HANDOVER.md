@@ -197,7 +197,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 35 | The orchestrator is not bound by the agent's allowlist | `c208689` | 2026-09-06 |
 | 36 | Test output can be trusted | `260a95a` | 2026-09-06 |
 | 37 | Agents keep their flags, and blockers do not vanish quietly | `ccbecaa` | 2026-09-06 |
-| 38 | Orientation stops being the largest cost | pending | 2026-09-06 |
+| 38 | Orientation stops being the largest cost | `1948302` | 2026-09-06 |
 
 ---
 
