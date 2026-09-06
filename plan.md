@@ -971,3 +971,69 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A feature whose spec has an unanswered question is demonstrably unapprovable
+---
+## Phase 30 — Test report cubes and brand mark
+**Goal:** The test report shows what it already measured, and the app carries its own mark.
+**PRD refs:** §5 R2
+**Tasks:**
+- [ ] Report first: the latest `test.report` payload carries `passed: 70`,
+      `authored_passed: 69`, `authored_failed: 0`, a `tests[]` array with
+      `test_name` / `status` / `authored` / `duration_ms` per row, and eight
+      `findings` entries with `"section": "vacuous assertions"` naming file and
+      line. None of these counts reach the web view — it renders findings only.
+      There is no wall-time field anywhere in the payload. State which of the
+      five cube values are web-only and which need a schema change
+- [ ] `107-favicon-and-header-mark` — add `apps/web/public/favicon.svg` verbatim
+      from the supplied asset, plus `favicon-32.png` and `favicon-180.png`
+      rendered from it. In `index.html` remove the default `/vite.svg` icon line
+      entirely and add SVG icon, PNG fallback, `apple-touch-icon`, and
+      `<meta name="theme-color" content="#0E1626">`. Delete
+      `apps/web/public/vite.svg`
+- [ ] Header renders the mark at 26px as `<img src="/favicon.svg" alt=""
+      aria-hidden="true">` left of the `Orrery` wordmark. Do not re-draw the SVG
+      inline in a component — one asset, one source of truth. The shell
+      metachar rule, install routing and `maxBuffer` each drifted because
+      geometry was copied. Report the header component path edited
+- [ ] Audit — list, not summary — every remaining reference to `vite.svg` in the
+      workspace, and whether `apps/web` already has a status-colour module. If
+      one exists the cubes use it; if not, say so rather than inventing hex
+- [ ] `108-wall-time-on-test-report` — add optional
+      `wall_time_ms: z.number().int().nonnegative().optional()` to the
+      `test.report` payload schema in `packages/shared`. Optional, not required:
+      historical events must still parse. Populate it in `testJob.ts` as elapsed
+      ms measured around the container exec call only — not install, not report
+      parsing, not agent turns. `eventFold.ts` folds a missing value to `null`,
+      never to `0`. Fail-first: show the historical-payload parse test red
+      before the field is optional
+- [ ] `109-cube-values` — five cubes above the findings list: `suite passing` =
+      `passed`; `authored` = `authored_passed + authored_failed`;
+      `authored failing` = `authored_failed`; `vacuous` = count of `findings`
+      where `section === 'vacuous assertions'`; `wall time` = `wall_time_ms` as
+      seconds to one decimal, or `—` when null. Against the pasted payload these
+      render `70 / 69 / 0 / 8 / —`. Grid is
+      `repeat(auto-fit, minmax(104px, 1fr))` so cubes wrap rather than shrink
+- [ ] `110-cube-drilldown` — cubes 1–4 expand an inline list below the row;
+      `wall time` is inert. `suite passing` → `tests[]` rows with
+      `status === 'passed'`; `authored` → rows where `authored === true`;
+      `authored failing` → authored rows not passed; `vacuous` → the
+      vacuous-section findings showing the `issue` string. Test rows show
+      `test_name` and `duration_ms` only — `tests[]` carries no file path, so do
+      not link to files. A cube at `0` renders the number but is not clickable
+**Definition of Done:**
+- `/vite.svg` gone from `index.html` and from `public/`, grep result recorded
+- Header mark and favicon load from the same single asset
+- `wall_time_ms` present on new `test.report` events; old events still parse
+- Five cubes render `70 / 69 / 0 / 8 / —` against the pasted payload in test
+- Vacuous count ignores findings outside the `vacuous assertions` section
+- Fail-first red output shown for `108`, `109` and `110`
+- vite.svg grep and status-colour audit recorded in HANDOVER.md
+- Suite count stated explicitly against the 2196 baseline, from the repo root
+**Verification:**
+```bash
+npm test          # baseline 2196 tests — must increase
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A test report with eight vacuous findings shows `8`, not `0`
+- Restart the worker before the next run — `testJob.ts` changed
