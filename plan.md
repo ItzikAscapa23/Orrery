@@ -1116,3 +1116,52 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - An agent looping on an identical result stops before its turn cap
+---
+## Phase 34 — Verification means what it says
+**Goal:** An agent that verifies gets the truth, and is not punished for verifying.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] `114-npm-test-is-not-scoped` — R-50. `summarizeBashTestRun` returns a
+      scoped result for `npm test`. On feature `8cabb35c` task `18cb51c5`,
+      turn 20 (`npx jest <one file>`) reported `9 passed`, turn 21 (`npm test`)
+      reported `9 passed`, and turn 22 (`npx jest --no-coverage`) reported
+      `2191 passed`. The same symptom appeared on take-19, where `npm test`
+      returned `12 passed` against a 2200-test suite. An agent verifying with
+      `npm test` receives a false all-clear on a fraction of the suite.
+      Diagnose before fixing: establish whether `toJsonReporterCommand` is
+      grafting a path argument from a previous invocation, or whether the
+      report file is stale from the prior run
+- [ ] Fix R-50 once diagnosed. A test command that names no path must run the
+      whole suite
+- [ ] `115-verification-is-not-non-progress` — R-49. The Phase 33 guard counts
+      identical *summarised* results across *different* commands. Turns 25, 26
+      and 27 of the first attempt ran `npx jest test/scenarios/cardAction/`,
+      `npm test --no-coverage` and `npm test` — three distinct commands, each
+      collapsed by the summariser to `TESTS: 97 passed, 0 failed` — and the task
+      was killed after its fix had already landed at turn 24. Include the command
+      in the hash so distinct commands never count as repetition
+- [ ] A passing suite is not non-progress. A result reporting zero failures must
+      not contribute to the repeat count regardless of how often it recurs — the
+      failure the guard exists for was `TESTS: 0 passed, 1 failed` twenty-seven
+      times
+- [ ] `116-proxy-block-is-environmental` — a `503 File Blocked` HTML page from
+      the corporate proxy was classified as an agent failure and consumed an
+      attempt (feature `8cabb35c`, task `ef659ce3`). It is infrastructure, the
+      same category as Bedrock unreachable, and belongs in `bedrockPark`
+- [ ] Audit — list, not summary — every place a test command's output is
+      rewritten or summarised before an agent sees it, and state for each what
+      the agent can no longer distinguish
+**Definition of Done:**
+- `npm test` with no path argument reports the full suite count
+- Three different commands returning identical summaries do not trigger the stop
+- A zero-failure result never contributes to the non-progress count
+- A proxy 503 parks without consuming an attempt
+- Output-rewriting audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1204 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- An agent running the full suite sees the full suite count
