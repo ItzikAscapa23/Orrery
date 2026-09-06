@@ -1329,3 +1329,54 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A test agent's filtered run completes in seconds, not the full-suite duration
+---
+## Phase 38 — Orientation stops being the largest cost
+**Goal:** An agent finds a symbol once, and the next agent does not look again.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] Report first: measure the current split. On feature `00d548a1`, 132
+      tool-issuing turns broke down as 58 orientation (44%), 18 authoring (14%),
+      23 verification (17%), 31 waste (24%), against a 28.7k-char
+      `orientationBlock`. Establish whether that ratio holds across the last five
+      features, and what a turn now costs: 6.34M cache-read tokens across 132
+      turns means roughly $0.014 per turn before a token is emitted, so cache
+      reads were 39% of the $4.83 total against output's 33%. Do not fix in this
+      task
+- [ ] `127-orientation-carries-a-symbol-map` — `isClientVersionSupported` lives
+      in `graphql/layers/common-files/nodejs/node_modules/bff-utils/general.js`.
+      Locating it consumed 16 turns across two jobs: impl turn 18 grepped
+      `bff-utils/index.js` (no output), impl turns 25–31 repeated the same grep
+      then tried four `find` variations before turn 30's `grep -rn` found it, and
+      fix turns 15–18 repeated the identical dead-end from the identical starting
+      point 12 minutes later. `dcs/openapis/card-order.json` was re-discovered
+      the same way (impl 21–23, fix 19–22). Add an exported-symbol index for the
+      vendored layer packages and an index of `dcs/openapis` to the orientation
+      block
+- [ ] Report the size cost. The block is already 28.7k chars in a ~50k prompt;
+      state what the additions cost and whether anything currently in the block
+      is unused. A larger block that removes 16 turns is a good trade at
+      $0.014/turn; a larger block that does not is not
+- [ ] `128-agents-share-what-they-found` — the fix agent had no memory of the
+      impl agent locating `general.js` twelve minutes earlier on the same
+      feature. The harness brief mechanism already carries knowledge between test
+      runs; report whether it can carry a discovered-symbol record between dev
+      jobs on the same feature, or whether a separate artifact is needed
+- [ ] `129-npm-test-yields-no-summary` — impl turn 36 and fix turn 31 both ran
+      `npm test --no-coverage`, both received `[raw output — JSON summary
+      unavailable]`, and both then re-ran `npx jest --no-coverage`. The same
+      wasted turn twice, ~90 seconds each. Neither the rules block nor the
+      target repo's `CLAUDE.md` says `npm test` yields no summary. State it where
+      the agent will read it
+**Definition of Done:**
+- Turn-split and per-turn-cost figures recorded in HANDOVER.md with numbers
+- An agent locating a vendored-layer export does not need a filesystem search
+- The orientation block's size change is stated, with what it displaced
+- `npm test` versus `npx jest` guidance is stated where agents read it
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1214 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- Orientation turns fall below 44% on the next real feature
