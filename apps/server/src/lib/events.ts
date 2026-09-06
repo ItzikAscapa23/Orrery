@@ -61,6 +61,8 @@ function deriveAgent(payload: EventPayload): string | null {
     case 'finding.resolved':
       return 'orchestrator';
     case 'spec.revised':
+    case 'spec.questions':
+    case 'spec.question_answered':
       return 'orchestrator';
     case 'plan.proposed':
       return payload.agent;

@@ -73,16 +73,11 @@ export function TopBar({
       {/* Left group */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         {/* Logo */}
-        <div
-          style={{
-            width: 27,
-            height: 27,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 30%, #ffd9a0, #ff5b45 55%, #a01f12)',
-            boxShadow: '0 0 16px rgba(255,91,69,0.4)',
-            flexShrink: 0,
-          }}
+        <img
+          src="/favicon.svg"
+          alt=""
           aria-hidden="true"
+          style={{ width: 26, height: 26, flexShrink: 0 }}
         />
 
         {/* Wordmark */}
