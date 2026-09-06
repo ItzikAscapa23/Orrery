@@ -6,7 +6,17 @@ import { createMessageStream } from '../lib/anthropic.js';
 import type { UsageRecord } from '../lib/anthropic.js';
 import { FindingSchema } from '@orrery/shared';
 
-const ReviewFindingArraySchema = z.object({ findings: z.array(FindingSchema) });
+const PriorFindingStatusSchema = z.object({
+  id: z.string(),
+  status: z.enum(['fixed', 'still_present', 'withdrawn']),
+  reason: z.string(),
+});
+export type PriorFindingStatus = z.infer<typeof PriorFindingStatusSchema>;
+
+const ReviewFindingArraySchema = z.object({
+  findings: z.array(FindingSchema),
+  prior_finding_statuses: z.array(PriorFindingStatusSchema).optional(),
+});
 
 // Resolve the charter path relative to this file so the server can be started
 // from any working directory.
@@ -23,7 +33,8 @@ function buildSystemPrompt(): string {
     charter +
     '\n\nReturn ONLY valid JSON — no prose, no markdown fences — matching:\n' +
     '{ "findings": [ { "id": "...", "severity": "blocker"|"warning", ' +
-    '"section": "...", "issue": "...", "repo": "..." } ] }'
+    '"section": "...", "issue": "...", "repo": "..." } ], ' +
+    '"prior_finding_statuses": [ { "id": "...", "status": "fixed"|"still_present"|"withdrawn", "reason": "..." } ] }'
   );
 }
 
@@ -52,7 +63,10 @@ export async function runReviewAgent(
   featureId: string,
   userPrompt: string,
   onUsage?: (u: UsageRecord) => void | Promise<void>,
-): Promise<z.infer<typeof FindingSchema>[]> {
+): Promise<{
+  findings: z.infer<typeof FindingSchema>[];
+  priorFindingStatuses: PriorFindingStatus[];
+}> {
   const systemPrompt = buildSystemPrompt();
   const usageCb = onUsage ? (u: UsageRecord) => void onUsage(u) : undefined;
 
@@ -86,7 +100,11 @@ export async function runReviewAgent(
     .join('');
 
   const firstParsed = parseResponse(firstText);
-  if (firstParsed) return firstParsed.findings;
+  if (firstParsed)
+    return {
+      findings: firstParsed.findings,
+      priorFindingStatuses: firstParsed.prior_finding_statuses ?? [],
+    };
 
   // Retry once with the validation failure fed back to the model
   const retryContent =
@@ -123,7 +141,11 @@ export async function runReviewAgent(
     .join('');
 
   const secondParsed = parseResponse(secondText);
-  if (secondParsed) return secondParsed.findings;
+  if (secondParsed)
+    return {
+      findings: secondParsed.findings,
+      priorFindingStatuses: secondParsed.prior_finding_statuses ?? [],
+    };
 
   throw new Error(
     `Review agent parse failure after retry. Last response: ${secondText.slice(0, 200)}`,

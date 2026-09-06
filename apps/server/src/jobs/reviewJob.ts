@@ -145,19 +145,51 @@ export async function runReviewJob(featureId: string, jobId?: string): Promise<v
           readArtifact(feature.slug, 'contract.yaml') ?? '(contract not found)',
         ];
 
+    // ── Prior findings (round ≥ 1 only) ─────────────────────────────────────
+    // Read before persistFindings overwrites them. specRev is stable between
+    // review rounds (only spec_approval/plan_approval gates advance it), so
+    // round 1 findings sit at (featureId, specRev) until persistFindings in
+    // this round replaces them.
+    const priorFindings =
+      priorReviewRounds >= 1
+        ? await getPrisma().finding.findMany({
+            where: { featureId, specRev },
+            select: { id: true, severity: true, section: true, issue: true },
+          })
+        : [];
+
+    const priorFindingsSection =
+      priorFindings.length > 0
+        ? [
+            '---',
+            '# Prior round findings',
+            'For each finding below, report its status in the `prior_finding_statuses` array: ' +
+              '`{ id, status: "fixed"|"still_present"|"withdrawn", reason }`.',
+            ...priorFindings.map(
+              (f) =>
+                `## Finding ${f.id} (${f.severity})\n- Section: ${f.section}\n- Issue: ${f.issue}`,
+            ),
+          ]
+        : [];
+
     const userPrompt = [
       '# Spec',
       specContent,
       ...contractSection,
+      ...priorFindingsSection,
       '---',
       '# Diffs',
       ...diffSections,
     ].join('\n\n');
 
     // ── API call ────────────────────────────────────────────────────────────
-    const findings = await runReviewAgent(featureId, userPrompt, async (usage) => {
-      await appendEvent(getPrisma(), featureId, usageEventPayload(usage, 'review', { jobId }));
-    });
+    const { findings, priorFindingStatuses } = await runReviewAgent(
+      featureId,
+      userPrompt,
+      async (usage) => {
+        await appendEvent(getPrisma(), featureId, usageEventPayload(usage, 'review', { jobId }));
+      },
+    );
 
     // ── Persist findings to DB (required for accept/dismiss routes) ─────────
     // persistFindings: deletes orphans from prior rounds, upserts current ones,
@@ -180,6 +212,18 @@ export async function runReviewJob(featureId: string, jobId?: string): Promise<v
       severity: 'ok',
       text: `✓ review complete — ${findings.length} finding(s) (${blockers} blockers, ${warnings} warnings)`,
     });
+
+    if (priorFindingStatuses.length > 0) {
+      const lines = priorFindingStatuses
+        .map((s) => `  ${s.id}: ${s.status}${s.reason ? ` — ${s.reason.slice(0, 120)}` : ''}`)
+        .join('\n');
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'review',
+        severity: 'muted',
+        text: `◦ prior findings:\n${lines}`,
+      });
+    }
 
     // ── Round/gate logic ────────────────────────────────────────────────────
     if (blockers === 0) {

@@ -127,9 +127,15 @@ describe('toJsonReporterCommand', () => {
     );
   });
 
-  it('maps npx jest --ci to jest JSON reporter command', () => {
+  it('maps npx jest --ci to jest JSON reporter command (--ci preserved)', () => {
     expect(toJsonReporterCommand('npx jest --ci')).toBe(
-      'npx jest --json --outputFile=/tmp/test-report.json',
+      'npx jest --ci --json --outputFile=/tmp/test-report.json',
+    );
+  });
+
+  it('preserves --testPathPattern flag from agent npx jest command', () => {
+    expect(toJsonReporterCommand('npx jest --testPathPattern=auth')).toBe(
+      'npx jest --testPathPattern=auth --json --outputFile=/tmp/test-report.json',
     );
   });
 
@@ -342,18 +348,20 @@ describe('summarizeBashTestRun', () => {
     expect(reportJson.length).toBeGreaterThan(8192);
   });
 
-  it('uses the jest command for npx jest --ci', async () => {
+  it('uses the jest command for npx jest --ci (--ci preserved in rewrite)', async () => {
     const reportJson = makePassingJson(10);
     const execCmds: string[] = [];
     const container = makeContainer((cmd) => {
       execCmds.push(cmd);
-      if (cmd.startsWith('npx jest --json')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('npx jest')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
     await summarizeBashTestRun('npx jest --ci', container);
-    // First call is the rewritten jest command; second is cat
-    expect(execCmds[0]).toContain('npx jest --json');
+    // --ci is preserved before the injected --json reporter flag
+    expect(execCmds[0]).toMatch(/^npx jest\b/);
+    expect(execCmds[0]).toContain('--ci');
+    expect(execCmds[0]).toContain('--json');
   });
 
   it('summarises npm test 2>&1 (2>&1 is not a metachar violation)', async () => {
@@ -369,19 +377,21 @@ describe('summarizeBashTestRun', () => {
     expect(result?.summary).toContain('3 passed');
   });
 
-  it('summarises npx jest foo.test.js 2>&1', async () => {
+  it('summarises npx jest foo.test.js 2>&1 (path arg preserved before --json)', async () => {
     const reportJson = makePassingJson(1);
     const execCmds: string[] = [];
     const container = makeContainer((cmd) => {
       execCmds.push(cmd);
-      if (cmd.startsWith('npx jest --json')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('npx jest')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
     const result = await summarizeBashTestRun('npx jest foo.test.js 2>&1', container);
     expect(result).not.toBeNull();
     expect(result?.summary).toContain('1 passed');
-    expect(execCmds[0]).toContain('npx jest --json');
+    expect(execCmds[0]).toMatch(/^npx jest\b/);
+    expect(execCmds[0]).toContain('foo.test.js');
+    expect(execCmds[0]).toContain('--json');
   });
 
   it("returns raw output labeled 'zero tests reported' when JSON reports zero total", async () => {
@@ -446,8 +456,9 @@ describe('summarizeBashTestRun', () => {
       throw new Error(`unexpected command: ${cmd}`);
     });
     await summarizeBashTestRun('npx jest foo.test.js', container);
+    expect(execCmds[0]).toMatch(/^npx jest\b/);
     expect(execCmds[0]).toContain('foo.test.js');
-    expect(execCmds[0]).toContain('npx jest --json');
+    expect(execCmds[0]).toContain('--json');
   });
 
   it('stale report from prior run is not returned — per-invocation path prevents false all-clear', async () => {

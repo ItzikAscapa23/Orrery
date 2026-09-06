@@ -138,7 +138,7 @@ describe('runReviewJob — job_id threading', () => {
           input_tokens: 50,
           output_tokens: 10,
         });
-        return [];
+        return { findings: [], priorFindingStatuses: [] };
       },
     );
 
@@ -169,7 +169,7 @@ describe('runReviewJob — job_id threading', () => {
           input_tokens: 50,
           output_tokens: 10,
         });
-        return [];
+        return { findings: [], priorFindingStatuses: [] };
       },
     );
 

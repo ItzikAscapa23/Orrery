@@ -844,6 +844,36 @@ export async function runDevJob(
       return 'completed';
     }
 
+    // Protected-test block: agent cannot resolve the finding without touching a read-only
+    // acceptance test. Park the task so the operator can investigate.
+    if (agentOutcome.kind === 'blocked_by_protected_test') {
+      const finalAttempt = task.attemptCount + 1;
+      await getPrisma().task.update({
+        where: { id: taskId },
+        data: {
+          status: 'parked',
+          parkReason: 'blocked_by_protected_test',
+          attemptCount: finalAttempt,
+        },
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: task.side,
+        repo: task.repo,
+        severity: 'action',
+        text: `⊘ blocked by protected test\n  finding: ${agentOutcome.findingId}\n  file: ${agentOutcome.testFile}\n  assertion: ${agentOutcome.conflictingAssertion.slice(0, 200)}`,
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'task.failed',
+        repo: task.repo,
+        task_id: task.id,
+        reason: `Agent blocked by protected acceptance test: ${agentOutcome.testFile} — ${agentOutcome.conflictingAssertion.slice(0, 200)}`,
+        attempt: finalAttempt,
+        final: false,
+      });
+      return 'parked';
+    }
+
     await appendEvent(getPrisma(), featureId, {
       type: 'agent.log',
       agent: task.side,

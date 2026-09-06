@@ -132,6 +132,34 @@ const READ_FILE_TOOL: Anthropic.Tool = {
   },
 };
 
+export const REPORT_BLOCKED_TOOL: Anthropic.Tool = {
+  name: 'report_blocked_by_protected_test',
+  description:
+    'Report that a review finding cannot be resolved because doing so requires modifying an ' +
+    'acceptance test that is owned by the test agent and is read-only to this agent. ' +
+    'Call this ONLY after confirming the test file is protected and the fix requires changing ' +
+    'an assertion in that file. The orchestrator will park this task for operator review.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      finding_id: {
+        type: 'string',
+        description: 'The review finding id (e.g. "f3") this block relates to.',
+      },
+      test_file: {
+        type: 'string',
+        description: 'Repo-relative path to the protected test file.',
+      },
+      conflicting_assertion: {
+        type: 'string',
+        description:
+          'The exact assertion or expectation in the test file that conflicts with the fix.',
+      },
+    },
+    required: ['finding_id', 'test_file', 'conflicting_assertion'],
+  },
+};
+
 export const PROPOSE_AMENDMENT_TOOL: Anthropic.Tool = {
   name: 'propose_amendment',
   description:
@@ -201,9 +229,17 @@ export interface DevContext {
 // Discriminated union returned by runDevAgent (formerly runServerDevAgent).
 // 'completed' = normal end_turn path (max_tokens turns are recovered and loop continues);
 // 'amendment_proposed' = agent called propose_amendment and the orchestrator must pause all tasks and open a gate.
+// 'blocked_by_protected_test' = agent called report_blocked_by_protected_test; orchestrator parks the task.
 export type AgentOutcome =
   | { kind: 'completed' }
-  | { kind: 'amendment_proposed'; contractYaml: string; rationale: string; taskId: string };
+  | { kind: 'amendment_proposed'; contractYaml: string; rationale: string; taskId: string }
+  | {
+      kind: 'blocked_by_protected_test';
+      findingId: string;
+      testFile: string;
+      conflictingAssertion: string;
+      taskId: string;
+    };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -497,7 +533,14 @@ export async function runDevAgent(
             cache_control: { type: 'ephemeral' },
           } as Anthropic.TextBlockParam,
         ],
-        tools: [BASH_TOOL, WRITE_FILE_TOOL, EDIT_FILE_TOOL, READ_FILE_TOOL, PROPOSE_AMENDMENT_TOOL],
+        tools: [
+          BASH_TOOL,
+          WRITE_FILE_TOOL,
+          EDIT_FILE_TOOL,
+          READ_FILE_TOOL,
+          PROPOSE_AMENDMENT_TOOL,
+          REPORT_BLOCKED_TOOL,
+        ],
         messages: withLastMessageCached(messages),
       },
       featureId,
@@ -758,6 +801,38 @@ export async function runDevAgent(
               kind: 'amendment_proposed',
               contractYaml: contract_yaml,
               rationale,
+              taskId: task.id,
+            };
+          } else if (block.name === 'report_blocked_by_protected_test') {
+            const {
+              finding_id = '',
+              test_file = '',
+              conflicting_assertion = '',
+            } = block.input as {
+              finding_id?: string;
+              test_file?: string;
+              conflicting_assertion?: string;
+            };
+            const blockedContent =
+              'Block report received. The orchestrator will park this task for operator review.';
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: blockedContent,
+            });
+            if (onToolCall)
+              await onToolCall({
+                turn,
+                toolName: 'report_blocked_by_protected_test',
+                resultSize: blockedContent.length,
+                resultFirstLine: (blockedContent.split('\n')[0] ?? '').slice(0, 120),
+              });
+            messages.push({ role: 'user', content: toolResults });
+            return {
+              kind: 'blocked_by_protected_test',
+              findingId: finding_id,
+              testFile: test_file,
+              conflictingAssertion: conflicting_assertion,
               taskId: task.id,
             };
           } else {

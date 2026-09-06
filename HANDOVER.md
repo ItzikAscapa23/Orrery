@@ -30,7 +30,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `apps/server/src/lib/` — orchestrator, events, container, anthropic, spendGuard
 - `apps/server/src/lib/nonProgressError.ts` — `NonProgressError` class + `checkNonProgress()` helper
 - `apps/server/src/lib/bedrockPark.ts` — `parkTaskOnBedrockFailure`, `parkFeatureAgentOnBedrockFailure`, `isEnvironmentalBedrockError`
-- `apps/server/src/lib/testOutputSummary.ts` — `summarizeBashTestRun`, `toJsonReporterCommand`
+- `apps/server/src/lib/testOutputSummary.ts` — `summarizeBashTestRun`, `toJsonReporterCommand`, `extractProbeFlags`
 - `apps/server/src/jobs/` — devJob, testJob, taskTestJob, createAdoPrJob, agentWorker
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 36 — Test output can be trusted
+- **Current phase:** 37 — Agents keep their flags, and blockers do not vanish quietly
 - **State:** `complete`
 - **Last updated:** 2026-09-06
 
@@ -64,11 +64,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] 120-log-resolved-argv-and-report-path
-- [x] 120-diagnosis
-- [x] 121-summary-states-its-scope
-- [x] 122-vacuous-findings-reach-a-gate
-- [x] 123-orchestrator-writes-are-not-agent-commits
+- [x] 124-preserve-agent-flags
+- [x] 125-blocked-by-protected-test
+- [x] 126-re-review-checks-prior-findings
 
 ---
 
@@ -76,13 +74,41 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1214 passed across 92 files**, 2026-09-06 |
+| `npm test` (repo root) | passed — **1215 passed across 92 files**, 2026-09-06 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
 
 ---
 
 ## Decisions
+
+- **Phase 37: `toJsonReporterCommand` reuses `extractProbeFlags` for agent args (`124`)** —
+  `extractPositionalArgs` dropped every `--flag` token, so an agent running
+  `npx jest --testPathPattern=auth` silently executed the full suite. Fix: replace
+  `extractPositionalArgs(trimmed, 'npx jest')` with `extractProbeFlags(trimmed)`, which
+  strips only the three reporter flags the rewrite injects (`--json`, `--outputFile=`,
+  `--reporter=`) and preserves everything else. The unused `extractPositionalArgs` function
+  was deleted. Wall-time benefit: a filtered run (e.g. `--testPathPattern`) now actually
+  filters instead of running all 92 files.
+
+- **Phase 37: `blocked_by_protected_test` AgentOutcome (`125`)** — `REPORT_BLOCKED_TOOL`
+  added to `devAgent.ts` alongside `PROPOSE_AMENDMENT_TOOL`. Agent calls
+  `report_blocked_by_protected_test(finding_id, test_file, conflicting_assertion)` when a
+  review finding requires changing a read-only acceptance test. `runDevAgent` returns
+  `{ kind: 'blocked_by_protected_test', ... }`. `devJob.ts` parks the task with
+  `parkReason: 'blocked_by_protected_test'` and `final: false` — not final because the
+  operator can investigate and unlock. Modelled on the `amendment_proposed` pattern.
+
+- **Phase 37: `runReviewAgent` returns `{ findings, priorFindingStatuses }` (`126`)** —
+  Return type changed from `FindingSchema[]` to
+  `{ findings: FindingSchema[]; priorFindingStatuses: PriorFindingStatus[] }`.
+  `ReviewFindingArraySchema` gains optional `prior_finding_statuses` array.
+  In `reviewJob.ts`, when `priorReviewRounds >= 1`, the DB is queried for findings at the
+  current `(featureId, specRev)` *before* `persistFindings` overwrites them — this is the
+  guaranteed read window (specRev is stable between review rounds since only
+  spec_approval/plan_approval gates increment it). Prior findings are injected into the
+  review prompt as a checklist; statuses are logged as a muted `agent.log` event after
+  the review completes.
 
 - **Phase 36: `summarizeBashTestRun` returns `TestRunSummary` (`120`)** — Now returns
   `{ summary, resolvedCommand, reportPath }` instead of a raw string. Both `devAgent.ts`
@@ -91,96 +117,24 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   testJob, and taskTestJob. The event log now records `∟ resolved: <rewritten cmd> @ <path>`
   alongside each intercepted test command.
 
-- **Phase 36: diagnosis — `toJsonReporterCommand` strips agent flags (`120`)** — `extractPositionalArgs`
-  only keeps non-`--` tokens; all `--flag` arguments are dropped from the rewrite. An agent running
-  `npx jest --testPathPattern="X"` executes the full suite because `--testPathPattern` is stripped. The
-  per-invocation path (`/tmp/test-report-<ts>-<rand>.json`) is reached in every branch that returns
-  non-null. Staleness is structurally impossible. Scope confusion is addressed by task 121 below.
+- **Phase 36: diagnosis — `toJsonReporterCommand` strips agent flags (`120`)** — Fixed in
+  Phase 37 (task 124). Phase 36 documented it; Phase 37 fixed it.
 
 - **Phase 36: file count in summary (`121`)** — `ParsedTestOutput` gains `fileCount?: number`
   (populated from `json.testResults.length`). `formatTestSummary` appends `(N files)` / `(1 file)`
-  when `fileCount` is set. An agent that issues a scoped command but gets the full suite sees
-  `TESTS: 2192 passed, 0 failed (92 files)` and immediately knows the scope is wider than requested.
+  when `fileCount` is set.
 
 - **Phase 36: vacuous findings reach a `test_report` gate (`122`)** — `_advanceTestPass` in
   `testJob.ts`: when `warnings.length > 0`, persists findings to the `finding` table, opens a
-  `test_report` gate (`blockers: 0, warnings: N`), and sets `agent.status: waiting` instead of
-  transitioning to TEST_PASS. `POST /approve-test` only blocks on blocker findings, so the operator
-  can approve immediately. The existing gate UI and resolve infrastructure handle the new path with
-  no new code needed.
+  `test_report` gate, and sets `agent.status: waiting` instead of transitioning to TEST_PASS.
 
 - **Phase 36: lockfiles excluded from agent commits (`123`)** — After `git add -A` in devJob.ts,
   testJob.ts, and taskTestJob.ts, any staged `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`
-  is unstaged via `git reset HEAD -- <lockfiles>` before the agent commit. These files are modified
-  by the bootstrap install (not by the agent) and must not ride in agent-trailers commits. The
-  unstaged files remain dirty in the (disposable) worktree.
+  is unstaged via `git reset HEAD -- <lockfiles>` before the agent commit.
 
 - **Phase 35: per-invocation path replaces `rm -f` (`117-118`)** — `summarizeBashTestRun`
-  now generates `/tmp/test-report-<timestamp>-<random>.json` per call. `rm` is not in
-  `ALLOWED_PREFIXES` and must not be added (`mv`/`cp` cannot destroy; `rm` can, and
-  Phase 28 made acceptance tests read-only to the dev agent). A fresh path is a
-  structural guarantee — the file cannot exist before the command runs, so no stale read
-  is possible. The 9 other `TEST_REPORT_FILE` sites (devJob.ts lines 629/851/898/958,
-  testJob.ts line 724) each run their own test command and are not downstream consumers
-  of `summarizeBashTestRun`; they continue using the constant unchanged.
-
-- **Phase 35: orchestrator-injected allowlist audit** — Every command `summarizeBashTestRun`
-  injects into the container on the agent's behalf, post-fix:
-
-  | Injected command | Allowlist result |
-  |---|---|
-  | `npx vitest run --reporter=json --outputFile=<path>` | passes (`npx vitest` prefix) |
-  | `npx jest --json --outputFile=<path> [args]` | passes (`npx jest` prefix) |
-  | `cat <invocationPath>` | passes (`cat ` prefix) |
-
-  No orchestrator-injected command is rejected by the allowlist.
-
-- **Phase 35: `isViolation` corrects the class hierarchy (`119`)** — The test agent
-  uses `TestAllowlistViolationError extends Error` (not `AllowlistViolationError` from
-  container.ts). `taskTestJob.ts` and `testJob.ts` violation classifiers previously
-  checked `AllowlistViolationError`, which in the test flow is only ever thrown by
-  orchestrator-injected code (never the agent). Fixed to check
-  `TestAllowlistViolationError` so genuine agent violations are classified as violations
-  and orchestrator errors are not. `MetacharViolationError` is unchanged: since
-  `TestMetacharViolationError extends MetacharViolationError`, the existing
-  `instanceof MetacharViolationError` check already covers test-agent metachar violations.
-
-- **Phase 34: stale report pre-delete (`114-npm-test-is-not-scoped`)** — Root cause:
-  `toJsonReporterCommand` rewrites `npm test` → `npx vitest run`. In a jest repo
-  vitest fails silently; the report file from the previous scoped jest run is stale-read
-  by `cat`, returning 9 tests when the suite has 2191. Fixed in Phase 34 by `rm -f`
-  before every `toJsonReporterCommand` exec; replaced in Phase 35 with per-invocation
-  path (structural, not procedural).
-
-- **Phase 34: command included in non-progress hash (`115-verification-is-not-non-progress`)** —
-  Three distinct commands all collapsing to `TESTS: 97 passed, 0 failed` filled the ring
-  buffer with identical hashes and killed a task whose fix had already landed. Fix: hash
-  `{ command, results }` so distinct commands never count as repetition. A passing test
-  result clears the ring buffer.
-
-- **Phase 34: `isEnvironmentalBedrockError` is the single predicate (`116-proxy-block-is-environmental`)** —
-  A `503 File Blocked` HTML page from the corporate proxy was classified as an agent
-  failure and consumed an attempt. Covered by `isEnvironmentalBedrockError` in
-  `lib/bedrockPark.ts`.
-
-- **Phase 33: ring buffer resets on write_file/edit_file** — An agent editing
-  source files between test runs legitimately produces identical test output. Without
-  the reset, that's a false positive. The buffer only accumulates during read/bash-only
-  turns; any write or edit clears it.
-
-- **Phase 33: `checkNonProgress()` extracted to `nonProgressError.ts`** — Pure function
-  testable without mocking the Anthropic API. Both `devAgent.ts` and `testAgent.ts`
-  call it; unit tests cover it directly.
-
-- **Phase 33: all five agent-stop caps** (audit, R-45 sub-item):
-
-  | Cap | File | Default threshold | Operator-visible outcome |
-  |---|---|---|---|
-  | Turn cap (dev) | `devAgent.ts` `MAX_TURNS` | 40 | "Agent hit N-turn safety cap" — task failed/parked |
-  | Turn cap (test) | `testAgent.ts` `MAX_TURNS`; overridden by `repoEntry.max_turns` | 30 default | "Test Agent hit N-turn safety cap" |
-  | Spend guard | `spendGuard.ts` `SPEND_GUARD_MAX_TURNS` | 150 cumulative | task parked, `gate.spend_guard` event, orange badge in UI |
-  | Violation cap | `devAgent.ts` `MAX_VIOLATIONS` = 3 | 3 | "too many violations" — task parked |
-  | Non-progress | `nonProgressError.ts` `NON_PROGRESS_THRESHOLD` env var | 3 | "Non-progress stop: '<command>' returned the same result 3 times." — task parked |
+  now generates `/tmp/test-report-<timestamp>-<random>.json` per call. Staleness is
+  structurally impossible without any `rm`.
 
 - **`spec_approval` gate-open and approve paths (Phase 29)** —
   Gate-open paths (4): `awsReviewJob.ts` after review; `specSubmit.ts` no-charter
@@ -190,11 +144,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **Test-file boundary: tool-handler enforcement, not prompt-only (Phase 28)** —
   `write_file` and `edit_file` in `runDevAgent` / `runLightDevAgent` call
   `getTestAuthoredSet(worktreePath)` at startup and reject any path in the returned
-  set with `is_error: true`. Rejection does NOT consume a violation slot.
-
-- **`| head -N` / `| tail -N` exempted from metachar check (Phase 28)** —
-  `checkMetachar()` strips `| head/tail [-n] N` before the regex; bare `| head` still
-  throws. `2>/dev/null` also exempted (Phase 20).
+  set with `is_error: true`.
 
 - **Finding identity is composite (featureId, specRev, id)** — Model-assigned ids
   (`f1`, `f2`) recur across cycles. A plain `where: { id }` on findings is always a bug.
@@ -259,6 +209,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 34 | Verification means what it says | `72bc51e` | 2026-09-06 |
 | 35 | The orchestrator is not bound by the agent's allowlist | `c208689` | 2026-09-06 |
 | 36 | Test output can be trusted | `260a95a` | 2026-09-06 |
+| 37 | Agents keep their flags, and blockers do not vanish quietly | pending | 2026-09-06 |
 
 ---
 
@@ -275,11 +226,12 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - A feature where acceptance tests are red at dev-agent start ends with the same
   assertions it began with.
 - A feature whose spec has an unanswered question is demonstrably unapprovable.
-- A test report with eight vacuous findings shows `8` in the vacuous cube, and the feature pauses at the `test_report` gate rather than auto-advancing.
-- An agent running the full suite sees the full suite count: `TESTS: N passed, 0 failed (92 files)`.
-- A test summary for an agent-issued `npx jest foo.test.js` that ran the full suite shows `(92 files)` — the scope gap is visible.
-- The event log for an intercepted test command includes `∟ resolved: <jsonCmd> @ /tmp/test-report-<ts>-<rand>.json`.
-- An agent commit in a repo with lockfile drift (bootstrap install) does not include `package-lock.json`.
-- Three different commands returning identical summaries do not trigger the non-progress stop.
-- A proxy 503 from the corporate proxy parks a task without consuming an attempt slot.
-- A test agent completes a run on the bff repo without an allowlist error.
+- An agent running `npx jest --testPathPattern=auth` sees only the matching tests, not
+  the full suite (scope is respected, not silently expanded).
+- An agent running `npx jest --ci` produces a rewritten command that contains `--ci`
+  before `--json` in the event log.
+- A dev agent that calls `report_blocked_by_protected_test` causes the task to park
+  with `parkReason: 'blocked_by_protected_test'` and a `task.failed` event with
+  `final: false`.
+- A round-2 review receives a prior-findings checklist in its prompt and the response
+  includes `prior_finding_statuses`; statuses are logged as a muted `agent.log` event.

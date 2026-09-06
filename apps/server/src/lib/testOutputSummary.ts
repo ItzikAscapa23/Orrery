@@ -33,35 +33,28 @@ export function extractProbeFlags(probeCommand: string): string {
     .trim();
 }
 
-// Collects non-flag tokens (positional file paths) from the agent's command
-// after stripping the base prefix and 2>&1.
-function extractPositionalArgs(command: string, prefix: string): string {
-  const rest = command.trim().replace(/2>&1/g, '').trim().slice(prefix.length).trim();
-  return rest
-    .split(/\s+/)
-    .filter((t) => t && !t.startsWith('--') && t !== '--')
-    .join(' ');
-}
-
 export function toJsonReporterCommand(
   command: string,
   reportFile: string = TEST_REPORT_FILE,
   probeCommand?: string,
 ): string {
   const trimmed = command.trim().replace(/2>&1/g, '').trim();
-  const extraFlags = probeCommand ? extractProbeFlags(probeCommand) : '';
+  const probeFlags = probeCommand ? extractProbeFlags(probeCommand) : '';
+  // Preserve the agent's own flags by applying the same stripping logic as
+  // extractProbeFlags — strip only the three reporter flags we inject ourselves.
+  const agentArgs = extractProbeFlags(trimmed);
 
   if (trimmed.startsWith('npx jest')) {
-    const pathArgs = extractPositionalArgs(trimmed, 'npx jest');
     const parts = ['npx jest'];
-    if (extraFlags) parts.push(extraFlags);
+    if (probeFlags) parts.push(probeFlags);
+    if (agentArgs) parts.push(agentArgs);
     parts.push(`--json --outputFile=${reportFile}`);
-    if (pathArgs) parts.push(pathArgs);
     return parts.join(' ');
   }
 
   const parts = ['npx vitest run'];
-  if (extraFlags) parts.push(extraFlags);
+  if (probeFlags) parts.push(probeFlags);
+  if (agentArgs) parts.push(agentArgs);
   parts.push(`--reporter=json --outputFile=${reportFile}`);
   return parts.join(' ');
 }

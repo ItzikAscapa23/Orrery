@@ -73,7 +73,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mockExecFileSync.mockReturnValue('diff --git a/index.ts b/index.ts\n+export function hello() {}');
   mockReadArtifact.mockReturnValue('# Spec\n\nFeature spec content.');
-  mockRunReviewAgent.mockResolvedValue([]);
+  mockRunReviewAgent.mockResolvedValue({ findings: [], priorFindingStatuses: [] });
   mockCheckBedrock.mockResolvedValue(true);
 });
 
@@ -87,7 +87,7 @@ async function getEvents() {
 
 describe('runReviewJob — no blockers (REVIEW_PASS)', () => {
   it('emits review.started, review.findings, phase.changed to TESTING', async () => {
-    mockRunReviewAgent.mockResolvedValue([]); // no findings
+    mockRunReviewAgent.mockResolvedValue({ findings: [], priorFindingStatuses: [] }); // no findings
 
     await runReviewJob(featureId);
 
@@ -109,15 +109,18 @@ describe('runReviewJob — no blockers (REVIEW_PASS)', () => {
 
 describe('runReviewJob — blockers, round 0 (REVIEW_FAIL + bounce-back)', () => {
   it('emits REVIEW_FAIL transition and orchestrator bounce-back log', async () => {
-    mockRunReviewAgent.mockResolvedValue([
-      {
-        id: 'rf1',
-        severity: 'blocker',
-        section: 'POST /api',
-        issue: 'Missing id field',
-        repo: 'demo-server',
-      },
-    ]);
+    mockRunReviewAgent.mockResolvedValue({
+      findings: [
+        {
+          id: 'rf1',
+          severity: 'blocker',
+          section: 'POST /api',
+          issue: 'Missing id field',
+          repo: 'demo-server',
+        },
+      ],
+      priorFindingStatuses: [],
+    });
 
     await runReviewJob(featureId);
 
@@ -154,15 +157,18 @@ describe('runReviewJob — blockers, round 1 (human gate)', () => {
       }),
     );
 
-    mockRunReviewAgent.mockResolvedValue([
-      {
-        id: 'rf1',
-        severity: 'blocker',
-        section: 'POST /api',
-        issue: 'Still missing',
-        repo: 'demo-server',
-      },
-    ]);
+    mockRunReviewAgent.mockResolvedValue({
+      findings: [
+        {
+          id: 'rf1',
+          severity: 'blocker',
+          section: 'POST /api',
+          issue: 'Still missing',
+          repo: 'demo-server',
+        },
+      ],
+      priorFindingStatuses: [],
+    });
 
     await runReviewJob(featureId);
 
@@ -217,7 +223,7 @@ describe('runReviewJob — empty currentBranches', () => {
       where: { id: featureId },
       data: { currentBranches: {} },
     });
-    mockRunReviewAgent.mockResolvedValue([]);
+    mockRunReviewAgent.mockResolvedValue({ findings: [], priorFindingStatuses: [] });
 
     await expect(runReviewJob(featureId)).resolves.not.toThrow();
 
@@ -320,17 +326,19 @@ describe('POST /features/:id/retry-review', () => {
 describe('runReviewJob — finding re-review: severity updated in DB on second round at same specRev', () => {
   it('DB reflects blocker when severity changes warning→blocker between two runs at same specRev', async () => {
     // Round 1: finding f1 is a warning
-    mockRunReviewAgent.mockResolvedValueOnce([
-      { id: 'f1', severity: 'warning', section: 'GET /api', issue: 'Minor issue' },
-    ]);
+    mockRunReviewAgent.mockResolvedValueOnce({
+      findings: [{ id: 'f1', severity: 'warning', section: 'GET /api', issue: 'Minor issue' }],
+      priorFindingStatuses: [],
+    });
     await runReviewJob(featureId);
 
     // Round 2: same specRev (no gate opened), finding f1 is now a blocker
     // Reset feature back to CODE_REVIEW so runReviewJob does not skip
     await getPrisma().feature.update({ where: { id: featureId }, data: { status: 'CODE_REVIEW' } });
-    mockRunReviewAgent.mockResolvedValueOnce([
-      { id: 'f1', severity: 'blocker', section: 'GET /api', issue: 'Serious issue' },
-    ]);
+    mockRunReviewAgent.mockResolvedValueOnce({
+      findings: [{ id: 'f1', severity: 'blocker', section: 'GET /api', issue: 'Serious issue' }],
+      priorFindingStatuses: [],
+    });
     await runReviewJob(featureId);
 
     // The DB row must reflect the new severity — not the stale one from round 1
