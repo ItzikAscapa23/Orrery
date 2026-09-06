@@ -114,9 +114,12 @@ function TestRowLine({ row }: { row: TestRow }) {
   );
 }
 
+type CubeDrilldownKey = 'passing' | 'authored' | 'authored-failing' | 'vacuous';
+
 export function TestReportCard({ testReport: r, featureId, gate, onAction }: TestReportCardProps) {
   const variant = resolveVariant(r);
   const [expanded, setExpanded] = useState(false);
+  const [expandedCube, setExpandedCube] = useState<CubeDrilldownKey | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function postGateAction(path: string) {
@@ -262,6 +265,168 @@ export function TestReportCard({ testReport: r, featureId, gate, onAction }: Tes
           {r.parseError}
         </div>
       )}
+
+      {/* Stat cubes */}
+      {(function () {
+        const vacuousCount = r.findings.filter((f) => f.section === 'vacuous assertions').length;
+        const authored = (r.authoredPassed ?? 0) + (r.authoredFailed ?? 0);
+        const wallTimeStr = r.wallTimeMs != null ? `${(r.wallTimeMs / 1000).toFixed(1)}s` : '—';
+
+        type CubeDef = {
+          label: string;
+          display: string;
+          drillKey: CubeDrilldownKey | null;
+          clickable: boolean;
+        };
+
+        const cubes: CubeDef[] = [
+          {
+            label: 'suite passing',
+            display: r.passed !== null ? String(r.passed) : '—',
+            drillKey: 'passing',
+            clickable: r.passed !== null && r.passed > 0,
+          },
+          {
+            label: 'authored',
+            display: r.authoredPassed !== undefined ? String(authored) : '—',
+            drillKey: 'authored',
+            clickable: r.authoredPassed !== undefined && authored > 0,
+          },
+          {
+            label: 'authored failing',
+            display: r.authoredFailed !== undefined ? String(r.authoredFailed) : '—',
+            drillKey: 'authored-failing',
+            clickable: r.authoredFailed !== undefined && r.authoredFailed > 0,
+          },
+          {
+            label: 'vacuous',
+            display: String(vacuousCount),
+            drillKey: 'vacuous',
+            clickable: vacuousCount > 0,
+          },
+          {
+            label: 'wall time',
+            display: wallTimeStr,
+            drillKey: null,
+            clickable: false,
+          },
+        ];
+
+        function drillItems(): React.ReactNode {
+          if (expandedCube === 'passing') {
+            return r.tests
+              .filter((t) => t.status === 'passed')
+              .map((t, i) => <TestRowLine key={`${t.test_name}-${i}`} row={t} />);
+          }
+          if (expandedCube === 'authored') {
+            return r.tests
+              .filter((t) => t.authored === true)
+              .map((t, i) => <TestRowLine key={`${t.test_name}-${i}`} row={t} />);
+          }
+          if (expandedCube === 'authored-failing') {
+            return r.tests
+              .filter((t) => t.authored === true && t.status !== 'passed')
+              .map((t, i) => <TestRowLine key={`${t.test_name}-${i}`} row={t} />);
+          }
+          if (expandedCube === 'vacuous') {
+            return r.findings
+              .filter((f) => f.section === 'vacuous assertions')
+              .map((f) => (
+                <div
+                  key={f.id}
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    color: 'var(--text-secondary)',
+                    padding: '2px 0',
+                  }}
+                >
+                  {f.issue}
+                </div>
+              ));
+          }
+          return null;
+        }
+
+        return (
+          <div style={{ marginTop: 10, marginBottom: 10 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(104px, 1fr))',
+                gap: 6,
+              }}
+            >
+              {cubes.map((cube) => {
+                const isExpanded = expandedCube === cube.drillKey;
+                const Tag = cube.clickable ? 'button' : 'div';
+                return (
+                  <Tag
+                    key={cube.label}
+                    role={cube.clickable ? 'button' : 'region'}
+                    aria-label={cube.label}
+                    onClick={
+                      cube.clickable
+                        ? () => setExpandedCube(isExpanded ? null : cube.drillKey)
+                        : undefined
+                    }
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      padding: '6px 4px 5px',
+                      borderRadius: 4,
+                      border: `1px solid ${isExpanded ? 'rgba(255,178,77,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                      background: isExpanded ? 'rgba(255,178,77,0.06)' : 'rgba(255,255,255,0.02)',
+                      cursor: cube.clickable ? 'pointer' : 'default',
+                      minWidth: 0,
+                      ...(Tag === 'button' ? { appearance: 'none' } : {}),
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        color: 'var(--text-primary)',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {cube.display}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 8,
+                        color: 'var(--text-muted)',
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        marginTop: 3,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {cube.label}
+                    </span>
+                  </Tag>
+                );
+              })}
+            </div>
+            {expandedCube && (
+              <div
+                style={{
+                  marginTop: 8,
+                  paddingTop: 8,
+                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {drillItems()}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Failure findings (test findings — read-only, no accept/dismiss here) */}
       {r.findings.length > 0 && (
