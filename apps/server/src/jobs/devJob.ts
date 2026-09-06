@@ -32,7 +32,7 @@ import { dispatchUnblockedTasks, dispatchForState } from '../lib/dispatch.js';
 import { getRejectedAmendments } from '../routes/featureAmendment.js';
 import { maybeAdvanceToReview } from '../lib/maybeAdvance.js';
 import { checkBedrockWithRetry } from '../lib/connectivity.js';
-import { parkTaskOnBedrockFailure } from '../lib/bedrockPark.js';
+import { parkTaskOnBedrockFailure, isEnvironmentalBedrockError } from '../lib/bedrockPark.js';
 import {
   runDevAgent,
   AgentNoopError,
@@ -1033,6 +1033,21 @@ export async function runDevJob(
 
     return completeTask(featureId, taskId, task, worktreeInfo, commitSha);
   } catch (err: unknown) {
+    // Environmental Bedrock failure mid-run (credential expiry or proxy 503):
+    // park without consuming an attempt — same semantics as the pre-probe check.
+    if (isEnvironmentalBedrockError(err)) {
+      await parkTaskOnBedrockFailure({
+        featureId,
+        taskId,
+        repo: task.repo,
+        agentName: task.side,
+        retryPath: `POST /features/${featureId}/retry-bounce`,
+        attemptRollback: { attemptCount: task.attemptCount },
+        attempt,
+      });
+      return 'parked';
+    }
+
     const isPolicyViolation =
       err instanceof AllowlistViolationError ||
       err instanceof MetacharViolationError ||

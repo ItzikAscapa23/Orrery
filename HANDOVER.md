@@ -29,6 +29,8 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 **Key directories:**
 - `apps/server/src/lib/` — orchestrator, events, container, anthropic, spendGuard
 - `apps/server/src/lib/nonProgressError.ts` — `NonProgressError` class + `checkNonProgress()` helper
+- `apps/server/src/lib/bedrockPark.ts` — `parkTaskOnBedrockFailure`, `parkFeatureAgentOnBedrockFailure`, `isEnvironmentalBedrockError`
+- `apps/server/src/lib/testOutputSummary.ts` — `summarizeBashTestRun`, `toJsonReporterCommand`
 - `apps/server/src/jobs/` — devJob, testJob, taskTestJob, createAdoPrJob, agentWorker
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
@@ -54,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 33 — An agent that is not progressing stops
+- **Current phase:** 34 — Verification means what it says
 - **State:** `complete`
 - **Last updated:** 2026-09-06
 
@@ -62,8 +64,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 34 not yet written to plan.md — plan.md ends at phase 33. Write the next
-spec before starting.*
+*(Phase 35 not yet written in plan.md — write the next spec before starting.)*
 
 ---
 
@@ -71,13 +72,48 @@ spec before starting.*
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1204 passed across 92 files**, 2026-09-06 |
+| `npm test` (repo root) | passed — **1210 passed across 92 files**, 2026-09-06 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
 
 ---
 
 ## Decisions
+
+- **Phase 34: stale report pre-delete (`114-npm-test-is-not-scoped`)** — Root cause:
+  `toJsonReporterCommand` rewrites `npm test` → `npx vitest run`. In a jest repo
+  vitest fails silently; the report file from the previous scoped jest run is stale-read
+  by `cat`, returning 9 tests when the suite has 2191. Fix: `rm -f ${reportFilePath}`
+  before every `toJsonReporterCommand` exec in `summarizeBashTestRun`. If the rewritten
+  command fails, `cat` returns empty → `parseError` → raw fallback to agent.
+
+- **Phase 34: command included in non-progress hash (`115-verification-is-not-non-progress`)** —
+  Three distinct commands (`npx jest test/…`, `npm test --no-coverage`, `npm test`) all
+  collapse to `TESTS: 97 passed, 0 failed`. Under Phase 33's hash-result-only scheme,
+  they filled the ring buffer with identical hashes and killed a task whose fix had
+  already landed. Fix: hash `{ command, results }` so distinct commands never count as
+  repetition. Added separately: a passing test result (zero failures) clears the ring
+  buffer — repeated green verification runs are progress, not a stuck loop.
+
+- **Phase 34: `isEnvironmentalBedrockError` is the single predicate (`116-proxy-block-is-environmental`)** —
+  A `503 File Blocked` HTML page from the corporate proxy was classified as an agent
+  failure and consumed an attempt. `isEnvironmentalBedrockError(err)` in `lib/bedrockPark.ts`
+  covers credential expiry (`'Bedrock credentials expired'`), pre-probe unreachable
+  (`'Bedrock unreachable'`), and proxy 503 (`status === 503 && msg.includes('file blocked')`).
+  Cited from devJob.ts catch block (new) and taskTestJob.ts (replaced inline check).
+  `rethrowIfExpiredToken` in `anthropic.ts` now detects proxy 503 and rethrows with
+  `'Bedrock unreachable — ...'` so the predicate matches.
+
+- **Phase 34: output-rewriting audit** — Every site that rewrites test output before an
+  agent sees it:
+
+  | Site | What is rewritten | What agent cannot distinguish |
+  |---|---|---|
+  | `summarizeBashTestRun` (testOutputSummary.ts:94) | Full output → `TESTS: X passed, Y failed` + FAILURES block | Which files ran; individual duration; runner errors vs test failures |
+  | `toJsonReporterCommand` (testOutputSummary.ts:46) | Agent's command gets `--json`/`--reporter=json` grafted on | Agent cannot tell the rewrite happened; wrong-runner failure looks like test failure |
+  | `testJob.ts` bash intercept | Same summariser path | Same as above, applies to the feature-level test agent |
+  | `formatTestSummary` (testOutputSummary.ts:69) | Per-test durations and suite metadata dropped | Agent cannot see which tests are slow or which suites hold failures |
+  | Phase 33 ring buffer (nonProgressError.ts:41) | Hashes the summarised string | Two runs with different failure sets but identical TESTS: line would collide (fixed in Phase 34 by including the command) |
 
 - **Phase 33: ring buffer resets on write_file/edit_file** — An agent editing
   source files between test runs legitimately produces identical test output (e.g.
@@ -89,55 +125,20 @@ spec before starting.*
   hash + ring-buffer logic is a pure function testable without mocking the Anthropic
   API. Both `devAgent.ts` and `testAgent.ts` call it; unit tests cover it directly.
 
-- **Phase 33: task 112 added to test agent system prompt, not an external repo** —
-  The `?? []` fixture fallback prohibition is a universal rule that should apply to
-  every target repo. Adding it to a specific external repo's CLAUDE.md would only
-  fix one repo. The rule now lives in `testAgent.ts`'s `## Rules` block so every
-  future test-writing run inherits it.
-
-- **Phase 33: `NonProgressError` parks immediately (added to `isPolicyViolation`
-  in `devJob.ts` and `isViolation` in `taskTestJob.ts`)** — Retrying a non-progress
-  stop is deterministic failure: the agent would loop again on the same condition.
-  Parking immediately on the first occurrence matches the semantics of
-  `AgentNoopError`. The error message names the command and first result line so
-  the operator can read the cause without opening the container logs.
-
-- **Phase 33: `createdAt` was already in the SSE event payload** — `EventRow`
-  already carries `createdAt: z.string().datetime()` and the `featureEvents` route
-  serialises the whole row via `JSON.stringify(row)`. No server route changes were
-  needed; only `activityFold.ts` and `ActivityTab.tsx` needed updating.
-
 - **Phase 33: all five agent-stop caps** (audit, R-45 sub-item):
 
   | Cap | File | Default threshold | Operator-visible outcome |
   |---|---|---|---|
   | Turn cap (dev) | `devAgent.ts` `MAX_TURNS` | 40 | "Agent hit N-turn safety cap" — task failed/parked |
-  | Turn cap (test) | `testAgent.ts` `MAX_TURNS` (fallback); overridden by `repoEntry.max_turns` in `repo-manifest.yaml` — `bff` repo uses 80 | 30 default, per-repo manifest override | "Test Agent hit N-turn safety cap" |
+  | Turn cap (test) | `testAgent.ts` `MAX_TURNS`; overridden by `repoEntry.max_turns` | 30 default | "Test Agent hit N-turn safety cap" |
   | Spend guard | `spendGuard.ts` `SPEND_GUARD_MAX_TURNS` | 150 cumulative | task parked, `gate.spend_guard` event, orange badge in UI |
-  | Violation cap | `devAgent.ts` `MAX_VIOLATIONS` = 3 | 3 | "too many violations" — `MetacharViolationError` or `AllowlistViolationError` thrown, task parked |
-  | Non-progress (Phase 33) | `devAgent.ts`, `testAgent.ts` `NON_PROGRESS_THRESHOLD` env var | 3 | "Non-progress stop: '<command>' returned the same result 3 times. First line: <firstLine>" — task parked |
-
-- **Phase 32: TEST REPORT and ACTIVITY excluded from copy scope** — both render
-  structured/folded content, not raw source. Only the five source-document tabs
-  (REQUIREMENT, SPEC, PLAN, CONTRACT, TEST PLAN) carry a Copy button.
-
-- **Phase 32: clipboard unavailability surfaces as COPY ERROR** — handler throws
-  if `navigator.clipboard` is falsy or `writeText` rejects; button shows `COPY ERROR`
-  for 2.5 s then resets. No `execCommand` fallback — deprecated, unreliable return value.
-  `localhost:5173` is a secure context in all modern browsers, so this is the rare path.
-
-- **Phase 32: REQUIREMENT uses `RequirementTab.tsx`, not `ArtifactPanel.tsx`** —
-  plan spec said all five tabs share one component; REQUIREMENT renders the raw
-  `requirement` string prop via a separate component. Copy added to both; behavior
-  identical.
+  | Violation cap | `devAgent.ts` `MAX_VIOLATIONS` = 3 | 3 | "too many violations" — task parked |
+  | Non-progress | `nonProgressError.ts` `NON_PROGRESS_THRESHOLD` env var | 3 | "Non-progress stop: '<command>' returned the same result 3 times." — task parked |
 
 - **`spec_approval` gate-open and approve paths (Phase 29)** —
-  Gate-open paths (4):
-  1. `awsReviewJob.ts` — after AWS review completes, `AWS_DONE` → AWAITING_APPROVAL
-  2. `specSubmit.ts` — no charter, `SUBMIT_SPEC_LIGHT` → AWAITING_APPROVAL
-  3. `awsReviewJob.ts` error-handler — final attempt exhausted, advances without findings
-  4. `awsReviewJob.ts` missing-charter fallback — programming-error guard
-  Approve path (1): `POST /features/:id/approve` only — `APPROVE` or `APPROVE_LIGHT`.
+  Gate-open paths (4): `awsReviewJob.ts` after review; `specSubmit.ts` no-charter
+  fast-path; `awsReviewJob.ts` error final-attempt; missing-charter fallback guard.
+  Approve path (1): `POST /features/:id/approve` only.
 
 - **Test-file boundary: tool-handler enforcement, not prompt-only (Phase 28)** —
   `write_file` and `edit_file` in `runDevAgent` / `runLightDevAgent` call
@@ -208,6 +209,7 @@ spec before starting.*
 | 31 | Test report cubes and brand mark | `41a8e1d` | 2026-09-06 |
 | 32 | Artifact tabs are copyable | `85592bf` | 2026-09-06 |
 | 33 | An agent that is not progressing stops | `4273e44` | 2026-09-06 |
+| 34 | Verification means what it says | pending | 2026-09-06 |
 
 ---
 
@@ -225,6 +227,6 @@ spec before starting.*
   assertions it began with.
 - A feature whose spec has an unanswered question is demonstrably unapprovable.
 - A test report with eight vacuous findings shows `8` in the vacuous cube.
-- An agent that issues the same bash/read result N consecutive times (default N=3)
-  stops with a message naming the command and the first line of the repeated result.
-- Turn rows in the Activity tab show a wall-clock timestamp (HH:MM:SS).
+- An agent running the full suite sees the full suite count (not a scoped result).
+- Three different commands returning identical summaries do not trigger the non-progress stop.
+- A proxy 503 from the corporate proxy parks a task without consuming an attempt slot.

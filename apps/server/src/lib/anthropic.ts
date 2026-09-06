@@ -84,8 +84,9 @@ function getClient(): Promise<MessagesClient> {
 }
 
 // Detect expired AWS STS credentials (Bedrock SSO tokens have a TTL) and
-// rethrow with a human-actionable message that includes the refresh command.
-// Called from every API path so no individual agent needs to handle this.
+// corporate proxy blocks (503 File Blocked), then rethrow with actionable
+// messages whose prefixes are matched by isEnvironmentalBedrockError in
+// bedrockPark.ts. Called from every API path so no individual agent handles this.
 function rethrowIfExpiredToken(err: unknown): never {
   if (err instanceof Error) {
     const status = (err as { status?: number }).status;
@@ -98,6 +99,15 @@ function rethrowIfExpiredToken(err: unknown): never {
         'Bedrock credentials expired. Refresh with:\n' +
           '  aws sso login --profile ai-devtools-dev\n' +
           'Then restart the server (env vars are read at startup).',
+      );
+    }
+    // Corporate TLS-inspecting proxy blocks appear as 503 with HTML body
+    // containing "File Blocked". Treat as infrastructure failure, not agent error.
+    const isProxyBlock =
+      status === 503 && (msg.includes('file blocked') || msg.includes('503 file blocked'));
+    if (isProxyBlock) {
+      throw new Error(
+        'Bedrock unreachable — corporate proxy blocked the request (503 File Blocked). Check VPN / proxy allowlist.',
       );
     }
   }

@@ -109,6 +109,11 @@ export async function summarizeBashTestRun(
 
   const jsonCmd = toJsonReporterCommand(command, reportFilePath, probeCommand);
 
+  // Pre-delete the report file so a stale result from a prior run is never
+  // returned. If the rewritten command fails (e.g. wrong runner for this repo),
+  // `cat` will return empty and parseTestOutput fires parseError → raw fallback.
+  await container.exec(`rm -f ${reportFilePath}`);
+
   // Run the JSON-reporter variant; stdout may be dirty (interleaved app output)
   // so we read the report file separately — same two-exec pattern as testJob.ts.
   const execResult = await container.exec(jsonCmd);

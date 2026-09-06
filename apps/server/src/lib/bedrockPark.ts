@@ -3,6 +3,22 @@ import { getPrisma } from './prisma.js';
 import { appendEvent } from './events.js';
 
 /**
+ * Single predicate for environmental Bedrock / infrastructure failures.
+ * Covers expired STS credentials, pre-probe unreachable, and corporate proxy
+ * blocks (503 File Blocked). Cited from devJob.ts and taskTestJob.ts catch blocks.
+ */
+export function isEnvironmentalBedrockError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  const status = (err as { status?: number }).status;
+  return (
+    msg.startsWith('bedrock credentials expired') ||
+    msg.startsWith('bedrock unreachable') ||
+    (status === 503 && (msg.includes('file blocked') || msg.includes('503 file blocked')))
+  );
+}
+
+/**
  * One definition for parking a task-level job (devJob, taskTestJob) on Bedrock
  * connectivity failure. Updates the Task row to parked, clears bullJobId, rolls
  * back the attempt counter, then emits task.failed (final:false) + agent.status

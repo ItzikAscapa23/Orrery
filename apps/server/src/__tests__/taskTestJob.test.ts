@@ -738,3 +738,33 @@ describe('taskTestJob — testsWritten update clears bullJobId (R-25)', () => {
     expect(task.bullJobId).toBeNull();
   });
 });
+
+// ── R-116: proxy 503 is environmental ─────────────────────────────────────────
+
+describe('taskTestJob — proxy 503 File Blocked is environmental (R-116)', () => {
+  it('parks via bedrockPark when agent throws Bedrock-unreachable from proxy block', async () => {
+    // rethrowIfExpiredToken in anthropic.ts converts proxy 503 to this prefix
+    mockRunTestAgent.mockRejectedValueOnce(
+      new Error(
+        'Bedrock unreachable — corporate proxy blocked the request (503 File Blocked). Check VPN / proxy allowlist.',
+      ),
+    );
+    await runTaskTestJob(featureId, taskId, 'job-proxy-503', 'server');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe('parked');
+    expect(task.parkReason).toBe('bedrock_unreachable');
+    expect(task.testsWritten).toBe(false);
+    // attempt counter must be rolled back — proxy block is not agent fault
+    expect(task.testTaskAttempts).toBe(0);
+  });
+
+  it('parks when err has status 503 and message containing File Blocked (raw SDK error)', async () => {
+    const sdkErr = Object.assign(new Error('503 File Blocked'), { status: 503 });
+    mockRunTestAgent.mockRejectedValueOnce(sdkErr);
+    await runTaskTestJob(featureId, taskId, 'job-proxy-raw', 'server');
+    const task = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe('parked');
+    expect(task.parkReason).toBe('bedrock_unreachable');
+    expect(task.testTaskAttempts).toBe(0);
+  });
+});

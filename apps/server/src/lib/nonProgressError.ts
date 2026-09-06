@@ -38,8 +38,35 @@ export function checkNonProgress(
     return null;
   }
 
+  // A passing test run (zero failures) is progress — agent is verifying, not stuck.
+  // Clear the buffer so repeated green checks never trigger the stop.
+  const resultText = results
+    .map((r) =>
+      typeof r.content === 'string'
+        ? r.content
+        : Array.isArray(r.content)
+          ? (r.content as Array<{ type?: string; text?: string }>)
+              .filter((b) => b?.type === 'text')
+              .map((b) => b.text ?? '')
+              .join('\n')
+          : '',
+    )
+    .join('\n');
+  if (/TESTS:\s*\d+\s+passed,\s*0\s+failed/.test(resultText)) {
+    recentHashes.length = 0;
+    return null;
+  }
+
+  // Include the command in the hash so distinct commands returning identical
+  // summaries (e.g. three verification runs all reporting "97 passed, 0 failed")
+  // never count as repetition of the same stuck loop.
   const hash = createHash('sha256')
-    .update(JSON.stringify(results.map((r) => ({ content: r.content, is_error: r.is_error }))))
+    .update(
+      JSON.stringify({
+        command,
+        results: results.map((r) => ({ content: r.content, is_error: r.is_error })),
+      }),
+    )
     .digest('hex');
 
   recentHashes.push(hash);
