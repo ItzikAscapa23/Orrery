@@ -1165,3 +1165,52 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - An agent running the full suite sees the full suite count
+---
+## Phase 35 — The orchestrator is not bound by the agent's allowlist
+**Goal:** A stale report is detected, not deleted by a command the agent may not run.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `117-remove-the-rm` — Phase 34 added `await container.exec(\`rm -f ${reportFilePath}\`)`
+      at `testOutputSummary.ts:115` to prevent a stale report being read. `rm` is
+      not in `ALLOWED_PREFIXES` (`container.ts:20-46` lists `cat`, `mkdir`, `cp`,
+      `mv` but deliberately not `rm`), and `ContainerHandle.exec` enforces the
+      allowlist for every caller. Every test command now fails identically with
+      `ERROR: Command not on allowlist: "rm -f /tmp/test-report.json"`. Observed
+      on the take-22 test agent: turns 26, 27 and 28 all returned that error,
+      tripping the Phase 33 non-progress stop, and the task parked at turn 28
+      having authored nothing
+- [ ] Do not add `rm` to the allowlist. `mv` and `cp` cannot destroy; `rm` can,
+      and Phase 28 made acceptance tests read-only to the dev agent — granting
+      `rm` would let an agent delete a test rather than edit it
+- [ ] `118-stale-report-is-a-parse-failure` — solve R-50 by detection rather than
+      deletion. `summarizeBashTestRun` must establish that the report it reads
+      was written by the command it just ran; a report that cannot be shown to be
+      current is treated as `parseError`, which already falls through to raw
+      output. Report the mechanism chosen — mtime, a marker, or a per-invocation
+      path — and why
+- [ ] If a per-invocation path is chosen, note the cost: `TEST_REPORT_FILE`
+      (`testJob.ts:368`) is read at nine sites across `devJob.ts` (629, 851, 898,
+      958), `testJob.ts` (724) and `testOutputSummary.ts` (48, 97, 115). All must
+      agree on the path for a given run
+- [ ] `119-orchestrator-errors-are-not-agent-violations` — the park message read
+      `test agent parked (allowlist violation) — use REDISPATCH to retry` for a
+      command the agent did not issue. The agent's three commands were
+      legitimate. An orchestrator-injected command that fails must not be
+      reported as agent misconduct, and must not consume the violation budget
+- [ ] Audit — list, not summary — every command the orchestrator injects into a
+      container on the agent's behalf, and state for each whether it passes the
+      allowlist
+**Definition of Done:**
+- No orchestrator-injected command is rejected by the agent allowlist
+- `rm` is absent from `ALLOWED_PREFIXES`
+- A stale report yields raw output, not stale counts
+- An orchestrator-injected failure is not reported as an allowlist violation
+- Injected-command audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1210 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A test agent completes a run on the bff repo without an allowlist error
