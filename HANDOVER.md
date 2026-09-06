@@ -174,7 +174,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 29 | Open questions are structured blockers answered at the gate | `aa04bb3` | 2026-09-05 |
 | 30 | Cover what Phase 29 shipped | `848f40b` | 2026-09-05 |
 | 31 | Test report cubes and brand mark | `41a8e1d` | 2026-09-06 |
-| 32 | Artifact tabs are copyable | pending | 2026-09-06 |
+| 32 | Artifact tabs are copyable | `85592bf` | 2026-09-06 |
 
 ---
 
