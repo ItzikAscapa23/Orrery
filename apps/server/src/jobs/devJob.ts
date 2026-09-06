@@ -730,14 +730,21 @@ export async function runDevJob(
         let text: string;
         if (info.toolName === 'read_file') {
           text = `◦ turn ${info.turn} · read_file ${info.path} (${info.range}, ${info.resultSize} chars)`;
+          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         } else if (info.toolName === 'bash') {
           text = `◦ turn ${info.turn} · bash ${info.command ?? ''} (${info.resultSize} chars)`;
+          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
+          if (info.resolvedCommand) {
+            text += `\n  ∟ resolved: ${info.resolvedCommand}`;
+            if (info.reportPath) text += ` @ ${info.reportPath}`;
+          }
         } else if (info.toolName === 'write_file') {
           text = `◦ turn ${info.turn} · write_file ${info.path} (${info.contentLength} chars content)`;
+          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         } else {
           text = `◦ turn ${info.turn} · ${info.toolName} (${info.resultSize} chars)`;
+          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         }
-        if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         await appendEvent(getPrisma(), featureId, {
           type: 'agent.log',
           agent: task.side,
@@ -907,6 +914,24 @@ export async function runDevJob(
     }
 
     git(worktreeInfo.worktreePath, 'add', '-A');
+
+    const LOCKFILE_NAMES = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'];
+    const rawStaged = git(worktreeInfo.worktreePath, 'diff', '--cached', '--name-only')
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    const lockfilesStaged = rawStaged.filter((f) =>
+      LOCKFILE_NAMES.some((n) => f === n || f.endsWith('/' + n)),
+    );
+    if (lockfilesStaged.length > 0) {
+      git(worktreeInfo.worktreePath, 'reset', 'HEAD', '--', ...lockfilesStaged);
+      void appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'orchestrator',
+        severity: 'muted',
+        text: `◦ unstaged ${lockfilesStaged.length} lockfile(s) from agent commit: ${lockfilesStaged.join(', ')}`,
+      });
+    }
 
     const stagedLines = git(worktreeInfo.worktreePath, 'diff', '--cached', '--name-only')
       .trim()

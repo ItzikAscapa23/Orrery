@@ -325,6 +325,10 @@ export async function runTaskTestJob(
           text = `◦ turn ${info.turn} · read_file ${info.path} (${info.range}, ${info.resultSize} chars)`;
         } else if (info.toolName === 'bash') {
           text = `◦ turn ${info.turn} · bash ${info.command ?? ''} (${info.resultSize} chars)`;
+          if (info.resolvedCommand) {
+            text += `\n  ∟ resolved: ${info.resolvedCommand}`;
+            if (info.reportPath) text += ` @ ${info.reportPath}`;
+          }
         } else if (info.toolName === 'write_file') {
           text = `◦ turn ${info.turn} · write_file ${info.path} (${info.contentLength} chars content)`;
         } else {
@@ -366,6 +370,25 @@ export async function runTaskTestJob(
     const statusOut = git(worktreePath, 'status', '--porcelain').trim();
     if (statusOut !== '') {
       git(worktreePath, 'add', '-A');
+
+      const LOCKFILE_NAMES = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'];
+      const rawStaged = git(worktreePath, 'diff', '--cached', '--name-only')
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+      const lockfilesStaged = rawStaged.filter((f) =>
+        LOCKFILE_NAMES.some((n) => f === n || f.endsWith('/' + n)),
+      );
+      if (lockfilesStaged.length > 0) {
+        git(worktreePath, 'reset', 'HEAD', '--', ...lockfilesStaged);
+        void appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'orchestrator',
+          severity: 'muted',
+          text: `◦ unstaged ${lockfilesStaged.length} lockfile(s) from agent commit: ${lockfilesStaged.join(', ')}`,
+        });
+      }
+
       const commitMessage = [
         `test: acceptance tests for task ${taskId}`,
         '',

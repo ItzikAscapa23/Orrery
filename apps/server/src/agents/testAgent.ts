@@ -628,9 +628,9 @@ export async function runTestAgent(
             // the narrower metachar set before the shared container.exec check.
             checkTestBashAllowed(command);
             // After allowlist check passes, attempt JSON-reporter intercept.
-            const summary = await summarizeBashTestRun(command, container, ctx.probeCommand);
-            if (summary !== null) {
-              result = summary;
+            const testRunSummary = await summarizeBashTestRun(command, container, ctx.probeCommand);
+            if (testRunSummary !== null) {
+              result = testRunSummary.summary;
             } else {
               const execResult = await container.exec(command);
               const raw =
@@ -645,6 +645,12 @@ export async function runTestAgent(
                 resultSize: result.length,
                 resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 command: command.slice(0, 120),
+                ...(testRunSummary !== null
+                  ? {
+                      resolvedCommand: testRunSummary.resolvedCommand,
+                      reportPath: testRunSummary.reportPath,
+                    }
+                  : {}),
               });
             continue;
           } else if (block.name === 'write_file') {

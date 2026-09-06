@@ -435,6 +435,8 @@ export interface ToolCallInfo {
   contentLength?: number;
   oldStrLength?: number;
   newStrLength?: number;
+  resolvedCommand?: string;
+  reportPath?: string;
 }
 
 export async function runDevAgent(
@@ -545,9 +547,9 @@ export async function runDevAgent(
           if (block.name === 'bash') {
             const { command = '' } = block.input as { command?: string };
             callCommand = command.slice(0, 120);
-            const summary = await summarizeBashTestRun(command, container, ctx.probeCommand);
-            if (summary !== null) {
-              result = summary;
+            const testRunSummary = await summarizeBashTestRun(command, container, ctx.probeCommand);
+            if (testRunSummary !== null) {
+              result = testRunSummary.summary;
             } else {
               const execResult = await container.exec(command);
               const raw =
@@ -562,6 +564,12 @@ export async function runDevAgent(
                 resultSize: result.length,
                 resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
                 command: command.slice(0, 120),
+                ...(testRunSummary !== null
+                  ? {
+                      resolvedCommand: testRunSummary.resolvedCommand,
+                      reportPath: testRunSummary.reportPath,
+                    }
+                  : {}),
               });
             continue;
           } else if (block.name === 'write_file') {

@@ -223,6 +223,41 @@ describe('formatTestSummary', () => {
     const result = formatTestSummary(parsed);
     expect(result).toContain('· "nameless failure"');
   });
+
+  it('includes file count in header when fileCount is set', () => {
+    const parsed: ParsedTestOutput = {
+      passed: 100,
+      failed: 0,
+      tests: [],
+      authoredPassed: 0,
+      authoredFailed: 0,
+      fileCount: 7,
+    };
+    expect(formatTestSummary(parsed)).toBe('TESTS: 100 passed, 0 failed (7 files)');
+  });
+
+  it('uses singular "file" when fileCount is 1', () => {
+    const parsed: ParsedTestOutput = {
+      passed: 5,
+      failed: 0,
+      tests: [],
+      authoredPassed: 0,
+      authoredFailed: 0,
+      fileCount: 1,
+    };
+    expect(formatTestSummary(parsed)).toBe('TESTS: 5 passed, 0 failed (1 file)');
+  });
+
+  it('omits file count when fileCount is not set', () => {
+    const parsed: ParsedTestOutput = {
+      passed: 10,
+      failed: 0,
+      tests: [],
+      authoredPassed: 0,
+      authoredFailed: 0,
+    };
+    expect(formatTestSummary(parsed)).toBe('TESTS: 10 passed, 0 failed');
+  });
 });
 
 // ── summarizeBashTestRun ───────────────────────────────────────────────────
@@ -245,7 +280,10 @@ describe('summarizeBashTestRun', () => {
       throw new Error(`unexpected command: ${cmd}`);
     });
     const result = await summarizeBashTestRun('npm test', container);
-    expect(result).toBe('TESTS: 5 passed, 0 failed');
+    // makePassingJson produces 1 testResults entry → (1 file)
+    expect(result?.summary).toBe('TESTS: 5 passed, 0 failed (1 file)');
+    expect(result?.resolvedCommand).toContain('npx vitest run');
+    expect(result?.reportPath).toMatch(/^\/tmp\/test-report-/);
   });
 
   it('returns failures block for a failing run', async () => {
@@ -264,11 +302,13 @@ describe('summarizeBashTestRun', () => {
     });
     const result = await summarizeBashTestRun('npm test', container);
     expect(result).not.toBeNull();
-    expect(result).toContain('TESTS: 3 passed, 2 failed');
-    expect(result).toContain('FAILURES:');
-    expect(result).toContain('· "should return 200 for valid token"');
-    expect(result).toContain('AssertionError: expected 200 got 401');
-    expect(result).not.toContain('passing test 0');
+    expect(result?.summary).toContain('TESTS: 3 passed, 2 failed');
+    expect(result?.summary).toContain('FAILURES:');
+    expect(result?.summary).toContain('· "should return 200 for valid token"');
+    expect(result?.summary).toContain('AssertionError: expected 200 got 401');
+    expect(result?.summary).not.toContain('passing test 0');
+    expect(result?.resolvedCommand).toContain('npx vitest run');
+    expect(result?.reportPath).toMatch(/^\/tmp\/test-report-/);
   });
 
   it('falls back to raw output with label when JSON is unparseable', async () => {
@@ -280,8 +320,8 @@ describe('summarizeBashTestRun', () => {
     });
     const result = await summarizeBashTestRun('npm test', container);
     expect(result).not.toBeNull();
-    expect(result).toContain('[raw output — JSON summary unavailable]');
-    expect(result).toContain('FAIL 3 tests');
+    expect(result?.summary).toContain('[raw output — JSON summary unavailable]');
+    expect(result?.summary).toContain('FAIL 3 tests');
   });
 
   it('summary is materially smaller than 8192 chars for a 2-failure run', async () => {
@@ -297,7 +337,7 @@ describe('summarizeBashTestRun', () => {
     });
     const result = await summarizeBashTestRun('npm test', container);
     expect(result).not.toBeNull();
-    expect(result!.length).toBeLessThan(400);
+    expect(result!.summary.length).toBeLessThan(400);
     // Confirm the full raw JSON would have been much larger
     expect(reportJson.length).toBeGreaterThan(8192);
   });
@@ -326,7 +366,7 @@ describe('summarizeBashTestRun', () => {
     });
     const result = await summarizeBashTestRun('npm test 2>&1', container);
     expect(result).not.toBeNull();
-    expect(result).toContain('3 passed');
+    expect(result?.summary).toContain('3 passed');
   });
 
   it('summarises npx jest foo.test.js 2>&1', async () => {
@@ -340,7 +380,7 @@ describe('summarizeBashTestRun', () => {
     });
     const result = await summarizeBashTestRun('npx jest foo.test.js 2>&1', container);
     expect(result).not.toBeNull();
-    expect(result).toContain('1 passed');
+    expect(result?.summary).toContain('1 passed');
     expect(execCmds[0]).toContain('npx jest --json');
   });
 
@@ -354,9 +394,9 @@ describe('summarizeBashTestRun', () => {
     });
     const result = await summarizeBashTestRun('npm test', container);
     expect(result).not.toBeNull();
-    expect(result).toContain('[raw output — zero tests reported]');
-    expect(result).toContain('some runner output');
-    expect(result).not.toContain('TESTS:');
+    expect(result?.summary).toContain('[raw output — zero tests reported]');
+    expect(result?.summary).toContain('some runner output');
+    expect(result?.summary).not.toContain('TESTS:');
   });
 
   it('returns null for a command with a real pipe (| is still blocked)', async () => {
@@ -422,9 +462,9 @@ describe('summarizeBashTestRun', () => {
     });
     const result = await summarizeBashTestRun('npm test', container);
     expect(result).not.toBeNull();
-    expect(result).not.toContain('passed');
-    expect(result).toContain('[raw output — JSON summary unavailable]');
-    expect(result).toContain('vitest: command not found');
+    expect(result?.summary).not.toContain('passed');
+    expect(result?.summary).toContain('[raw output — JSON summary unavailable]');
+    expect(result?.summary).toContain('vitest: command not found');
   });
 
   it('per-invocation paths are distinct across successive calls', async () => {

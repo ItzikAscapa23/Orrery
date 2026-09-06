@@ -66,10 +66,20 @@ export function toJsonReporterCommand(
   return parts.join(' ');
 }
 
+export interface TestRunSummary {
+  summary: string;
+  resolvedCommand: string;
+  reportPath: string;
+}
+
 export function formatTestSummary(parsed: ParsedTestOutput): string {
   const passed = parsed.passed ?? 0;
   const failed = parsed.failed ?? 0;
-  const header = `TESTS: ${passed} passed, ${failed} failed`;
+  const filePart =
+    parsed.fileCount !== undefined
+      ? ` (${parsed.fileCount} ${parsed.fileCount === 1 ? 'file' : 'files'})`
+      : '';
+  const header = `TESTS: ${passed} passed, ${failed} failed${filePart}`;
   if (failed === 0) return header;
 
   const failures = parsed.tests
@@ -86,9 +96,9 @@ export function formatTestSummary(parsed: ParsedTestOutput): string {
 }
 
 /**
- * Intercept a test-runner bash command and return a compact summary string.
+ * Intercept a test-runner bash command and return a TestRunSummary.
  * Returns null when `command` is not a test runner command (caller should run normally).
- * Returns a fallback string prefixed with [raw output — JSON summary unavailable]
+ * Returns a fallback summary prefixed with [raw output — JSON summary unavailable]
  * if the JSON report cannot be parsed.
  *
  * Each call uses a fresh per-invocation path so no prior run's report can be
@@ -98,7 +108,7 @@ export async function summarizeBashTestRun(
   command: string,
   container: ContainerHandle,
   probeCommand?: string,
-): Promise<string | null> {
+): Promise<TestRunSummary | null> {
   // Bail out for commands with shell metachars — they must go through
   // container.exec so the MetacharViolationError path fires normally.
   // Strip the same exemptions as checkMetachar: trailing | head/tail -N and 2>&1.
@@ -124,13 +134,25 @@ export async function summarizeBashTestRun(
 
   if (parsed.parseError) {
     const raw = rawCombined || '(no output)';
-    return `[raw output — JSON summary unavailable]\n${raw.slice(-8192)}`;
+    return {
+      summary: `[raw output — JSON summary unavailable]\n${raw.slice(-8192)}`,
+      resolvedCommand: jsonCmd,
+      reportPath: invocationPath,
+    };
   }
 
   if ((parsed.passed ?? 0) + (parsed.failed ?? 0) === 0) {
     const raw = rawCombined || '(no output)';
-    return `[raw output — zero tests reported]\n${raw.slice(-8192)}`;
+    return {
+      summary: `[raw output — zero tests reported]\n${raw.slice(-8192)}`,
+      resolvedCommand: jsonCmd,
+      reportPath: invocationPath,
+    };
   }
 
-  return formatTestSummary(parsed);
+  return {
+    summary: formatTestSummary(parsed),
+    resolvedCommand: jsonCmd,
+    reportPath: invocationPath,
+  };
 }

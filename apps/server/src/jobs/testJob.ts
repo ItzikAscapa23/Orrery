@@ -218,6 +218,7 @@ export interface ParsedTestOutput {
   authoredPassed: number;
   authoredFailed: number;
   parseError?: string;
+  fileCount?: number;
 }
 
 interface JestAssertionResult {
@@ -332,6 +333,7 @@ export function parseTestOutput(
     tests,
     authoredPassed,
     authoredFailed,
+    fileCount: json.testResults.length,
   };
 }
 
@@ -673,14 +675,21 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
         let text: string;
         if (info.toolName === 'read_file') {
           text = `◦ turn ${info.turn} · read_file ${info.path} (${info.range}, ${info.resultSize} chars)`;
+          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         } else if (info.toolName === 'bash') {
           text = `◦ turn ${info.turn} · bash ${info.command ?? ''} (${info.resultSize} chars)`;
+          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
+          if (info.resolvedCommand) {
+            text += `\n  ∟ resolved: ${info.resolvedCommand}`;
+            if (info.reportPath) text += ` @ ${info.reportPath}`;
+          }
         } else if (info.toolName === 'write_file') {
           text = `◦ turn ${info.turn} · write_file ${info.path} (${info.contentLength} chars content)`;
+          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         } else {
           text = `◦ turn ${info.turn} · ${info.toolName} (${info.resultSize} chars)`;
+          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         }
-        if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         await appendEvent(getPrisma(), featureId, {
           type: 'agent.log',
           agent: 'test',
@@ -862,6 +871,25 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     const statusOut = git(worktreePath, 'status', '--porcelain').trim();
     if (statusOut !== '') {
       git(worktreePath, 'add', '-A');
+
+      const LOCKFILE_NAMES = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'];
+      const rawStaged = git(worktreePath, 'diff', '--cached', '--name-only')
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+      const lockfilesStaged = rawStaged.filter((f) =>
+        LOCKFILE_NAMES.some((n) => f === n || f.endsWith('/' + n)),
+      );
+      if (lockfilesStaged.length > 0) {
+        git(worktreePath, 'reset', 'HEAD', '--', ...lockfilesStaged);
+        void appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'orchestrator',
+          severity: 'muted',
+          text: `◦ unstaged ${lockfilesStaged.length} lockfile(s) from agent commit: ${lockfilesStaged.join(', ')}`,
+        });
+      }
+
       stagedLines = git(worktreePath, 'diff', '--cached', '--name-only')
         .trim()
         .split('\n')
@@ -1023,13 +1051,15 @@ async function _advanceTestPass(
     wallTimeMs?: number;
   },
 ): Promise<void> {
+  const warnings = counts.warnings ?? [];
+
   await appendEvent(getPrisma(), featureId, {
     type: 'test.report',
     agent: 'test',
     spec_rev: specRev,
     passed: counts.passed,
     failed: 0,
-    findings: counts.warnings ?? [],
+    findings: warnings,
     ...(counts.tests && counts.tests.length > 0 ? { tests: counts.tests } : {}),
     ...(counts.authoredPassed !== undefined ? { authored_passed: counts.authoredPassed } : {}),
     ...(counts.authoredFailed !== undefined ? { authored_failed: counts.authoredFailed } : {}),
@@ -1042,6 +1072,38 @@ async function _advanceTestPass(
     severity: 'ok',
     text: `✓ all acceptance tests pass (${counts.passed ?? '?'} passed, 0 failed)`,
   });
+
+  if (warnings.length > 0) {
+    // Vacuous assertions detected — open a test_report gate for operator review.
+    // POST /approve-test only blocks on blocker-severity findings, so the operator
+    // can approve immediately or investigate and retry.
+    await getPrisma().finding.createMany({
+      data: warnings.map((f) => ({
+        id: f.id,
+        featureId,
+        specRev,
+        severity: f.severity,
+        section: f.section,
+        issue: f.issue,
+        suggestedText: null,
+      })),
+      skipDuplicates: true,
+    });
+    await appendEvent(getPrisma(), featureId, {
+      type: 'gate.opened',
+      gate: 'test_report',
+      summary: `${warnings.length} vacuous assertion(s) detected — review before accepting`,
+      revision: specRev,
+      counts: { blockers: 0, warnings: warnings.length, suggestions: 0 },
+    });
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.status',
+      agent: 'test',
+      status: 'waiting',
+    });
+    return;
+  }
+
   await appendEvent(getPrisma(), featureId, {
     type: 'agent.status',
     agent: 'test',

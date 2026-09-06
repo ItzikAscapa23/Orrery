@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 35 — The orchestrator is not bound by the agent's allowlist
+- **Current phase:** 36 — Test output can be trusted
 - **State:** `complete`
 - **Last updated:** 2026-09-06
 
@@ -64,7 +64,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*(Phase 36 not yet written in plan.md — write the next spec before starting.)*
+- [x] 120-log-resolved-argv-and-report-path
+- [x] 120-diagnosis
+- [x] 121-summary-states-its-scope
+- [x] 122-vacuous-findings-reach-a-gate
+- [x] 123-orchestrator-writes-are-not-agent-commits
 
 ---
 
@@ -72,13 +76,44 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1211 passed across 92 files**, 2026-09-06 |
+| `npm test` (repo root) | passed — **1214 passed across 92 files**, 2026-09-06 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
 
 ---
 
 ## Decisions
+
+- **Phase 36: `summarizeBashTestRun` returns `TestRunSummary` (`120`)** — Now returns
+  `{ summary, resolvedCommand, reportPath }` instead of a raw string. Both `devAgent.ts`
+  and `testAgent.ts` destructure `.summary` as the tool result, and pass `resolvedCommand`
+  and `reportPath` through `ToolCallInfo` to the `onToolCall` log handlers in devJob,
+  testJob, and taskTestJob. The event log now records `∟ resolved: <rewritten cmd> @ <path>`
+  alongside each intercepted test command.
+
+- **Phase 36: diagnosis — `toJsonReporterCommand` strips agent flags (`120`)** — `extractPositionalArgs`
+  only keeps non-`--` tokens; all `--flag` arguments are dropped from the rewrite. An agent running
+  `npx jest --testPathPattern="X"` executes the full suite because `--testPathPattern` is stripped. The
+  per-invocation path (`/tmp/test-report-<ts>-<rand>.json`) is reached in every branch that returns
+  non-null. Staleness is structurally impossible. Scope confusion is addressed by task 121 below.
+
+- **Phase 36: file count in summary (`121`)** — `ParsedTestOutput` gains `fileCount?: number`
+  (populated from `json.testResults.length`). `formatTestSummary` appends `(N files)` / `(1 file)`
+  when `fileCount` is set. An agent that issues a scoped command but gets the full suite sees
+  `TESTS: 2192 passed, 0 failed (92 files)` and immediately knows the scope is wider than requested.
+
+- **Phase 36: vacuous findings reach a `test_report` gate (`122`)** — `_advanceTestPass` in
+  `testJob.ts`: when `warnings.length > 0`, persists findings to the `finding` table, opens a
+  `test_report` gate (`blockers: 0, warnings: N`), and sets `agent.status: waiting` instead of
+  transitioning to TEST_PASS. `POST /approve-test` only blocks on blocker findings, so the operator
+  can approve immediately. The existing gate UI and resolve infrastructure handle the new path with
+  no new code needed.
+
+- **Phase 36: lockfiles excluded from agent commits (`123`)** — After `git add -A` in devJob.ts,
+  testJob.ts, and taskTestJob.ts, any staged `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`
+  is unstaged via `git reset HEAD -- <lockfiles>` before the agent commit. These files are modified
+  by the bootstrap install (not by the agent) and must not ride in agent-trailers commits. The
+  unstaged files remain dirty in the (disposable) worktree.
 
 - **Phase 35: per-invocation path replaces `rm -f` (`117-118`)** — `summarizeBashTestRun`
   now generates `/tmp/test-report-<timestamp>-<random>.json` per call. `rm` is not in
@@ -223,6 +258,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 33 | An agent that is not progressing stops | `4273e44` | 2026-09-06 |
 | 34 | Verification means what it says | `72bc51e` | 2026-09-06 |
 | 35 | The orchestrator is not bound by the agent's allowlist | `c208689` | 2026-09-06 |
+| 36 | Test output can be trusted | pending | 2026-09-06 |
 
 ---
 
@@ -239,8 +275,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - A feature where acceptance tests are red at dev-agent start ends with the same
   assertions it began with.
 - A feature whose spec has an unanswered question is demonstrably unapprovable.
-- A test report with eight vacuous findings shows `8` in the vacuous cube.
-- An agent running the full suite sees the full suite count (not a scoped result).
+- A test report with eight vacuous findings shows `8` in the vacuous cube, and the feature pauses at the `test_report` gate rather than auto-advancing.
+- An agent running the full suite sees the full suite count: `TESTS: N passed, 0 failed (92 files)`.
+- A test summary for an agent-issued `npx jest foo.test.js` that ran the full suite shows `(92 files)` — the scope gap is visible.
+- The event log for an intercepted test command includes `∟ resolved: <jsonCmd> @ /tmp/test-report-<ts>-<rand>.json`.
+- An agent commit in a repo with lockfile drift (bootstrap install) does not include `package-lock.json`.
 - Three different commands returning identical summaries do not trigger the non-progress stop.
 - A proxy 503 from the corporate proxy parks a task without consuming an attempt slot.
 - A test agent completes a run on the bff repo without an allowlist error.
