@@ -326,13 +326,19 @@ export function buildSystemPrompt(task: DevTask, ctx: DevContext): string {
           'The test agent has already written acceptance tests for this task.',
           'Do NOT write new test files or author acceptance tests — the test files already exist.',
           'Your job is to implement production code so that the existing acceptance tests pass.',
-          'Run `npm test`. When acceptance tests pass, call end_turn.',
+          'Run `npx jest` (or `npx vitest run`) to verify — use the direct runner, not `npm test`.' +
+            ' `npm test` is a script alias that the interceptor rewrites to `npx vitest run`;' +
+            ' on a jest repo that rewrite fails and returns raw output with no pass/fail counts.' +
+            ' Check the package.json `scripts.test` field if unsure which runner this repo uses.' +
+            ' When acceptance tests pass, call end_turn.',
           '',
         ]
       : []),
     '## Rules',
     '- Implement only what this task requires. Do not change unrelated code.',
-    '- Run `npm test` after implementation. Fix all failures.',
+    '- Run `npx jest` or `npx vitest run` after implementation — not `npm test`.' +
+      ' `npm test` is a script alias that returns raw output with no structured pass/fail counts.' +
+      ' Fix all failures.',
     '- When tests pass, your work is done — call end_turn. Do not make further changes.',
     '- The orchestrator commits your changes after verifying tests. You do not git commit.',
     '- The container working directory is /workspace — run commands directly. Never prefix with `cd /workspace &&` or any `cd <path> &&`.',
@@ -382,7 +388,7 @@ export function buildSystemPrompt(task: DevTask, ctx: DevContext): string {
     'editing it. Supply start_line and end_line (1-based, inclusive) to read a slice — slices are returned in full.',
     'Whole-file output is capped at 200 lines / 8 KB.',
     '',
-    '**bash(command)** — Run a single shell command. Use only for: npm test,',
+    '**bash(command)** — Run a single shell command. Use only for: npx jest / npx vitest run (not npm test — see Rules),',
     'npm run lint, npm run typecheck, read-only exploration',
     '(cat, ls, find, grep, head, tail, wc, pwd), and running scripts with node <file>.',
     'git is NOT available — the orchestrator handles all version control.',

@@ -468,6 +468,8 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     '',
     '**bash(command)** — Run a test-runner command only.',
     `Allowed: ${TEST_BASH_ALLOWED_PREFIXES.join(', ')}.`,
+    'Prefer `npx jest --ci` or `npx vitest run` over `npm test` — `npm test` is a script alias' +
+      ' that returns raw output with no structured pass/fail counts, wasting the turn.',
     'NO cat, ls, find, grep. NO npm install. NO git. No shell operators (;, |, &, $, >, <).',
     `Three violations permanently fail the task.\n\nAllowed commands:\n${TEST_BASH_ALLOWED_HINT}`,
     '',

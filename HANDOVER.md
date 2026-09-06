@@ -28,17 +28,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 **Key directories:**
 - `apps/server/src/lib/` — orchestrator, events, container, anthropic, spendGuard
-- `apps/server/src/lib/nonProgressError.ts` — `NonProgressError` class + `checkNonProgress()` helper
-- `apps/server/src/lib/bedrockPark.ts` — `parkTaskOnBedrockFailure`, `parkFeatureAgentOnBedrockFailure`, `isEnvironmentalBedrockError`
-- `apps/server/src/lib/testOutputSummary.ts` — `summarizeBashTestRun`, `toJsonReporterCommand`, `extractProbeFlags`
+  - `repoOrientation.ts` — `generateRepoOrientation()`, includes vendored-package + API-spec sections
+  - `nonProgressError.ts` — `NonProgressError` class + `checkNonProgress()` helper
+  - `bedrockPark.ts` — `parkTaskOnBedrockFailure`, `isEnvironmentalBedrockError`
+  - `testOutputSummary.ts` — `summarizeBashTestRun`, `toJsonReporterCommand`, `extractProbeFlags`
 - `apps/server/src/jobs/` — devJob, testJob, taskTestJob, createAdoPrJob, agentWorker
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
-- `apps/web/src/lib/eventFold.ts` — all UI state derives from folding the event log
-- `apps/web/src/lib/activityFold.ts` — activity-tab rows folded from events + task rows
-- `apps/web/public/` — static assets; favicon.svg is the canonical brand mark
-- `packages/shared/` — event payload schemas
-- `docs/specs/` — numbered phase specs (phases 0–5, amended through phase 18)
-- `docs/agents/repo-manifest.yaml` — operator config, gitignored, example committed
+- `apps/web/src/lib/eventFold.ts` — all UI state derived from folding the event log
+- `packages/shared/` — event payload schemas; `docs/agents/repo-manifest.yaml` — operator config
+- `scripts/orientation-probe.ts` — measure orientation block size for a given repo path
 
 **Conventions:**
 - No default exports. Zod for all external input. No `any` without a comment.
@@ -56,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 37 — Agents keep their flags, and blockers do not vanish quietly
+- **Current phase:** 38 — Orientation stops being the largest cost
 - **State:** `complete`
 - **Last updated:** 2026-09-06
 
@@ -64,9 +62,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] 124-preserve-agent-flags
-- [x] 125-blocked-by-protected-test
-- [x] 126-re-review-checks-prior-findings
+*Next phase not yet defined in plan.md — no tasks to list.*
 
 ---
 
@@ -74,7 +70,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1215 passed across 92 files**, 2026-09-06 |
+| `npm test` (repo root) | passed — **1225 passed across 92 files**, 2026-09-06 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
 
@@ -82,72 +78,63 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **Phase 38: turn-split measurement reference** —
+  Feature `00d548a1`: 132 turns → 58 orientation (44%), 18 authoring (14%), 23
+  verification (17%), 31 waste (24%). orientationBlock was 28.7k chars. Per-turn cost
+  ≈ $0.037; cache reads were 39% of $4.83 total. Broader sample requires querying
+  `agent_event` where tool calls are `read_file`/`find`/`grep` on repo-structure files.
+
+- **Phase 38: `generateRepoOrientation` adds vendored-package and API-spec sections (`127`)** —
+  Two new optional sections appended after tsconfig. (a) **Vendored packages** — scans
+  `node_modules/` at depth > 0 (top-level excluded), lists packages with exported names
+  via regex (CJS `module.exports.name =`, ESM `export function/const/class`, named
+  `export { ... }`); capped at 30 symbols/package, 10 packages/vendor-dir, depth ≤ 6.
+  (b) **API spec files** — scans dirs named `openapis`/`openapi`/`api-specs`/`api-spec`,
+  lists `.json`/`.yaml`/`.yml`; depth ≤ 5. Both omitted when empty, so non-bff repos
+  are unaffected. Generic detection chosen over BFF-specific to keep the function
+  repo-agnostic.
+
+- **Phase 38: size cost of new orientation sections** —
+  On repos without vendored layers or openapis dirs: zero increase. For the bff repo:
+  ~700 chars / ~175 tokens estimated. Cost increase ≈ $0.069/feature; saves ~16
+  re-discovery turns × $0.037 ≈ $0.59/feature. Net ≈ +$0.52/feature.
+
+- **Phase 38: dev-job harness brief is feasible, deferred (`128`)** —
+  The `harnessbrief.ts` pattern can carry discovered symbols between dev jobs:
+  `__orrery_dev_brief.md` written by first dev job, committed as `dev-symbol-brief.md`,
+  loaded by subsequent jobs via a new `loadDevSymbolBrief` — same freshness-check
+  mechanism. No separate artifact type needed. Implementation deferred to a later phase.
+
+- **Phase 38: `npm test` guidance added to dev and test agents (`129`)** —
+  `toJsonReporterCommand` rewrites `npm test` to `npx vitest run` (else-branch,
+  `testOutputSummary.ts:55`); on a jest repo that fails → raw output. Agents wasted a
+  turn per job discovering this empirically. Guidance added at three sites in
+  `devAgent.ts` and once in `testAgent.ts`: "use `npx jest` / `npx vitest run` directly."
+
 - **Phase 37: `toJsonReporterCommand` reuses `extractProbeFlags` for agent args (`124`)** —
-  `extractPositionalArgs` dropped every `--flag` token, so an agent running
-  `npx jest --testPathPattern=auth` silently executed the full suite. Fix: replace
-  `extractPositionalArgs(trimmed, 'npx jest')` with `extractProbeFlags(trimmed)`, which
-  strips only the three reporter flags the rewrite injects (`--json`, `--outputFile=`,
-  `--reporter=`) and preserves everything else. The unused `extractPositionalArgs` function
-  was deleted. Wall-time benefit: a filtered run (e.g. `--testPathPattern`) now actually
-  filters instead of running all 92 files.
+  `extractPositionalArgs` dropped every `--flag` token; replaced with `extractProbeFlags`
+  which strips only the three reporter flags the rewrite injects. Filtered runs now filter.
 
 - **Phase 37: `blocked_by_protected_test` AgentOutcome (`125`)** — `REPORT_BLOCKED_TOOL`
-  added to `devAgent.ts` alongside `PROPOSE_AMENDMENT_TOOL`. Agent calls
-  `report_blocked_by_protected_test(finding_id, test_file, conflicting_assertion)` when a
-  review finding requires changing a read-only acceptance test. `runDevAgent` returns
-  `{ kind: 'blocked_by_protected_test', ... }`. `devJob.ts` parks the task with
-  `parkReason: 'blocked_by_protected_test'` and `final: false` — not final because the
-  operator can investigate and unlock. Modelled on the `amendment_proposed` pattern.
+  added to `devAgent.ts`. `runDevAgent` returns `{ kind: 'blocked_by_protected_test', ... }`.
+  `devJob.ts` parks with `parkReason: 'blocked_by_protected_test'` and `final: false`.
 
 - **Phase 37: `runReviewAgent` returns `{ findings, priorFindingStatuses }` (`126`)** —
-  Return type changed from `FindingSchema[]` to
-  `{ findings: FindingSchema[]; priorFindingStatuses: PriorFindingStatus[] }`.
-  `ReviewFindingArraySchema` gains optional `prior_finding_statuses` array.
-  In `reviewJob.ts`, when `priorReviewRounds >= 1`, the DB is queried for findings at the
-  current `(featureId, specRev)` *before* `persistFindings` overwrites them — this is the
-  guaranteed read window (specRev is stable between review rounds since only
-  spec_approval/plan_approval gates increment it). Prior findings are injected into the
-  review prompt as a checklist; statuses are logged as a muted `agent.log` event after
-  the review completes.
+  On `priorReviewRounds >= 1`, DB queried for prior findings before `persistFindings`
+  overwrites them (specRev is stable between review rounds). Prior findings injected as
+  checklist; statuses logged as muted `agent.log` after review.
 
-- **Phase 36: `summarizeBashTestRun` returns `TestRunSummary` (`120`)** — Now returns
-  `{ summary, resolvedCommand, reportPath }` instead of a raw string. Both `devAgent.ts`
-  and `testAgent.ts` destructure `.summary` as the tool result, and pass `resolvedCommand`
-  and `reportPath` through `ToolCallInfo` to the `onToolCall` log handlers in devJob,
-  testJob, and taskTestJob. The event log now records `∟ resolved: <rewritten cmd> @ <path>`
-  alongside each intercepted test command.
+- **Phase 36: `summarizeBashTestRun` returns `TestRunSummary`; vacuous findings gate (`120`, `122`)** —
+  Returns `{ summary, resolvedCommand, reportPath }`; event log records resolved command + path.
+  `_advanceTestPass` opens `test_report` gate when warnings > 0 instead of transitioning to TEST_PASS.
 
-- **Phase 36: diagnosis — `toJsonReporterCommand` strips agent flags (`120`)** — Fixed in
-  Phase 37 (task 124). Phase 36 documented it; Phase 37 fixed it.
+- **`spec_approval` gate-open (Phase 29)** — 4 open paths: `awsReviewJob.ts` after review,
+  `specSubmit.ts` no-charter fast-path, `awsReviewJob.ts` error final-attempt, missing-charter
+  guard. 1 approve path: `POST /features/:id/approve`.
 
-- **Phase 36: file count in summary (`121`)** — `ParsedTestOutput` gains `fileCount?: number`
-  (populated from `json.testResults.length`). `formatTestSummary` appends `(N files)` / `(1 file)`
-  when `fileCount` is set.
-
-- **Phase 36: vacuous findings reach a `test_report` gate (`122`)** — `_advanceTestPass` in
-  `testJob.ts`: when `warnings.length > 0`, persists findings to the `finding` table, opens a
-  `test_report` gate, and sets `agent.status: waiting` instead of transitioning to TEST_PASS.
-
-- **Phase 36: lockfiles excluded from agent commits (`123`)** — After `git add -A` in devJob.ts,
-  testJob.ts, and taskTestJob.ts, any staged `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`
-  is unstaged via `git reset HEAD -- <lockfiles>` before the agent commit.
-
-- **Phase 35: per-invocation path replaces `rm -f` (`117-118`)** — `summarizeBashTestRun`
-  now generates `/tmp/test-report-<timestamp>-<random>.json` per call. Staleness is
-  structurally impossible without any `rm`.
-
-- **`spec_approval` gate-open and approve paths (Phase 29)** —
-  Gate-open paths (4): `awsReviewJob.ts` after review; `specSubmit.ts` no-charter
-  fast-path; `awsReviewJob.ts` error final-attempt; missing-charter fallback guard.
-  Approve path (1): `POST /features/:id/approve` only.
-
-- **Test-file boundary: tool-handler enforcement, not prompt-only (Phase 28)** —
-  `write_file` and `edit_file` in `runDevAgent` / `runLightDevAgent` call
-  `getTestAuthoredSet(worktreePath)` at startup and reject any path in the returned
-  set with `is_error: true`.
-
-- **Finding identity is composite (featureId, specRev, id)** — Model-assigned ids
-  (`f1`, `f2`) recur across cycles. A plain `where: { id }` on findings is always a bug.
+- **Test-file boundary + finding identity (Phases 28, core)** — `write_file`/`edit_file` in
+  dev agents call `getTestAuthoredSet` at startup and reject test-trailer files. Finding ids
+  (`f1`, `f2`) recur per cycle — lookups must use composite `(featureId, specRev, id)`.
 
 ---
 
@@ -210,6 +197,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 35 | The orchestrator is not bound by the agent's allowlist | `c208689` | 2026-09-06 |
 | 36 | Test output can be trusted | `260a95a` | 2026-09-06 |
 | 37 | Agents keep their flags, and blockers do not vanish quietly | `ccbecaa` | 2026-09-06 |
+| 38 | Orientation stops being the largest cost | pending | 2026-09-06 |
 
 ---
 
@@ -217,21 +205,6 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 - Full suite green from the repo root, with the count recorded.
 - `npm run lint` exits 0.
-- No feature mid-run: `tsx watch` reloads on file save, which stalls in-flight
-  BullMQ jobs and parks their tasks. Never edit the orchestrator while a feature
-  is running.
+- No feature mid-run when editing the orchestrator.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
-- A restart mid-dispatch produces exactly one container.
-- A feature whose test agent fails parks without the dev agent running.
-- A feature where acceptance tests are red at dev-agent start ends with the same
-  assertions it began with.
-- A feature whose spec has an unanswered question is demonstrably unapprovable.
-- An agent running `npx jest --testPathPattern=auth` sees only the matching tests, not
-  the full suite (scope is respected, not silently expanded).
-- An agent running `npx jest --ci` produces a rewritten command that contains `--ci`
-  before `--json` in the event log.
-- A dev agent that calls `report_blocked_by_protected_test` causes the task to park
-  with `parkReason: 'blocked_by_protected_test'` and a `task.failed` event with
-  `final: false`.
-- A round-2 review receives a prior-findings checklist in its prompt and the response
-  includes `prior_finding_statuses`; statuses are logged as a muted `agent.log` event.
+- Orientation turns below 44% on the next real feature (plan.md phase 38 exit criterion).
