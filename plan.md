@@ -1214,3 +1214,60 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A test agent completes a run on the bff repo without an allowlist error
+---
+## Phase 36 — Test output can be trusted
+**Goal:** Every summarised test result is traceable to the command that produced it.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `120-log-resolved-argv-and-report-path` — the event log records the command
+      the agent asked for, never the command actually executed by
+      `summarizeBashTestRun` nor the report path it read. Log both alongside each
+      summary. Evidence from feature `00d548a1`, test-writing job:
+      turns 38 (`--testPathPattern="orderCardClubsListStrongIdentification"`),
+      42 (`--config`), 44 (`--testPathPattern="NOMATCH" --showConfig`) and
+      45 (`--listTests`) each returned **byte-identical 9209-char output**.
+      `--listTests` runs no tests and `--showConfig` prints configuration; neither
+      can produce a test summary. Turns 47, 48 and 51 then returned identical
+      5849-char output across a filtered run and a bare full-suite run
+- [ ] Diagnose before fixing. Running the repo's own jest 29.7.0 directly in the
+      worktree with the same flag lists exactly one file, so the flag is not at
+      fault — something between the agent's command and jest changes the scope or
+      the report. Report the mechanism found. Phase 35 introduced a
+      per-invocation report path (`/tmp/test-report-<ts>-<rand>.json`); establish
+      whether it is reached in every branch
+- [ ] `121-summary-states-its-scope` — the summary must say how many test *files*
+      it covered, so a whole-suite count under a single-file command is visible to
+      the agent. Evidence, final-gate job on one file: turn 4 reported
+      `TESTS: 2192 passed`, turn 6 reported `TESTS: 26 passed`
+- [ ] `122-vacuous-findings-reach-a-gate` — the Phase 28 detector correctly found
+      13 unfailable assertions in the authored test file (`resolves.toBeDefined()`
+      ×4, `toBeDefined()` ×5, `toHaveProperty()` without a value ×4). It fires in
+      TESTING, after the PR is open and after code review, and the feature went
+      `TESTING → DONE` with no gate. Thirteen correct findings had no effect.
+      Route them somewhere that can act — a gate, or the test agent's next turn
+- [ ] `123-orchestrator-writes-are-not-agent-commits` — commit `6c09c4fd7`
+      carries the test agent's trailer and **2,189 lines of lockfile drift**
+      (`dynamo-db-utils/package-lock.json` +1191, `common-libraries/package-lock.json`
+      +946, root `package-lock.json` 52±, pinning `mysql2 ^3.9.2 → 3.9.2` and
+      `sequelize ^6.37.3 → 6.37.3`). No agent turn wrote them; the source is the
+      bootstrap install. Exclude orchestrator-written files from agent commits,
+      or commit them separately with an orchestrator trailer
+- [ ] Audit — list, not summary — every point between an agent issuing a test
+      command and the summary it receives, and state what is recorded at each
+**Definition of Done:**
+- Every test summary event carries the resolved argv and the report path read
+- Two different commands cannot produce an identical summary without that being
+  visible in the log
+- A summary states how many test files it covered
+- Vacuous-assertion findings reach something that can act on them
+- No lockfile or install artifact appears in a commit carrying an agent trailer
+- Command-path audit recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1211 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A filtered test command and a full-suite command produce visibly different
+  summaries
