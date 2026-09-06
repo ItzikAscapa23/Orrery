@@ -1428,3 +1428,144 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A test agent completes within its turn cap on the bff repo
+---
+## Phase 40 — A correct finding has an effect
+**Goal:** The review agent's findings route somewhere.
+**PRD refs:** §3 R4
+**Tasks:**
+- [ ] `133-review-warnings-route` — R1. `reviewJob.ts` branches on `blockers`
+      alone: zero blockers → `REVIEW_PASS` → `CODE_REVIEW → TESTING`, no gate.
+      Warnings have no path. On feature `1b6e3d8c` the review agent produced
+      three warnings at seq 336 and `phase.changed → TESTING` fired at seq 338,
+      **zero seconds later**. All three `findings` rows still carry
+      `resolution: null` — nobody dismissed them, nobody saw them, nothing
+      recorded a decision. Meanwhile the vacuous detector's 23 warnings opened a
+      `test_report` gate and stopped the feature. The same severity is treated
+      two opposite ways
+- [ ] Finding f1 was the shipped defect, stated correctly: *"The diff-visible
+      early return in the `if (useStrongIdentificationLimit === true)` block never
+      falls through to the `if (!isVersionSupported)` branch."* It quotes AC-10,
+      names the mechanism, and locates the line. It is the second consecutive
+      take shipping this defect
+- [ ] Decide and implement one: a `code_review` gate on warnings, or a rule that
+      a finding contradicting a stated acceptance criterion must be graded
+      `blocker`. Not both. State which and why
+- [ ] Findings must record a decision. A `finding.resolved` event should
+      distinguish dismissed, fixed, and never-reviewed. Today the AWS spec
+      findings all carry `resolution: 'dismissed'` because the spec gate forces a
+      human through them; the code-review findings sit at `null` indefinitely
+**Definition of Done:**
+- A review warning cannot advance a feature without a recorded decision
+- Every finding reaches a terminal resolution or blocks
+- The routing rule is stated once, and review and test report agree on it
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1225 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+---
+## Phase 41 — The loop guard counts commands
+**Goal:** A repeated command is caught whether or not its output varies.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] `134-count-commands-not-results` — R2. `checkNonProgress` hashes
+      `{command, results}`. On feature `1b6e3d8c`, test-job turns 21–66 issued
+      `npx jest --ci --testPathPattern="orderCardClubsListDebug" 2>&1` more than
+      twenty times with result sizes 338/344/350/637/306/299/578/511/549/517/295/291
+      — every one different, so no two hashes matched and the guard never fired.
+      **46 turns, 35,081 output tokens, $1.506 — 40.4% of the feature.** Count
+      repetitions of the command string, not of the result
+- [ ] `135-green-does-not-disarm` — the guard clears the ring buffer
+      unconditionally on `TESTS: n passed, 0 failed`. A passing scratch file emits
+      that every cycle, so **a byte-identical loop against a passing file can never
+      trip the stop**. That rule was added in Phase 34 to stop a false positive
+      which the command-in-hash fix already covers. Remove it, or restrict it to
+      a green result on the command that was previously red
+- [ ] Both cases must be tested, and `nonProgress.test.ts` already has the shape:
+      a repeated command with varying output stops; three distinct commands with
+      identical output do not
+**Definition of Done:**
+- Twenty runs of one command stop the agent regardless of output variation
+- Phase 37's three-different-commands case still does not fire
+- A passing result no longer clears the buffer unconditionally
+**Verification:**
+```bash
+npm test
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+---
+## Phase 42 — The harness brief works at all
+**Goal:** What an agent learns survives to the next agent.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] `136-orchestrator-computes-the-hashes` — R3a.
+      `checkHarnessBriefFreshness` recomputes SHA-256 for every path in the
+      `orrery-sources` header, and `HARNESS_BRIEF_WRITE_INSTRUCTION` asks the
+      **model** to supply those hashes. On feature `1b6e3d8c` it produced
+      `"test/__mocks__/axios.js": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"`
+      and `"test/__mocks__/bff-utils.js": "b2c3d4e5f6a7b8…"` — sequential nibbles
+      across all thirteen entries. A language model cannot compute SHA-256.
+      **Every brief fails freshness and is regenerated forever.** The orchestrator
+      must hash the files itself
+- [ ] `137-brief-path-agrees` — R3b. `taskTestJob.ts` looks for
+      `<worktreeRoot>/__orrery_harness_brief.md`; `testAgent.ts:304` permits that
+      path *and* the whole test directory, so the agent wrote
+      `test/__orrery_harness_brief.md` legitimately and the pickup found nothing.
+      `agent did not write harness brief` fired at seq 251, the same second the
+      file was committed. One declared path, enforced at both ends
+- [ ] `138-scratch-does-not-reach-the-pr` — because the brief was never captured
+      and unlinked, `git add -A` swept it plus a placeholder plus
+      `orderCardClubsListDebug.test.js` into PR #92807. The debug file's own body
+      reads *"This file is intentionally empty … this file should be deleted"*.
+      Exclude scratch-matched and brief files from agent commits, as Phase 36 did
+      for lockfiles
+- [ ] Report: with hashes computed correctly, does the brief actually carry
+      knowledge between jobs? Phase 38's orientation carry-over is built on this
+      mechanism and it has never worked
+**Definition of Done:**
+- Brief hashes are computed by the orchestrator and verify on an unchanged tree
+- A brief written by an agent is found by the job that looks for it
+- No scratch file or harness brief appears in a PR
+**Verification:**
+```bash
+npm test
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+---
+## Phase 43 — The vacuous detector earns its gate
+**Goal:** A gate worth reading, so it is not approved in 35 seconds.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `139-detector-precision` — R5. The gate reported 23 vacuous of 32 authored.
+      Ten are `.find()` results where `toBeDefined()` is the only thing between a
+      missing club and a `TypeError` on the next line (lines 280, 281, 632, 664,
+      669, 722, 728, 734, 773, 812). Nine more are `toHaveProperty(k)` immediately
+      followed by a hard value or type assertion on `subject[k]`. **A 43%
+      false-positive rate produced a 35-second approval.** Exempt `toBeDefined()`
+      when the subject is the result of `.find()`/`.get()`/index access on the
+      preceding line, and `toHaveProperty(k)` when the next statement asserts on
+      `subject[k]`
+- [ ] `140-flag-the-two-that-matter` — separately and loudly: a test whose *only*
+      assertion is vacuous (line 891), and a `forEach` over a collection with no
+      preceding non-empty guard (line 213). Both sit in AC-10, the one acceptance
+      criterion with no real coverage, and that is why the shipped defect hid
+- [ ] `141-tests-that-pass-against-base` — R2 of the report's §2. Eight of 32
+      authored tests pass unchanged against the pre-feature commit: all five AC-1
+      (by design) and all three AC-10 (not by design). Report whether the
+      orchestrator can run the authored tests against the base commit and count
+      how many pass. That number would have caught AC-10 automatically. Do not
+      implement in this task — report cost and feasibility
+**Definition of Done:**
+- A `.find()`-guarded `toBeDefined()` is not reported vacuous
+- A `toHaveProperty` followed by a value assertion is not reported vacuous
+- A sole-assertion-vacuous test and an unguarded `forEach` are reported distinctly
+- Base-commit comparison feasibility recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
