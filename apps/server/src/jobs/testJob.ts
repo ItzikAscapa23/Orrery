@@ -713,6 +713,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     // with cat. This prevents stdout interleaving from the app-under-test from
     // corrupting the reporter output (backlog C-4).
     const jsonCmd = detectJsonCommand(repoClaudeMd, repoEntry.probe_command);
+    const t0 = Date.now();
     let testResult = await container.exec(jsonCmd);
     void appendEvent(getPrisma(), featureId, {
       type: 'agent.log',
@@ -727,6 +728,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
       severity: 'muted',
       text: `◦ cat ${TEST_REPORT_FILE}: exit ${catResult.exitCode}, ${catResult.stdout.length} bytes`,
     });
+    const wallTimeMs = Date.now() - t0;
     let reportSource = catResult.stdout;
     let parsed = parseTestOutput(reportSource, '');
 
@@ -775,6 +777,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
         findings,
         tests: parsed.tests.length > 0 ? parsed.tests : undefined,
         ...(parsed.parseError ? { parse_error: parsed.parseError } : {}),
+        wall_time_ms: wallTimeMs,
       });
 
       await appendEvent(getPrisma(), featureId, {
@@ -972,6 +975,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
       authoredFailed: authoredParsed.authoredFailed,
       ...(authoredParsed.parseError !== undefined && { parseError: authoredParsed.parseError }),
       warnings: vacuousWarnings,
+      wallTimeMs,
     });
   } catch (err: unknown) {
     const isPolicyViolation =
@@ -1020,6 +1024,7 @@ async function _advanceTestPass(
     authoredFailed?: number;
     parseError?: string;
     warnings?: TestFinding[];
+    wallTimeMs?: number;
   },
 ): Promise<void> {
   await appendEvent(getPrisma(), featureId, {
@@ -1033,6 +1038,7 @@ async function _advanceTestPass(
     ...(counts.authoredPassed !== undefined ? { authored_passed: counts.authoredPassed } : {}),
     ...(counts.authoredFailed !== undefined ? { authored_failed: counts.authoredFailed } : {}),
     ...(counts.parseError ? { parse_error: counts.parseError } : {}),
+    ...(counts.wallTimeMs !== undefined ? { wall_time_ms: counts.wallTimeMs } : {}),
   });
   await appendEvent(getPrisma(), featureId, {
     type: 'agent.log',

@@ -35,6 +35,7 @@ const testReportBase = {
   skipped: false,
   skipReason: null,
   parseError: null,
+  wallTimeMs: null,
   findings: [
     {
       id: 'no-authored-tests',

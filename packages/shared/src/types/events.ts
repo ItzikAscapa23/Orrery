@@ -285,6 +285,7 @@ export const TestReportPayloadSchema = z.object({
   skipped: z.boolean().optional(), // true when no repos were observed
   skip_reason: z.string().optional(),
   parse_error: z.string().optional(), // present when counts could not be parsed
+  wall_time_ms: z.number().int().nonnegative().optional(), // container exec elapsed ms (install and agent turns excluded)
 });
 
 // ── Phase 7 payload schemas ─────────────────────────────────────────────────

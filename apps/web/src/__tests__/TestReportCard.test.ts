@@ -12,6 +12,7 @@ function makeReport(overrides: Partial<TestReportState>): TestReportState {
     skipped: false,
     skipReason: null,
     parseError: null,
+    wallTimeMs: null,
     findings: [],
     ...overrides,
   };

@@ -337,6 +337,7 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
           skipReason: p.skip_reason ?? null,
           parseError: p.parse_error ?? null,
           findings: testFindings,
+          wallTimeMs: p.wall_time_ms ?? null,
         };
         break;
       }
@@ -359,6 +360,7 @@ export function foldEvents(events: EventRow[], tasks?: TaskSummary[]): RunState 
               skipped: prev.skipped,
               skipReason: prev.skipReason,
               parseError: prev.parseError,
+              wallTimeMs: prev.wallTimeMs,
               findings: prev.findings.map((f, i) =>
                 i === tidx ? { ...f, resolution: p.resolution } : f,
               ),

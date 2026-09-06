@@ -130,6 +130,7 @@ export interface TestReportState {
   skipReason: string | null;
   parseError: string | null;
   findings: FindingEntry[];
+  wallTimeMs: number | null;
 }
 
 /** The full derived run state — produced by foldEvents() */
