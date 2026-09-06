@@ -71,6 +71,10 @@ const TEST_FILE_RE = /\.(test|spec)\./;
 // segment, not a prefix in a compound name (e.g. debugPanel or scratchpadReducer are real files).
 const SCRATCH_FILE_RE = /(?:debug|scratch)(?![a-zA-Z0-9])/i;
 
+export function isSharedInfraPath(p: string): boolean {
+  return p.split('/').includes('__mocks__');
+}
+
 export function getAuthoredTestFilesForTask(
   worktreePath: string,
   testDir: string,
@@ -629,6 +633,8 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     execTimeoutMs,
   );
 
+  const sharedInfraChanges: string[] = [];
+
   try {
     void appendEvent(getPrisma(), featureId, {
       type: 'agent.log',
@@ -696,6 +702,27 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
           severity: 'muted',
           text,
         });
+        // Detect edits to shared test infrastructure (e.g. __mocks__ directories).
+        if (
+          (info.toolName === 'write_file' || info.toolName === 'edit_file') &&
+          info.path !== undefined &&
+          isSharedInfraPath(info.path)
+        ) {
+          sharedInfraChanges.push(info.path);
+          await appendEvent(getPrisma(), featureId, {
+            type: 'test.shared_infra_changed',
+            path: info.path,
+            tool: info.toolName,
+            repo: repoId,
+          });
+          void appendEvent(getPrisma(), featureId, {
+            type: 'agent.log',
+            agent: 'test',
+            severity: 'action',
+            text: `⚠ test agent modified shared infrastructure: ${info.path}`,
+            repo: repoId,
+          });
+        }
       },
     );
 
@@ -783,6 +810,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
         tests: parsed.tests.length > 0 ? parsed.tests : undefined,
         ...(parsed.parseError ? { parse_error: parsed.parseError } : {}),
         wall_time_ms: wallTimeMs,
+        ...(sharedInfraChanges.length > 0 ? { shared_infra_changes: sharedInfraChanges } : {}),
       });
 
       await appendEvent(getPrisma(), featureId, {
@@ -1000,6 +1028,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
       ...(authoredParsed.parseError !== undefined && { parseError: authoredParsed.parseError }),
       warnings: vacuousWarnings,
       wallTimeMs,
+      ...(sharedInfraChanges.length > 0 ? { sharedInfraChanges } : {}),
     });
   } catch (err: unknown) {
     const isPolicyViolation =
@@ -1049,6 +1078,7 @@ async function _advanceTestPass(
     parseError?: string;
     warnings?: TestFinding[];
     wallTimeMs?: number;
+    sharedInfraChanges?: string[];
   },
 ): Promise<void> {
   const warnings = counts.warnings ?? [];
@@ -1065,6 +1095,9 @@ async function _advanceTestPass(
     ...(counts.authoredFailed !== undefined ? { authored_failed: counts.authoredFailed } : {}),
     ...(counts.parseError ? { parse_error: counts.parseError } : {}),
     ...(counts.wallTimeMs !== undefined ? { wall_time_ms: counts.wallTimeMs } : {}),
+    ...(counts.sharedInfraChanges && counts.sharedInfraChanges.length > 0
+      ? { shared_infra_changes: counts.sharedInfraChanges }
+      : {}),
   });
   await appendEvent(getPrisma(), featureId, {
     type: 'agent.log',

@@ -286,6 +286,7 @@ export const TestReportPayloadSchema = z.object({
   skip_reason: z.string().optional(),
   parse_error: z.string().optional(), // present when counts could not be parsed
   wall_time_ms: z.number().int().nonnegative().optional(), // container exec elapsed ms (install and agent turns excluded)
+  shared_infra_changes: z.array(z.string()).optional(), // paths under __mocks__/ or equivalent modified by the agent
 });
 
 // ── Phase 7 payload schemas ─────────────────────────────────────────────────
@@ -320,6 +321,18 @@ export const LightDevCompletedPayloadSchema = z.object({
   type: z.literal('light_dev.completed'),
   repo_id: z.string(),
   commit_sha: z.string().optional(),
+});
+
+// ── Phase 39 payload schemas ────────────────────────────────────────────────
+
+// test.shared_infra_changed — emitted when the test agent edits a file under
+// __mocks__/ or equivalent shared test infrastructure, so the operator can
+// review the change rather than treating it as ordinary test work.
+export const TestSharedInfraChangedPayloadSchema = z.object({
+  type: z.literal('test.shared_infra_changed'),
+  path: z.string(), // repo-relative path that was modified
+  tool: z.enum(['write_file', 'edit_file']),
+  repo: z.string().optional(),
 });
 
 // ── Phase 29 payload schemas ────────────────────────────────────────────────
@@ -370,6 +383,7 @@ export const EventPayloadSchema = z.discriminatedUnion('type', [
   LightDevCompletedPayloadSchema,
   SpecQuestionsPayloadSchema,
   SpecQuestionAnsweredPayloadSchema,
+  TestSharedInfraChangedPayloadSchema,
 ]);
 
 export type EventPayload = z.infer<typeof EventPayloadSchema>;
@@ -407,6 +421,7 @@ export type TaskTestsWrittenPayload = z.infer<typeof TaskTestsWrittenPayloadSche
 export type LightDevCompletedPayload = z.infer<typeof LightDevCompletedPayloadSchema>;
 export type SpecQuestionsPayload = z.infer<typeof SpecQuestionsPayloadSchema>;
 export type SpecQuestionAnsweredPayload = z.infer<typeof SpecQuestionAnsweredPayloadSchema>;
+export type TestSharedInfraChangedPayload = z.infer<typeof TestSharedInfraChangedPayloadSchema>;
 
 // ── Full event row (as returned from the DB / SSE stream) ───────────────────
 

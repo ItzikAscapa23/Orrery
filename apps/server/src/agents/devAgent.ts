@@ -949,10 +949,7 @@ export async function runDevAgent(
           });
       }
 
-      // Non-progress guard: reset on write/edit; detect N consecutive identical results.
-      const hadWrite = assistantContent.some(
-        (b) => b.type === 'tool_use' && (b.name === 'write_file' || b.name === 'edit_file'),
-      );
+      // Non-progress guard: detect N consecutive identical results.
       const lastToolBlock = assistantContent.find((b) => b.type === 'tool_use');
       const cmdName = lastToolBlock?.type === 'tool_use' ? lastToolBlock.name : 'unknown';
       const lastResult = toolResults[toolResults.length - 1];
@@ -970,7 +967,6 @@ export async function runDevAgent(
       const npErr = checkNonProgress(
         recentToolHashes,
         toolResults,
-        hadWrite,
         nonProgressThreshold,
         cmdName,
         firstLine,
@@ -1252,10 +1248,7 @@ export async function runLightDevAgent(
         }
       }
 
-      // Non-progress guard (light agent only has write/edit/read — reset on write/edit).
-      const hadWriteLight = assistantContent.some(
-        (b) => b.type === 'tool_use' && (b.name === 'write_file' || b.name === 'edit_file'),
-      );
+      // Non-progress guard: detect N consecutive identical results.
       const lastToolBlockLight = assistantContent.find((b) => b.type === 'tool_use');
       const cmdNameLight =
         lastToolBlockLight?.type === 'tool_use' ? lastToolBlockLight.name : 'unknown';
@@ -1275,7 +1268,6 @@ export async function runLightDevAgent(
       const npErrLight = checkNonProgress(
         recentToolHashes,
         toolResults,
-        hadWriteLight,
         nonProgressThreshold,
         cmdNameLight,
         firstLineLight,

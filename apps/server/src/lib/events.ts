@@ -92,6 +92,8 @@ function deriveAgent(payload: EventPayload): string | null {
       return 'orchestrator';
     case 'light_dev.completed':
       return 'orchestrator';
+    case 'test.shared_infra_changed':
+      return 'test';
   }
 }
 

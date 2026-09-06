@@ -20,7 +20,6 @@ export class NonProgressError extends Error {
  *
  * @param recentHashes - mutable ring buffer (mutated in place)
  * @param results - tool result content/is_error pairs for the current turn
- * @param hadWriteOrEdit - true if any write_file or edit_file call was in this turn
  * @param threshold - number of consecutive identical results that trigger a stop
  * @param command - tool name to embed in the error (for diagnostics)
  * @param firstLine - first line of the last result to embed in the error
@@ -28,15 +27,13 @@ export class NonProgressError extends Error {
 export function checkNonProgress(
   recentHashes: string[],
   results: Array<{ content?: unknown; is_error?: boolean }>,
-  hadWriteOrEdit: boolean,
   threshold: number,
   command: string,
   firstLine: string,
 ): NonProgressError | null {
-  if (hadWriteOrEdit) {
-    recentHashes.length = 0;
-    return null;
-  }
+  // Authoring turns (write/edit) are transparent to the buffer — they neither
+  // add entries nor clear it. Only execution outcomes (bash, read) are tracked.
+  if (command === 'write_file' || command === 'edit_file') return null;
 
   // A passing test run (zero failures) is progress — agent is verifying, not stuck.
   // Clear the buffer so repeated green checks never trigger the stop.

@@ -16,6 +16,7 @@ import {
   discoverTestDir,
   getAuthoredTestFilesForTask,
   getExistingTestFilesWithDescribes,
+  isSharedInfraPath,
 } from './testJob.js';
 import {
   runTestAgent,
@@ -290,6 +291,7 @@ export async function runTaskTestJob(
       `red→green iteration context and spends turns on unchanged boilerplate.`;
 
     const existingTestFiles = getExistingTestFilesWithDescribes(worktreePath, testDir);
+    const taskSharedInfraChanges: string[] = [];
     await runTestAgent(
       featureId,
       {
@@ -340,6 +342,25 @@ export async function runTaskTestJob(
           severity: 'muted',
           text,
         });
+        // Detect edits to shared test infrastructure (e.g. __mocks__ directories).
+        if (
+          (info.toolName === 'write_file' || info.toolName === 'edit_file') &&
+          info.path !== undefined &&
+          isSharedInfraPath(info.path)
+        ) {
+          taskSharedInfraChanges.push(info.path);
+          await appendEvent(getPrisma(), featureId, {
+            type: 'test.shared_infra_changed',
+            path: info.path,
+            tool: info.toolName,
+          });
+          void appendEvent(getPrisma(), featureId, {
+            type: 'agent.log',
+            agent: 'test',
+            severity: 'action',
+            text: `⚠ test agent modified shared infrastructure: ${info.path}`,
+          });
+        }
       },
     );
 

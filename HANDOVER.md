@@ -54,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 38 — Orientation stops being the largest cost
+- **Current phase:** 39 — A write does not excuse a loop
 - **State:** `complete`
 - **Last updated:** 2026-09-06
 
@@ -78,55 +78,34 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
-- **Phase 38: turn-split measurement reference** —
-  Feature `00d548a1`: 132 turns → 58 orientation (44%), 18 authoring (14%), 23
-  verification (17%), 31 waste (24%). orientationBlock was 28.7k chars. Per-turn cost
-  ≈ $0.037; cache reads were 39% of $4.83 total. Broader sample requires querying
-  `agent_event` where tool calls are `read_file`/`find`/`grep` on repo-structure files.
+- **Phase 39: edit-run loop fix (`130`)** —
+  `checkNonProgress` now skips write_file/edit_file turns entirely (no buffer entry,
+  no clear). Only bash/read results are tracked. Write→bash→write→bash loops with
+  an identical bash result fire after N bash hashes accumulate. The old
+  `hadWriteOrEdit` reset was redundant: Phase 37's command-hash already prevented
+  false positives from different commands returning identical summaries.
+  Loop cost reference: 37 of 80 turns ≈ $1.13 of test agent's $2.27, bff repo take-24.
+
+- **Phase 39: shared mock edits surfaced (`131`)** —
+  New `test.shared_infra_changed` event (path, tool, repo?) emitted whenever the
+  test agent writes/edits a file whose path contains `__mocks__` as a segment.
+  Both `testJob.ts` and `taskTestJob.ts` detect in `onToolCall` and emit an
+  `agent.log` severity `action` for stream visibility. `TestReportPayloadSchema`
+  gains `shared_infra_changes?: string[]`; included in both test.report paths.
+
+- **Phase 39: URL-map feasibility (`132`)** —
+  The 37-turn loop existed because the test agent had to discover the handler's
+  outbound URL empirically. It was derivable from `creditCards.js` and
+  `setup-env-vars.js` which the agent had already read. Adding an "### Outbound URLs"
+  section to `generateRepoOrientation` is **feasible**: scan JS/TS handlers for
+  `https?://` literals, axios/fetch calls, and `process.env` URL references.
+  Cost: ~400–700 chars / ~100–175 tokens; saving: 10–20 turns × $0.037 ≈ $0.37–0.74/feature.
+  **Deferred**; requires a real bff run to confirm the model uses the section.
 
 - **Phase 38: `generateRepoOrientation` adds vendored-package and API-spec sections (`127`)** —
-  Two new optional sections appended after tsconfig. (a) **Vendored packages** — scans
-  `node_modules/` at depth > 0 (top-level excluded), lists packages with exported names
-  via regex (CJS `module.exports.name =`, ESM `export function/const/class`, named
-  `export { ... }`); capped at 30 symbols/package, 10 packages/vendor-dir, depth ≤ 6.
-  (b) **API spec files** — scans dirs named `openapis`/`openapi`/`api-specs`/`api-spec`,
-  lists `.json`/`.yaml`/`.yml`; depth ≤ 5. Both omitted when empty, so non-bff repos
-  are unaffected. Generic detection chosen over BFF-specific to keep the function
-  repo-agnostic.
-
-- **Phase 38: size cost of new orientation sections** —
-  On repos without vendored layers or openapis dirs: zero increase. For the bff repo:
-  ~700 chars / ~175 tokens estimated. Cost increase ≈ $0.069/feature; saves ~16
-  re-discovery turns × $0.037 ≈ $0.59/feature. Net ≈ +$0.52/feature.
-
-- **Phase 38: dev-job harness brief is feasible, deferred (`128`)** —
-  The `harnessbrief.ts` pattern can carry discovered symbols between dev jobs:
-  `__orrery_dev_brief.md` written by first dev job, committed as `dev-symbol-brief.md`,
-  loaded by subsequent jobs via a new `loadDevSymbolBrief` — same freshness-check
-  mechanism. No separate artifact type needed. Implementation deferred to a later phase.
-
-- **Phase 38: `npm test` guidance added to dev and test agents (`129`)** —
-  `toJsonReporterCommand` rewrites `npm test` to `npx vitest run` (else-branch,
-  `testOutputSummary.ts:55`); on a jest repo that fails → raw output. Agents wasted a
-  turn per job discovering this empirically. Guidance added at three sites in
-  `devAgent.ts` and once in `testAgent.ts`: "use `npx jest` / `npx vitest run` directly."
-
-- **Phase 37: `toJsonReporterCommand` reuses `extractProbeFlags` for agent args (`124`)** —
-  `extractPositionalArgs` dropped every `--flag` token; replaced with `extractProbeFlags`
-  which strips only the three reporter flags the rewrite injects. Filtered runs now filter.
-
-- **Phase 37: `blocked_by_protected_test` AgentOutcome (`125`)** — `REPORT_BLOCKED_TOOL`
-  added to `devAgent.ts`. `runDevAgent` returns `{ kind: 'blocked_by_protected_test', ... }`.
-  `devJob.ts` parks with `parkReason: 'blocked_by_protected_test'` and `final: false`.
-
-- **Phase 37: `runReviewAgent` returns `{ findings, priorFindingStatuses }` (`126`)** —
-  On `priorReviewRounds >= 1`, DB queried for prior findings before `persistFindings`
-  overwrites them (specRev is stable between review rounds). Prior findings injected as
-  checklist; statuses logged as muted `agent.log` after review.
-
-- **Phase 36: `summarizeBashTestRun` returns `TestRunSummary`; vacuous findings gate (`120`, `122`)** —
-  Returns `{ summary, resolvedCommand, reportPath }`; event log records resolved command + path.
-  `_advanceTestPass` opens `test_report` gate when warnings > 0 instead of transitioning to TEST_PASS.
+  Two new optional sections after tsconfig: vendored packages (depth > 0, ≤30 symbols,
+  ≤10 packages) and API spec file listings (dirs named openapis/openapi/api-specs).
+  Both omitted when empty; zero cost on non-bff repos.
 
 - **`spec_approval` gate-open (Phase 29)** — 4 open paths: `awsReviewJob.ts` after review,
   `specSubmit.ts` no-charter fast-path, `awsReviewJob.ts` error final-attempt, missing-charter
@@ -198,6 +177,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 36 | Test output can be trusted | `260a95a` | 2026-09-06 |
 | 37 | Agents keep their flags, and blockers do not vanish quietly | `ccbecaa` | 2026-09-06 |
 | 38 | Orientation stops being the largest cost | `1948302` | 2026-09-06 |
+| 39 | A write does not excuse a loop | pending | 2026-09-06 |
 
 ---
 
@@ -207,4 +187,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `npm run lint` exits 0.
 - No feature mid-run when editing the orchestrator.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
-- Orientation turns below 44% on the next real feature (plan.md phase 38 exit criterion).
+- A test agent completes within its turn cap on the bff repo (plan.md phase 39 exit criterion).
