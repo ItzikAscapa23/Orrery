@@ -1122,10 +1122,17 @@ async function _advanceTestPass(
       })),
       skipDuplicates: true,
     });
+    const regularCount = warnings.filter((f) => f.section === 'vacuous assertions').length;
+    const soleCount = warnings.filter((f) => f.section === 'sole-assertion-vacuous').length;
+    const forEachCount = warnings.filter((f) => f.section === 'unguarded-forEach').length;
+    const summaryParts: string[] = [];
+    if (regularCount) summaryParts.push(`${regularCount} vacuous assertion(s)`);
+    if (soleCount) summaryParts.push(`${soleCount} sole-assertion test(s)`);
+    if (forEachCount) summaryParts.push(`${forEachCount} unguarded forEach(s)`);
     await appendEvent(getPrisma(), featureId, {
       type: 'gate.opened',
       gate: 'test_report',
-      summary: `${warnings.length} vacuous assertion(s) detected — review before accepting`,
+      summary: `${summaryParts.join(', ')} detected — review before accepting`,
       revision: specRev,
       counts: { blockers: 0, warnings: warnings.length, suggestions: 0 },
     });

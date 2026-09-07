@@ -268,7 +268,12 @@ export function TestReportCard({ testReport: r, featureId, gate, onAction }: Tes
 
       {/* Stat cubes */}
       {(function () {
-        const vacuousCount = r.findings.filter((f) => f.section === 'vacuous assertions').length;
+        const vacuousCount = r.findings.filter(
+          (f) =>
+            f.section === 'vacuous assertions' ||
+            f.section === 'sole-assertion-vacuous' ||
+            f.section === 'unguarded-forEach',
+        ).length;
         const authored = (r.authoredPassed ?? 0) + (r.authoredFailed ?? 0);
         const wallTimeStr = r.wallTimeMs != null ? `${(r.wallTimeMs / 1000).toFixed(1)}s` : '—';
 
@@ -330,7 +335,12 @@ export function TestReportCard({ testReport: r, featureId, gate, onAction }: Tes
           }
           if (expandedCube === 'vacuous') {
             return r.findings
-              .filter((f) => f.section === 'vacuous assertions')
+              .filter(
+                (f) =>
+                  f.section === 'vacuous assertions' ||
+                  f.section === 'sole-assertion-vacuous' ||
+                  f.section === 'unguarded-forEach',
+              )
               .map((f) => (
                 <div
                   key={f.id}
