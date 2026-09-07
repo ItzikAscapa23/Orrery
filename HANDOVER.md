@@ -244,7 +244,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 43 | The vacuous detector earns its gate | `b9efa8f` | 2026-09-07 |
 | 44 | The loop guard counts what it means to count | `f439b52` | 2026-09-07 |
 | 45 | Coverage is only claimed where it can be proved | `7f2c688` | 2026-09-07 |
-| 46 | An agent can see why nothing ran | `<commit>` | 2026-09-07 |
+| 46 | An agent can see why nothing ran | `891cb40` | 2026-09-07 |
 
 ---
 
