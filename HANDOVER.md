@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 43 — The vacuous detector earns its gate
+- **Current phase:** 44 — The loop guard counts what it means to count
 - **State:** `complete`
 - **Last updated:** 2026-09-07
 
@@ -64,7 +64,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Next phase (44) tasks — none defined in plan.md yet.*
+*Next phase (45) tasks — none defined in plan.md yet.*
 
 ---
 
@@ -72,7 +72,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1249 passed across 92 files**, 2026-09-07 |
+| `npm test` (repo root) | passed — **1253 passed across 92 files**, 2026-09-07 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-07 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-07 |
 
@@ -80,54 +80,40 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **Phase 44: bash-only guard + full-command hash (`142`, `143`)** —
+  `checkNonProgress` accepts `toolName` + `fullCommand` as separate params. Only
+  `toolName === 'bash'` adds to the ring buffer; reads, listings and writes are
+  transparent. The hash covers `fullCommand` (the full bash input including arguments)
+  so `npx jest --a` and `npx jest --b` are distinct. Callers extract
+  `toolBlock.input.command` for bash invocations. No observed loop would be missed —
+  every take-24/take-25 loop was a bash/jest loop.
+
+- **Phase 44: non-progress is not an allowlist violation (`144`)** —
+  `taskTestJob.ts` now has a separate `isNonProgress` branch with
+  `parkReason: 'non_progress'` and message "test agent parked (non-progress:
+  repeated command)". Previously grouped with `isViolation`, which produced
+  "allowlist violation" for an orchestrator-side stop.
+
 - **Phase 43: detector exemptions (`139`)** —
-  `toBeDefined()` is no longer flagged when the preceding or current line contains
-  `.find(`/`.get(`/`[index]` — the assertion is a necessary null-check, not a
-  content check. `toHaveProperty('k')` is no longer flagged when the next non-blank
-  line asserts on `subject.k` or `subject['k']` with a value assertion — the
-  property check acts as an existence guard before the value check. Both exemptions
-  are `exemptCheck` functions on the `VacuousPattern` entries themselves; false-positive
-  suppression stays colocated with the pattern that produces it.
+  `toBeDefined()` is not flagged when the preceding line contains `.find(`/`.get(`/index
+  access — necessary null-check. `toHaveProperty('k')` is not flagged when the next
+  statement asserts on `subject.k` with a value — property check guards the value
+  assertion. Exemptions live on the `VacuousPattern` entries themselves.
 
 - **Phase 43: two high-priority finding categories (`140`)** —
-  `detectSoleAssertionVacuous` uses brace-depth counting to walk test blocks and
-  emits `section: 'sole-assertion-vacuous'` when every assertion in a block is
-  vacuous. `detectUnguardedForEach` scans back 10 lines from each `.forEach(` for a
-  length guard. Both use distinct `section` values (`'sole-assertion-vacuous'`,
-  `'unguarded-forEach'`); the UI `vacuousCount` and vacuous drilldown in
-  `TestReportCard.tsx` include all three sections. Gate summary names each category.
+  `detectSoleAssertionVacuous` (brace-depth walk) emits `section: 'sole-assertion-vacuous'`;
+  `detectUnguardedForEach` (10-line lookback) emits `section: 'unguarded-forEach'`.
+  UI `vacuousCount` and drilldown include all three sections.
 
 - **Phase 43: base-commit test feasibility (`141`)** —
-  Running authored tests against the base commit is **feasible and high-value**.
-  Approach: `git merge-base HEAD <default_branch>` → secondary git worktree at that
-  SHA → copy authored test files → run suite in container → report
-  `passes_against_base`. Infrastructure already exists (worktree creation in
-  `serverDevJob.ts`, container exec in `container.ts`). Cost: ~40s extra wall time
-  per test job (doubles `wall_time_ms`); no extra API calls. Risk: when
-  `package.json` changed on the feature branch, the secondary worktree needs its own
-  install (~60s); mitigate by binding the feature worktree's `node_modules` (works
-  for the common case where deps haven't changed). Not implemented this phase.
+  Feasible: `git merge-base HEAD <default_branch>` → secondary worktree → copy authored
+  tests → container exec → report `passes_against_base`. Cost ~40s; binds feature
+  worktree's `node_modules` when deps unchanged. Not implemented this phase.
 
-- **Phase 42: orchestrator computes brief hashes (`136`)** —
-  `HARNESS_BRIEF_WRITE_INSTRUCTION` now asks the agent to write a paths-only comment
-  `<!-- orrery-sources-paths: [...] -->`. After the agent writes the brief,
-  `injectHarnessBriefHashes` reads each path and rewrites the header to the
-  `<!-- orrery-sources: {...} -->` format that `checkHarnessBriefFreshness` verifies.
-  The LLM lists paths; it cannot compute SHA-256. Briefs are now reused across test
-  tasks on unchanged repos.
-
-- **Phase 42: one canonical brief path (`137`)** —
-  `testAgent.ts:checkWriteAllowed` rejects any write to a file named
-  `__orrery_harness_brief.md` that is not at the exact repo root.
-
-- **Phase 42: scratch + brief excluded from agent commit (`138`)** —
-  After `git add -A`, `taskTestJob.ts` unstages files whose basename matches
-  `SCRATCH_FILE_RE` or equals `__orrery_harness_brief.md`.
-
-- **Phase 41: command-only hashing (`134`, `135`)** —
-  `checkNonProgress` hashes only `command`, not `{command, results}`. A repeated
-  command accumulates in the ring buffer regardless of output variation. The green-
-  clears rule is removed — it was redundant and harmful once command hashing was in place.
+- **Phase 42: brief hashes computed by orchestrator (`136`–`138`)** —
+  Agent writes paths-only comment; orchestrator hashes the files and rewrites the header.
+  One canonical path (`<worktreeRoot>/__orrery_harness_brief.md`) enforced at both ends.
+  Scratch and brief files unstaged before agent commit.
 
 - **Phase 40: warning findings open `code_review` gate (`133`)** —
   A warnings-only review opens the `code_review` gate; only a fully clean review
@@ -208,6 +194,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 41 | The loop guard counts commands | `7b8baa5` | 2026-09-07 |
 | 42 | The harness brief works at all | `3b50e71` | 2026-09-07 |
 | 43 | The vacuous detector earns its gate | `b9efa8f` | 2026-09-07 |
+| 44 | The loop guard counts what it means to count | pending | 2026-09-07 |
 
 ---
 
@@ -217,4 +204,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `npm run lint` exits 0.
 - No feature mid-run when editing the orchestrator.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
-- A test agent completes within its turn cap on the bff repo (plan.md phase 39 exit criterion).
+- A test agent completes its orientation turns without a non-progress stop.

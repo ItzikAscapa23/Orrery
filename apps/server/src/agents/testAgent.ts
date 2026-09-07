@@ -908,9 +908,13 @@ export async function runTestAgent(
           });
       }
 
-      // Non-progress guard: detect N consecutive identical results.
+      // Non-progress guard: detect N consecutive identical bash commands.
       const lastToolBlock = assistantContent.find((b) => b.type === 'tool_use');
-      const cmdName = lastToolBlock?.type === 'tool_use' ? lastToolBlock.name : 'unknown';
+      const toolName = lastToolBlock?.type === 'tool_use' ? lastToolBlock.name : 'unknown';
+      const fullCommand =
+        lastToolBlock?.type === 'tool_use' && lastToolBlock.name === 'bash'
+          ? ((lastToolBlock.input as { command?: string }).command ?? '')
+          : '';
       const lastResult = toolResults[toolResults.length - 1];
       const rawContent = lastResult?.content;
       const resultText =
@@ -927,7 +931,8 @@ export async function runTestAgent(
         recentToolHashes,
         toolResults,
         nonProgressThreshold,
-        cmdName,
+        toolName,
+        fullCommand,
         firstLine,
       );
       if (npErr) throw npErr;

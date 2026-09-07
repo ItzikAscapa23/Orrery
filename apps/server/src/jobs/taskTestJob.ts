@@ -500,9 +500,8 @@ export async function runTaskTestJob(
     console.error(JSON.stringify({ event: 'task_test_job_error', featureId, taskId, error: msg }));
 
     const isViolation =
-      err instanceof TestAllowlistViolationError ||
-      err instanceof MetacharViolationError ||
-      err instanceof NonProgressError;
+      err instanceof TestAllowlistViolationError || err instanceof MetacharViolationError;
+    const isNonProgress = err instanceof NonProgressError;
     // Credential expiry or Bedrock outage during the agent run — same canonical
     // handler as the pre-agent probe, with attempt rollback so the retry goes
     // back through the test-task path instead of skipping to dev.
@@ -553,6 +552,27 @@ export async function runTaskTestJob(
         agent: 'test',
         severity: 'muted',
         text: `· test agent parked (allowlist violation) — use REDISPATCH to retry`,
+      });
+    } else if (isNonProgress) {
+      // Orchestrator-side stop — not agent misconduct. Park so the operator can
+      // inspect the repeated command, then REDISPATCH once the loop cause is known.
+      await getPrisma().task.update({
+        where: { id: taskId },
+        data: { status: 'parked', parkReason: 'non_progress', bullJobId: null },
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'task.failed',
+        repo: task.repo,
+        task_id: taskId,
+        reason: msg.slice(0, 300),
+        attempt: task.testTaskAttempts + 1,
+        final: false,
+      });
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'test',
+        severity: 'muted',
+        text: `· test agent parked (non-progress: repeated command) — use REDISPATCH to retry`,
       });
     } else {
       const refreshed = await getPrisma().task.findUniqueOrThrow({ where: { id: taskId } });

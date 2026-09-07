@@ -1107,7 +1107,7 @@ export async function runDevJob(
       err instanceof AllowlistViolationError ||
       err instanceof MetacharViolationError ||
       err instanceof AgentNoopError ||
-      err instanceof NonProgressError;
+      err instanceof NonProgressError; // orchestrator-side stop; final like other policy violations
     const isCommitStep = err instanceof CommitStepError;
     const isInstall = err instanceof InstallError;
     // PushError: work is committed but push failed — retrying the full agent job

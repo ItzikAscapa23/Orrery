@@ -949,9 +949,13 @@ export async function runDevAgent(
           });
       }
 
-      // Non-progress guard: detect N consecutive identical results.
+      // Non-progress guard: detect N consecutive identical bash commands.
       const lastToolBlock = assistantContent.find((b) => b.type === 'tool_use');
-      const cmdName = lastToolBlock?.type === 'tool_use' ? lastToolBlock.name : 'unknown';
+      const toolName = lastToolBlock?.type === 'tool_use' ? lastToolBlock.name : 'unknown';
+      const fullCommand =
+        lastToolBlock?.type === 'tool_use' && lastToolBlock.name === 'bash'
+          ? ((lastToolBlock.input as { command?: string }).command ?? '')
+          : '';
       const lastResult = toolResults[toolResults.length - 1];
       const rawContent = lastResult?.content;
       const resultText =
@@ -968,7 +972,8 @@ export async function runDevAgent(
         recentToolHashes,
         toolResults,
         nonProgressThreshold,
-        cmdName,
+        toolName,
+        fullCommand,
         firstLine,
       );
       if (npErr) throw npErr;
@@ -1248,10 +1253,14 @@ export async function runLightDevAgent(
         }
       }
 
-      // Non-progress guard: detect N consecutive identical results.
+      // Non-progress guard: detect N consecutive identical bash commands.
       const lastToolBlockLight = assistantContent.find((b) => b.type === 'tool_use');
-      const cmdNameLight =
+      const toolNameLight =
         lastToolBlockLight?.type === 'tool_use' ? lastToolBlockLight.name : 'unknown';
+      const fullCommandLight =
+        lastToolBlockLight?.type === 'tool_use' && lastToolBlockLight.name === 'bash'
+          ? ((lastToolBlockLight.input as { command?: string }).command ?? '')
+          : '';
       const lastResultLight = toolResults[toolResults.length - 1];
       const rawContentLight = lastResultLight?.content;
       const resultTextLight =
@@ -1269,7 +1278,8 @@ export async function runLightDevAgent(
         recentToolHashes,
         toolResults,
         nonProgressThreshold,
-        cmdNameLight,
+        toolNameLight,
+        fullCommandLight,
         firstLineLight,
       );
       if (npErrLight) throw npErrLight;

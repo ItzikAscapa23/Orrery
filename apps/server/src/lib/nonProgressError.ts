@@ -16,24 +16,26 @@ export class NonProgressError extends Error {
 
 /**
  * Update the non-progress ring buffer and throw a NonProgressError if the
- * same command has been issued `threshold` times in a row. Output variation
- * is irrelevant — repeated command strings are what counts.
+ * same bash command has been issued `threshold` times in a row.
+ *
+ * Only bash tool invocations are counted — reads, file listings and writes
+ * are orientation or authoring, not churn. The hash covers the full command
+ * string including arguments so `jest --a` and `jest --b` are distinct.
  */
 export function checkNonProgress(
   recentHashes: string[],
   _results: Array<{ content?: unknown; is_error?: boolean }>,
   threshold: number,
-  command: string,
+  toolName: string,
+  fullCommand: string,
   firstLine: string,
 ): NonProgressError | null {
-  // Authoring turns (write/edit) are transparent to the buffer — they neither
-  // add entries nor clear it. Only execution outcomes (bash, read) are tracked.
-  if (command === 'write_file' || command === 'edit_file') return null;
+  // Only bash commands contribute to the loop guard.
+  if (toolName !== 'bash') return null;
 
-  // Hash only the command string — not the output. Repeated invocations of the
-  // same command accumulate regardless of whether the output varies turn-to-turn.
-  // Distinct commands produce distinct hashes (Phase 37 invariant is preserved).
-  const hash = createHash('sha256').update(command).digest('hex');
+  // Hash the full bash command — arguments included. Distinct commands (even
+  // with identical output) produce distinct hashes (Phase 37 invariant).
+  const hash = createHash('sha256').update(fullCommand).digest('hex');
 
   recentHashes.push(hash);
   if (recentHashes.length > threshold) {
@@ -41,7 +43,7 @@ export function checkNonProgress(
   }
 
   if (recentHashes.length === threshold && recentHashes.every((h) => h === recentHashes[0])) {
-    return new NonProgressError(command, firstLine, threshold);
+    return new NonProgressError(fullCommand, firstLine, threshold);
   }
 
   return null;
