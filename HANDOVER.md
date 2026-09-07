@@ -194,7 +194,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 39 | A write does not excuse a loop | `178d109` | 2026-09-06 |
 | 40 | A correct finding has an effect | `937dba6` | 2026-09-07 |
 | 41 | The loop guard counts commands | `7b8baa5` | 2026-09-07 |
-| 42 | The harness brief works at all | pending | 2026-09-07 |
+| 42 | The harness brief works at all | `3b50e71` | 2026-09-07 |
 
 ---
 
