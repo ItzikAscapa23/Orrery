@@ -5,7 +5,7 @@ const result = (text: string) => [{ content: text, is_error: false }];
 const N = 3;
 
 describe('checkNonProgress', () => {
-  it('fires after exactly N consecutive identical results', () => {
+  it('fires after N consecutive runs of the same command', () => {
     const buf: string[] = [];
     expect(
       checkNonProgress(buf, result('TESTS: 0 failed'), N, 'bash', 'TESTS: 0 failed'),
@@ -19,22 +19,22 @@ describe('checkNonProgress', () => {
     expect(err?.message).toContain('3 times');
   });
 
-  it('does not fire after N-1 identical results', () => {
+  it('does not fire after N-1 runs of the same command', () => {
     const buf: string[] = [];
     for (let i = 0; i < N - 1; i++) {
       expect(checkNonProgress(buf, result('same output'), N, 'bash', 'same output')).toBeNull();
     }
   });
 
-  it('resets on a different result — no false positive after N-1 + 1 different + 1 same', () => {
+  it('a different command breaks the sequence — N-1 cmd-A + 1 cmd-B + 1 cmd-A does not fire', () => {
     const buf: string[] = [];
     for (let i = 0; i < N - 1; i++) {
-      checkNonProgress(buf, result('same'), N, 'bash', 'same');
+      checkNonProgress(buf, result('error'), N, 'bash', 'error');
     }
-    // One different result resets
-    expect(checkNonProgress(buf, result('different'), N, 'bash', 'different')).toBeNull();
-    // One more same — buffer only has 2 entries now (different + same), not N
-    expect(checkNonProgress(buf, result('same'), N, 'bash', 'same')).toBeNull();
+    // One different command breaks the bash streak
+    expect(checkNonProgress(buf, result('error'), N, 'npx jest', 'error')).toBeNull();
+    // One more bash — buf = [H_bash, H_jest, H_bash], not all same → no fire
+    expect(checkNonProgress(buf, result('error'), N, 'bash', 'error')).toBeNull();
   });
 
   it('write_file between identical bash results does NOT reset buffer — edit-run loop is caught', () => {
@@ -49,7 +49,7 @@ describe('checkNonProgress', () => {
     expect(err).toBeInstanceOf(NonProgressError);
   });
 
-  it('three distinct commands with identical content do not fire — command is in hash', () => {
+  it('three distinct commands with identical content do not fire — phase 37 invariant', () => {
     const buf: string[] = [];
     const content = 'TESTS: 5 passed, 1 failed';
     // Each call uses a different command name — hashes must differ
@@ -59,47 +59,50 @@ describe('checkNonProgress', () => {
     // Buffer has 3 entries but all have different hashes → no fire
   });
 
-  it('a passing result (0 failed) clears the buffer — repeated green checks never fire', () => {
+  it('repeated command with varying output fires — task 134 case', () => {
     const buf: string[] = [];
-    const passing = 'TESTS: 97 passed, 0 failed';
-    for (let i = 0; i < N * 3; i++) {
-      expect(checkNonProgress(buf, result(passing), N, 'npm test', passing)).toBeNull();
-      expect(buf).toHaveLength(0);
-    }
+    // Same command, different output each time (as seen on feature 1b6e3d8c)
+    checkNonProgress(buf, result('output size 338'), N, 'npx jest --ci', 'output size 338');
+    checkNonProgress(buf, result('output size 344'), N, 'npx jest --ci', 'output size 344');
+    const err = checkNonProgress(
+      buf,
+      result('output size 350'),
+      N,
+      'npx jest --ci',
+      'output size 350',
+    );
+    expect(err).toBeInstanceOf(NonProgressError);
   });
 
-  it('passing result clears buffer mid-sequence — N-1 failures then pass then 1 failure does not fire', () => {
+  it('passing result no longer clears buffer — N repeated green results fire', () => {
+    const buf: string[] = [];
+    const passing = 'TESTS: 97 passed, 0 failed';
+    for (let i = 0; i < N - 1; i++) {
+      expect(checkNonProgress(buf, result(passing), N, 'npm test', passing)).toBeNull();
+    }
+    // Nth call fires — green result does not clear the buffer
+    const err = checkNonProgress(buf, result(passing), N, 'npm test', passing);
+    expect(err).toBeInstanceOf(NonProgressError);
+  });
+
+  it('N-1 red then 1 green fires — passing no longer resets mid-sequence', () => {
     const buf: string[] = [];
     const failing = 'TESTS: 0 passed, 1 failed';
     for (let i = 0; i < N - 1; i++) {
       checkNonProgress(buf, result(failing), N, 'bash', failing);
     }
-    // Passing result clears the buffer
-    checkNonProgress(
+    // The Nth call with a passing result still fires — same command N times
+    const err = checkNonProgress(
       buf,
       result('TESTS: 97 passed, 0 failed'),
       N,
       'bash',
       'TESTS: 97 passed, 0 failed',
     );
-    expect(buf).toHaveLength(0);
-    // One more failing result — buffer has only 1 entry, must not fire
-    expect(checkNonProgress(buf, result(failing), N, 'bash', failing)).toBeNull();
+    expect(err).toBeInstanceOf(NonProgressError);
   });
 
-  it('tool_use_id differences do not cause false negatives — only content is hashed', () => {
-    // Simulate identical content with the same two separate calls (content-hash equality)
-    const buf: string[] = [];
-    for (let i = 0; i < N; i++) {
-      checkNonProgress(
-        buf,
-        result('error: cannot find module'),
-        N,
-        'bash',
-        'error: cannot find module',
-      );
-    }
-    // The loop above fires on the Nth call; confirm by doing it explicitly
+  it('tool_use_id differences do not cause false negatives — only command is hashed', () => {
     const buf2: string[] = [];
     for (let i = 0; i < N - 1; i++) {
       expect(checkNonProgress(buf2, result('error: cannot find module'), N, 'bash', '')).toBeNull();

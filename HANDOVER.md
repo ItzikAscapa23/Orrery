@@ -54,7 +54,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 40 — A correct finding has an effect
+- **Current phase:** 41 — The loop guard counts commands
 - **State:** `complete`
 - **Last updated:** 2026-09-07
 
@@ -62,7 +62,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] `133-review-warnings-route` — gate on warnings; findings record dismissed/fixed; routing rule stated once
+- [x] `134-count-commands-not-results` — `checkNonProgress` hashes only the command string; repeated invocations with varying output now accumulate
+- [x] `135-green-does-not-disarm` — unconditional buffer-clear on passing results removed; green results no longer disarm the guard
+- [x] Tests updated: new cases for varying-output fire and green-no-longer-clears; Phase 37 invariant retained
 
 ---
 
@@ -70,13 +72,24 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1230 passed across 92 files**, 2026-09-07 |
+| `npm test` (repo root) | passed — **1231 passed across 92 files**, 2026-09-07 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-07 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-07 |
 
 ---
 
 ## Decisions
+
+- **Phase 41: command-only hashing (`134`, `135`)** —
+  `checkNonProgress` now hashes only `command`, not `{command, results}`.
+  A repeated command accumulates in the ring buffer regardless of output variation;
+  20 identical command invocations fire the guard even if every result is different.
+  The Phase 37 invariant (three distinct commands with identical output do not fire)
+  is preserved because distinct command strings still produce distinct hashes.
+  The Phase 34 green-clears rule is removed: it was added to prevent false positives
+  from distinct commands with identical output — command-only hashing already prevents
+  that, so the rule was both redundant and harmful (it permanently disarmed the guard
+  against passing scratch-file loops).
 
 - **Phase 40: warning findings open `code_review` gate (`133`)** —
   `reviewJob.ts` now branches on both `blockers` and `warnings`.
@@ -92,33 +105,21 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   severity set.
 
 - **Phase 39: edit-run loop fix (`130`)** —
-  `checkNonProgress` now skips write_file/edit_file turns entirely (no buffer entry,
+  `checkNonProgress` skips write_file/edit_file turns entirely (no buffer entry,
   no clear). Only bash/read results are tracked. Write→bash→write→bash loops with
   an identical bash result fire after N bash hashes accumulate. The old
   `hadWriteOrEdit` reset was redundant: Phase 37's command-hash already prevented
   false positives from different commands returning identical summaries.
-  Loop cost reference: 37 of 80 turns ≈ $1.13 of test agent's $2.27, bff repo take-24.
 
 - **Phase 39: shared mock edits surfaced (`131`)** —
   New `test.shared_infra_changed` event (path, tool, repo?) emitted whenever the
   test agent writes/edits a file whose path contains `__mocks__` as a segment.
-  Both `testJob.ts` and `taskTestJob.ts` detect in `onToolCall` and emit an
-  `agent.log` severity `action` for stream visibility. `TestReportPayloadSchema`
-  gains `shared_infra_changes?: string[]`; included in both test.report paths.
 
 - **Phase 39: URL-map feasibility (`132`)** —
-  The 37-turn loop existed because the test agent had to discover the handler's
-  outbound URL empirically. It was derivable from `creditCards.js` and
-  `setup-env-vars.js` which the agent had already read. Adding an "### Outbound URLs"
-  section to `generateRepoOrientation` is **feasible**: scan JS/TS handlers for
-  `https?://` literals, axios/fetch calls, and `process.env` URL references.
-  Cost: ~400–700 chars / ~100–175 tokens; saving: 10–20 turns × $0.037 ≈ $0.37–0.74/feature.
-  **Deferred**; requires a real bff run to confirm the model uses the section.
+  Deferred; requires a real bff run to confirm the model uses the section.
 
 - **Phase 38: `generateRepoOrientation` adds vendored-package and API-spec sections (`127`)** —
-  Two new optional sections after tsconfig: vendored packages (depth > 0, ≤30 symbols,
-  ≤10 packages) and API spec file listings (dirs named openapis/openapi/api-specs).
-  Both omitted when empty; zero cost on non-bff repos.
+  Two new optional sections after tsconfig; zero cost on non-bff repos.
 
 - **`spec_approval` gate-open (Phase 29)** — 4 open paths: `awsReviewJob.ts` after review,
   `specSubmit.ts` no-charter fast-path, `awsReviewJob.ts` error final-attempt, missing-charter
@@ -192,6 +193,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 38 | Orientation stops being the largest cost | `1948302` | 2026-09-06 |
 | 39 | A write does not excuse a loop | `178d109` | 2026-09-06 |
 | 40 | A correct finding has an effect | `937dba6` | 2026-09-07 |
+| 41 | The loop guard counts commands | pending | 2026-09-07 |
 
 ---
 

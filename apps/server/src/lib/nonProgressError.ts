@@ -6,7 +6,7 @@ export class NonProgressError extends Error {
 
   constructor(command: string, firstLine: string, threshold: number) {
     super(
-      `Non-progress stop: '${command}' returned the same result ${threshold} times. First line: ${firstLine}`,
+      `Non-progress stop: '${command}' was issued ${threshold} times in a row. First line: ${firstLine}`,
     );
     this.name = 'NonProgressError';
     this.command = command;
@@ -15,18 +15,13 @@ export class NonProgressError extends Error {
 }
 
 /**
- * Update the non-progress ring buffer and return a NonProgressError if the
- * threshold of consecutive identical tool results has been reached.
- *
- * @param recentHashes - mutable ring buffer (mutated in place)
- * @param results - tool result content/is_error pairs for the current turn
- * @param threshold - number of consecutive identical results that trigger a stop
- * @param command - tool name to embed in the error (for diagnostics)
- * @param firstLine - first line of the last result to embed in the error
+ * Update the non-progress ring buffer and throw a NonProgressError if the
+ * same command has been issued `threshold` times in a row. Output variation
+ * is irrelevant — repeated command strings are what counts.
  */
 export function checkNonProgress(
   recentHashes: string[],
-  results: Array<{ content?: unknown; is_error?: boolean }>,
+  _results: Array<{ content?: unknown; is_error?: boolean }>,
   threshold: number,
   command: string,
   firstLine: string,
@@ -35,36 +30,10 @@ export function checkNonProgress(
   // add entries nor clear it. Only execution outcomes (bash, read) are tracked.
   if (command === 'write_file' || command === 'edit_file') return null;
 
-  // A passing test run (zero failures) is progress — agent is verifying, not stuck.
-  // Clear the buffer so repeated green checks never trigger the stop.
-  const resultText = results
-    .map((r) =>
-      typeof r.content === 'string'
-        ? r.content
-        : Array.isArray(r.content)
-          ? (r.content as Array<{ type?: string; text?: string }>)
-              .filter((b) => b?.type === 'text')
-              .map((b) => b.text ?? '')
-              .join('\n')
-          : '',
-    )
-    .join('\n');
-  if (/TESTS:\s*\d+\s+passed,\s*0\s+failed/.test(resultText)) {
-    recentHashes.length = 0;
-    return null;
-  }
-
-  // Include the command in the hash so distinct commands returning identical
-  // summaries (e.g. three verification runs all reporting "97 passed, 0 failed")
-  // never count as repetition of the same stuck loop.
-  const hash = createHash('sha256')
-    .update(
-      JSON.stringify({
-        command,
-        results: results.map((r) => ({ content: r.content, is_error: r.is_error })),
-      }),
-    )
-    .digest('hex');
+  // Hash only the command string — not the output. Repeated invocations of the
+  // same command accumulate regardless of whether the output varies turn-to-turn.
+  // Distinct commands produce distinct hashes (Phase 37 invariant is preserved).
+  const hash = createHash('sha256').update(command).digest('hex');
 
   recentHashes.push(hash);
   if (recentHashes.length > threshold) {
