@@ -193,7 +193,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 38 | Orientation stops being the largest cost | `1948302` | 2026-09-06 |
 | 39 | A write does not excuse a loop | `178d109` | 2026-09-06 |
 | 40 | A correct finding has an effect | `937dba6` | 2026-09-07 |
-| 41 | The loop guard counts commands | pending | 2026-09-07 |
+| 41 | The loop guard counts commands | `7b8baa5` | 2026-09-07 |
 
 ---
 
