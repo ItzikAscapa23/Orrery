@@ -44,6 +44,16 @@ export function buildSystemPrompt(): string {
     'The test agent authors test files for every covered task; covering a test-authoring ' +
     'task would be a loop. Use skip reason: "Deliverable is test code — not subject to ' +
     'acceptance testing."\n' +
+    '- A task whose primary deliverable is build tooling, bundler config, dev-server config, ' +
+    'proxy config, environment setup, or asset pipeline changes must always be marked SKIPPED. ' +
+    'The test harness runs vitest/jest in a container; it cannot start a Vite dev server, ' +
+    'observe proxy routing, or run a build pipeline. Use skip reason: ' +
+    '"Deliverable is configuration — the harness cannot execute a dev server or observe a build."\n' +
+    '- A task whose observable behaviour is stated as the absence of something must always ' +
+    'be marked SKIPPED. Examples of absence proofs: "no absolute URLs appear in client source", ' +
+    '"no CORS configuration exists on the server", "no network calls at request time". ' +
+    'vitest cannot assert what is not there; only skip if the spec offers no positive observable ' +
+    'form. Use skip reason: "Behaviour is an absence proof — vitest cannot assert what is not there."\n' +
     '- When several tasks in a dependency chain contribute to ONE observable behaviour — ' +
     'for example, helper computations or sub-routines that are only externally visible ' +
     'through a single endpoint, resolver, or mutation — cover the task at which that ' +

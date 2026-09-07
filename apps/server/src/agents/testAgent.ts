@@ -449,6 +449,7 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     `- Write test files ONLY to the test directory: ${ctx.testDir}/`,
     '- Do not import from src/, lib/, app/, or any implementation directory.',
     '- Run the test suite after writing tests. Fix failures.',
+    '- The --reporter, --json, and --outputFile flags are controlled by the harness and cannot be overridden — pass only test-selection flags.',
     '- When all tests pass, call end_turn.',
     '- The orchestrator commits your test files after verifying the suite passes.',
     '- You do not git commit.',

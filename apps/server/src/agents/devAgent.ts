@@ -339,6 +339,7 @@ export function buildSystemPrompt(task: DevTask, ctx: DevContext): string {
     '- Run `npx jest` or `npx vitest run` after implementation — not `npm test`.' +
       ' `npm test` is a script alias that returns raw output with no structured pass/fail counts.' +
       ' Fix all failures.',
+    '- The --reporter, --json, and --outputFile flags are controlled by the harness and cannot be overridden — pass only test-selection and coverage flags.',
     '- When tests pass, your work is done — call end_turn. Do not make further changes.',
     '- The orchestrator commits your changes after verifying tests. You do not git commit.',
     '- The container working directory is /workspace — run commands directly. Never prefix with `cd /workspace &&` or any `cd <path> &&`.',

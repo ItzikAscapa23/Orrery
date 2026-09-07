@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 44 — The loop guard counts what it means to count
+- **Current phase:** 45 — Coverage is only claimed where it can be proved
 - **State:** `complete`
 - **Last updated:** 2026-09-07
 
@@ -64,7 +64,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Next phase (45) tasks — none defined in plan.md yet.*
+*Next phase (46) tasks — none defined in plan.md yet.*
 
 ---
 
@@ -72,7 +72,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1253 passed across 92 files**, 2026-09-07 |
+| `npm test` (repo root) | passed — **1259 passed across 92 files**, 2026-09-07 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-07 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-07 |
 
@@ -80,44 +80,48 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **Phase 45: coverage inflation from one unprovable task (`148`)** —
+  World-clock run covered 5 tasks / 244 test-agent events vs take-10's 2 tasks / 70 events.
+  The Vite proxy task was marked covered despite requiring a running dev server and
+  containing three absence proofs. Two new hard-skip rules added to
+  `testPlannerAgent.ts` `buildSystemPrompt()`:
+  (1) build/dev-server/proxy/asset-pipeline config → "Deliverable is configuration —
+  the harness cannot execute a dev server or observe a build.";
+  (2) behaviour stated as the absence of something → "Behaviour is an absence proof —
+  vitest cannot assert what is not there."
+  Both mirror the test-code skip rule structure with verbatim `skipReason` strings.
+
+- **Phase 45: reporter flags stated where agents read them (`149`)** —
+  `toJsonReporterCommand` strips `--reporter`, `--json`, `--outputFile` silently.
+  On the world-clock run the test agent asked for `--reporter=verbose` five times and
+  received the same JSON-derived summary each time. One bullet added to both
+  `devAgent.ts` and `testAgent.ts` `## Rules` blocks naming the three harness-controlled
+  flags.
+
 - **Phase 44: bash-only guard + full-command hash (`142`, `143`)** —
   `checkNonProgress` accepts `toolName` + `fullCommand` as separate params. Only
   `toolName === 'bash'` adds to the ring buffer; reads, listings and writes are
-  transparent. The hash covers `fullCommand` (the full bash input including arguments)
-  so `npx jest --a` and `npx jest --b` are distinct. Callers extract
-  `toolBlock.input.command` for bash invocations. No observed loop would be missed —
-  every take-24/take-25 loop was a bash/jest loop.
+  transparent. The hash covers `fullCommand` so `npx jest --a` and `npx jest --b`
+  are distinct. Every observed loop was a bash/jest loop — no coverage gap.
 
 - **Phase 44: non-progress is not an allowlist violation (`144`)** —
-  `taskTestJob.ts` now has a separate `isNonProgress` branch with
-  `parkReason: 'non_progress'` and message "test agent parked (non-progress:
-  repeated command)". Previously grouped with `isViolation`, which produced
-  "allowlist violation" for an orchestrator-side stop.
+  `taskTestJob.ts` has a separate `isNonProgress` branch with `parkReason: 'non_progress'`
+  and message "test agent parked (non-progress: repeated command)".
 
 - **Phase 43: detector exemptions (`139`)** —
-  `toBeDefined()` is not flagged when the preceding line contains `.find(`/`.get(`/index
-  access — necessary null-check. `toHaveProperty('k')` is not flagged when the next
-  statement asserts on `subject.k` with a value — property check guards the value
-  assertion. Exemptions live on the `VacuousPattern` entries themselves.
+  `toBeDefined()` not flagged when preceding line contains `.find(`/`.get(`/index access.
+  `toHaveProperty('k')` not flagged when next statement asserts on `subject.k` with a value.
 
 - **Phase 43: two high-priority finding categories (`140`)** —
-  `detectSoleAssertionVacuous` (brace-depth walk) emits `section: 'sole-assertion-vacuous'`;
-  `detectUnguardedForEach` (10-line lookback) emits `section: 'unguarded-forEach'`.
-  UI `vacuousCount` and drilldown include all three sections.
-
-- **Phase 43: base-commit test feasibility (`141`)** —
-  Feasible: `git merge-base HEAD <default_branch>` → secondary worktree → copy authored
-  tests → container exec → report `passes_against_base`. Cost ~40s; binds feature
-  worktree's `node_modules` when deps unchanged. Not implemented this phase.
+  `detectSoleAssertionVacuous` emits `section: 'sole-assertion-vacuous'`;
+  `detectUnguardedForEach` emits `section: 'unguarded-forEach'`.
 
 - **Phase 42: brief hashes computed by orchestrator (`136`–`138`)** —
   Agent writes paths-only comment; orchestrator hashes the files and rewrites the header.
   One canonical path (`<worktreeRoot>/__orrery_harness_brief.md`) enforced at both ends.
-  Scratch and brief files unstaged before agent commit.
 
 - **Phase 40: warning findings open `code_review` gate (`133`)** —
-  A warnings-only review opens the `code_review` gate; only a fully clean review
-  passes immediately.
+  A warnings-only review opens the `code_review` gate; only a fully clean review passes immediately.
 
 - **`spec_approval` gate-open (Phase 29)** — 4 open paths: `awsReviewJob.ts` after review,
   `specSubmit.ts` no-charter fast-path, `awsReviewJob.ts` error final-attempt, missing-charter
@@ -195,6 +199,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 42 | The harness brief works at all | `3b50e71` | 2026-09-07 |
 | 43 | The vacuous detector earns its gate | `b9efa8f` | 2026-09-07 |
 | 44 | The loop guard counts what it means to count | `f439b52` | 2026-09-07 |
+| 45 | Coverage is only claimed where it can be proved | pending | 2026-09-07 |
 
 ---
 
@@ -204,4 +209,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `npm run lint` exits 0.
 - No feature mid-run when editing the orchestrator.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
-- A test agent completes its orientation turns without a non-progress stop.
+- A world-clock feature plans two or three covered tasks, not five.

@@ -263,3 +263,48 @@ describe('testPlannerAgent — test-authoring task exclusion', () => {
     expect(prompt).toContain('Add tests for');
   });
 });
+
+describe('testPlannerAgent — configuration task exclusion', () => {
+  it('system prompt instructs to skip build/dev-server configuration tasks', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('dev-server config');
+    expect(prompt).toContain('build tooling');
+    expect(prompt).toContain('Deliverable is configuration');
+  });
+
+  it('system prompt names the fixed skipReason for configuration tasks', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain(
+      'Deliverable is configuration — the harness cannot execute a dev server or observe a build.',
+    );
+  });
+
+  it('system prompt lists proxy config and asset pipeline as configuration examples', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('proxy config');
+    expect(prompt).toContain('asset pipeline');
+  });
+});
+
+describe('testPlannerAgent — absence proof exclusion', () => {
+  it('system prompt instructs to skip tasks whose behaviour is an absence proof', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('absence of something');
+    expect(prompt).toContain('absence proof');
+    expect(prompt).toContain('Behaviour is an absence proof');
+  });
+
+  it('system prompt names the fixed skipReason for absence proofs', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain(
+      'Behaviour is an absence proof — vitest cannot assert what is not there.',
+    );
+  });
+
+  it('system prompt gives concrete examples of absence proof behaviours', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('no absolute URLs appear in client source');
+    expect(prompt).toContain('no CORS configuration exists on the server');
+    expect(prompt).toContain('no network calls at request time');
+  });
+});
