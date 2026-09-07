@@ -164,22 +164,26 @@ export async function featureFindingsRoutes(app: FastifyInstance): Promise<void>
         });
       });
 
-      // Gate auto-resolution: if all blockers for the current cycle are now
+      // Gate auto-resolution: if all relevant findings for the current cycle are
       // resolved, close the gate and advance state.
-      // CODE_REVIEW → REVIEW_PASS → TESTING
-      // TESTING     → TEST_PASS  → DONE
+      // CODE_REVIEW → REVIEW_PASS → TESTING  (checks blockers + warnings)
+      // TESTING     → TEST_PASS  → DONE      (checks blockers only)
       if (feature.status === 'CODE_REVIEW' || feature.status === 'TESTING') {
         const cycleRev = (await gateOpenedCount(feature.id)) - 1;
+        const isCodeReview = feature.status === 'CODE_REVIEW';
+        // CODE_REVIEW gate requires all blockers AND warnings to have a decision.
+        // TESTING gate (test_report) requires only blockers — warnings are a
+        // separate concern handled by phase 43's vacuous-detector changes.
+        const remainingSeverities = isCodeReview ? { in: ['blocker', 'warning'] } : 'blocker';
         const remaining = await getPrisma().finding.count({
           where: {
             featureId: feature.id,
             specRev: cycleRev,
-            severity: 'blocker',
+            severity: remainingSeverities,
             resolution: null,
           },
         });
         if (remaining === 0) {
-          const isCodeReview = feature.status === 'CODE_REVIEW';
           const gate = isCodeReview ? 'code_review' : 'test_report';
           const transition = isCodeReview ? ('REVIEW_PASS' as const) : ('TEST_PASS' as const);
           const nextState = isCodeReview ? ('TESTING' as const) : ('DONE' as const);

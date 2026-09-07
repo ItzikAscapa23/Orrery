@@ -375,6 +375,48 @@ describe('dismiss in CODE_REVIEW state', () => {
   });
 });
 
+// ── CODE_REVIEW dismiss — warnings (phase 40) ────────────────────────────────
+
+describe('dismiss in CODE_REVIEW state — warning routing', () => {
+  beforeEach(async () => {
+    await getPrisma().feature.update({
+      where: { id: featureId },
+      data: { status: 'CODE_REVIEW' },
+    });
+  });
+
+  it('dismiss of last blocker does NOT advance when unresolved warnings remain', async () => {
+    // Blocker + warning: dismissing the blocker must not advance because the
+    // warning still has no recorded decision.
+    const blocker = await createFinding({ severity: 'blocker', specRev: 0 });
+    await createFinding({ severity: 'warning', specRev: 0 });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/features/${featureId}/findings/${blocker.id}/dismiss`,
+      payload: { reason: 'addressed' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const feature = await getPrisma().feature.findUnique({ where: { id: featureId } });
+    expect(feature?.status).toBe('CODE_REVIEW'); // warning still open — must not advance
+  });
+
+  it('dismiss of last warning auto-advances to TESTING when no blockers remain', async () => {
+    const warning = await createFinding({ severity: 'warning', specRev: 0 });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/features/${featureId}/findings/${warning.id}/dismiss`,
+      payload: { reason: 'acceptable' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const feature = await getPrisma().feature.findUnique({ where: { id: featureId } });
+    expect(feature?.status).toBe('TESTING');
+  });
+});
+
 // ── simulator finding id consistency (5b-T8) ──────────────────────────────────
 //
 // runSimulate persists the spec-approval mock finding and emits a review.findings

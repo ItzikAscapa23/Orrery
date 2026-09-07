@@ -118,4 +118,24 @@ describe('persistFindings', () => {
 
     expect(mockAppendEvent).not.toHaveBeenCalled();
   });
+
+  it('fixed resolution — orphaned finding emits finding.resolved(fixed) before deletion', async () => {
+    await seedFinding('f1');
+    await seedFinding('f2'); // will be orphaned
+
+    await persistFindings(FID, SPEC_REV, [f1], 'review');
+
+    // f2 row must be deleted
+    const f2Row = await getPrisma().finding.findUnique({
+      where: { featureId_specRev_id: { featureId: FID, specRev: SPEC_REV, id: 'f2' } },
+    });
+    expect(f2Row).toBeNull();
+
+    // finding.resolved(fixed) event must have been emitted for f2
+    const fixedCall = mockAppendEvent.mock.calls.find(([, , payload]) => {
+      const p = payload as Record<string, unknown>;
+      return p.type === 'finding.resolved' && p.resolution === 'fixed' && p.finding_id === 'f2';
+    });
+    expect(fixedCall).toBeDefined();
+  });
 });

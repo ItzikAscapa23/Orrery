@@ -21,12 +21,17 @@ export async function featureReviewGateRoutes(app: FastifyInstance): Promise<voi
     }
 
     const cycleRev = (await gateOpenedCount(feature.id)) - 1;
-    const unresolvedBlockers = await getPrisma().finding.count({
-      where: { featureId: feature.id, specRev: cycleRev, severity: 'blocker', resolution: null },
+    const unresolvedFindings = await getPrisma().finding.count({
+      where: {
+        featureId: feature.id,
+        specRev: cycleRev,
+        severity: { in: ['blocker', 'warning'] },
+        resolution: null,
+      },
     });
-    if (unresolvedBlockers > 0) {
+    if (unresolvedFindings > 0) {
       return reply.status(409).send({
-        error: `${unresolvedBlockers} blocker finding(s) must be dismissed before approval`,
+        error: `${unresolvedFindings} finding(s) (blockers or warnings) must be dismissed before approval`,
       });
     }
 

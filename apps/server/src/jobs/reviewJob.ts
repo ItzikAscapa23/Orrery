@@ -226,8 +226,8 @@ export async function runReviewJob(featureId: string, jobId?: string): Promise<v
     }
 
     // ── Round/gate logic ────────────────────────────────────────────────────
-    if (blockers === 0) {
-      // No blockers at any round → REVIEW_PASS (or REVIEW_PASS_LIGHT for light features)
+    if (blockers === 0 && warnings === 0) {
+      // Clean review — no findings require a decision → immediate REVIEW_PASS
       const passEvent = isLight ? ('REVIEW_PASS_LIGHT' as const) : ('REVIEW_PASS' as const);
       let nextState: import('@prisma/client').FeatureStatus | null = null;
       await getPrisma().$transaction(async (tx) => {
@@ -251,6 +251,22 @@ export async function runReviewJob(featureId: string, jobId?: string): Promise<v
           simulated_run: simulatedRun,
         });
       }
+    } else if (blockers === 0 && warnings > 0) {
+      // Warnings only — open gate so every warning gets a recorded decision
+      await getPrisma().$transaction((tx) =>
+        appendEvent(tx, featureId, {
+          type: 'gate.opened',
+          gate: 'code_review',
+          summary: `${warnings} warning(s) require a decision before advancing`,
+          revision: specRev,
+          counts: { blockers: 0, warnings, suggestions: 0 },
+        }),
+      );
+      await appendEvent(getPrisma(), featureId, {
+        type: 'agent.status',
+        agent: 'review',
+        status: 'waiting',
+      });
     } else if (priorReviewRounds >= 1) {
       // Round cap: second entry with blockers → open human gate
       await appendEvent(getPrisma(), featureId, {

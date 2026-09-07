@@ -54,15 +54,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 39 — A write does not excuse a loop
+- **Current phase:** 40 — A correct finding has an effect
 - **State:** `complete`
-- **Last updated:** 2026-09-06
+- **Last updated:** 2026-09-07
 
 ---
 
 ## Current phase progress
 
-*Next phase not yet defined in plan.md — no tasks to list.*
+- [x] `133-review-warnings-route` — gate on warnings; findings record dismissed/fixed; routing rule stated once
 
 ---
 
@@ -70,13 +70,26 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1225 passed across 92 files**, 2026-09-06 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-06 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-06 |
+| `npm test` (repo root) | passed — **1230 passed across 92 files**, 2026-09-07 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-07 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-07 |
 
 ---
 
 ## Decisions
+
+- **Phase 40: warning findings open `code_review` gate (`133`)** —
+  `reviewJob.ts` now branches on both `blockers` and `warnings`.
+  A clean review (`blockers === 0 && warnings === 0`) passes immediately.
+  A warnings-only review (`blockers === 0 && warnings > 0`) opens the
+  `code_review` gate so every warning gets a recorded decision before advancing.
+  `featureReviewGate.ts` `POST /approve-review` and `featureFindings.ts`
+  auto-advance now check `severity: { in: ['blocker', 'warning'] }` for
+  CODE_REVIEW; TESTING still checks `severity: 'blocker'` only.
+  `persistFindings.ts` emits `finding.resolved(fixed)` for orphaned findings
+  before deleting them, completing the dismissed/fixed/never-reviewed trail.
+  Routing rule defined once in `reviewJob.ts`; both guard sites cite the same
+  severity set.
 
 - **Phase 39: edit-run loop fix (`130`)** —
   `checkNonProgress` now skips write_file/edit_file turns entirely (no buffer entry,
@@ -178,6 +191,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 37 | Agents keep their flags, and blockers do not vanish quietly | `ccbecaa` | 2026-09-06 |
 | 38 | Orientation stops being the largest cost | `1948302` | 2026-09-06 |
 | 39 | A write does not excuse a loop | `178d109` | 2026-09-06 |
+| 40 | A correct finding has an effect | pending | 2026-09-07 |
 
 ---
 

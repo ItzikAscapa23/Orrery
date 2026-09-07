@@ -192,6 +192,60 @@ describe('runReviewJob — blockers, round 1 (human gate)', () => {
   });
 });
 
+describe('runReviewJob — warnings only (gate.opened, no immediate pass)', () => {
+  it('opens code_review gate when warnings > 0 and blockers === 0', async () => {
+    mockRunReviewAgent.mockResolvedValue({
+      findings: [
+        {
+          id: 'wf1',
+          severity: 'warning',
+          section: 'POST /api',
+          issue: 'Missing JSDoc comment',
+          repo: 'demo-server',
+        },
+      ],
+      priorFindingStatuses: [],
+    });
+
+    await runReviewJob(featureId);
+
+    const events = await getEvents();
+    const types = events.map((e) => e.type);
+
+    expect(types).toContain('gate.opened');
+    const gateEvent = events.find((e) => e.type === 'gate.opened');
+    expect((gateEvent?.payload as { gate: string }).gate).toBe('code_review');
+    expect((gateEvent?.payload as { counts: { warnings: number } }).counts.warnings).toBe(1);
+    expect((gateEvent?.payload as { counts: { blockers: number } }).counts.blockers).toBe(0);
+
+    // Machine must NOT have advanced — warning requires a decision
+    const feature = await getPrisma().feature.findUnique({ where: { id: featureId } });
+    expect(feature?.status).toBe('CODE_REVIEW');
+
+    // Agent must be waiting, not done
+    const statusEvents = events
+      .filter(
+        (e) => e.type === 'agent.status' && (e.payload as { agent: string }).agent === 'review',
+      )
+      .map((e) => (e.payload as { status: string }).status);
+    expect(statusEvents).toContain('waiting');
+    expect(statusEvents).not.toContain('done');
+  });
+
+  it('passes immediately with no findings at all (clean review)', async () => {
+    mockRunReviewAgent.mockResolvedValue({ findings: [], priorFindingStatuses: [] });
+
+    await runReviewJob(featureId);
+
+    const feature = await getPrisma().feature.findUnique({ where: { id: featureId } });
+    expect(feature?.status).toBe('TESTING');
+
+    const events = await getEvents();
+    const types = events.map((e) => e.type);
+    expect(types).not.toContain('gate.opened');
+  });
+});
+
 describe('runReviewJob — fail-open (review.skipped scar)', () => {
   it('emits review.skipped and REVIEW_PASS when agent throws', async () => {
     mockRunReviewAgent.mockRejectedValue(new Error('Review agent parse failure after retry.'));

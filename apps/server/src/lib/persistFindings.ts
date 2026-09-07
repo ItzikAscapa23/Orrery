@@ -48,6 +48,22 @@ export async function persistFindings(
     }
   }
 
+  // Pre-flight: emit finding.resolved(fixed) for findings the re-review no longer raises.
+  // These are deleted below; the event preserves the resolution trail.
+  const newIds = findings.map((f) => f.id);
+  const orphaned = await getPrisma().finding.findMany({
+    where: { featureId, specRev, id: { notIn: newIds } },
+    select: { id: true },
+  });
+  for (const row of orphaned) {
+    await appendEvent(getPrisma(), featureId, {
+      type: 'finding.resolved',
+      finding_id: row.id,
+      resolution: 'fixed',
+      by: agent,
+    });
+  }
+
   // Atomic: delete orphans then upsert current findings
   await getPrisma().$transaction([
     getPrisma().finding.deleteMany({
