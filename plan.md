@@ -1569,3 +1569,48 @@ npm test
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 44 — The loop guard counts what it means to count
+**Goal:** Orientation is not mistaken for a loop.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] `142-count-the-full-command` — R-56. Phase 41 changed the guard to count
+      command repetition rather than result identity. It counts the tool name
+      without arguments, so on take-26 the test agent died at **turn 3**:
+```
+      turn 1 · list_files (43 chars)
+      turn 2 · list_files (951 chars)
+      turn 2 · list_files (163 chars)
+      turn 3 · list_files (214 chars)
+      · Non-progress stop: 'list_files' was issued 3 times in a row.
+```
+      Four different directories, four different results, correct orientation
+      behaviour. The comparison must be the full command including its arguments
+- [ ] `143-count-only-bash` — every loop the guard exists for has been a
+      bash/test-run loop: take-24 turns 40–77 (17 runs of one jest command),
+      take-25 turns 21–66 (20+ runs of one jest command, $1.506). A repeated
+      `read_file` or `list_files` is orientation, not churn, and the orientation
+      problem is Phase 38's to solve, not this guard's. Restrict the counter to
+      `bash`. State whether any observed loop would be missed by that restriction
+- [ ] `144-non-progress-is-not-a-violation` — the park message read
+      `test agent parked (allowlist violation)` for a `NonProgressError`. This is
+      the same misclassification Phase 35 fixed for `TestAllowlistViolationError`:
+      an orchestrator-side stop reported as agent misconduct. `NonProgressError`
+      needs its own branch and its own message
+- [ ] Tests, fail-first: three `list_files` on different paths do not stop; three
+      identical `list_files` on the same path do not stop under the bash-only
+      rule; twenty runs of one bash command with varying output do stop; three
+      distinct bash commands with identical output do not
+**Definition of Done:**
+- An agent listing three directories in sequence is not stopped
+- The take-25 loop shape still stops
+- A non-progress stop is not reported as an allowlist violation
+- Fail-first output shown per case
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1249 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A test agent completes its orientation turns without a non-progress stop
