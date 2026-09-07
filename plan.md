@@ -1658,3 +1658,51 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A world-clock feature plans two or three covered tasks, not five
+---
+## Phase 46 — An agent can see why nothing ran
+**Goal:** A degenerate test result carries the reason, not just the verdict.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `150-degenerate-results-carry-stdout` — `summarizeBashTestRun` returns
+      `[raw output — zero tests reported]` when the parse yields zero total tests.
+      The message names the case and carries none of the evidence. On take-12 the
+      test agent received exactly that string eleven times across turns 19–39,
+      rewriting `_probe.test.ts` between each (439 → 1981 → 2139 → 1583 → 521 →
+      392 → 1222 → 1300 → 474 → 736 → 1235 chars) and never learning why the file
+      produced no tests. When total is zero, return the command's actual stdout
+      and stderr, truncated, in place of the summary. This is the one case where
+      counts are useless and the runner's own error is the whole answer
+- [ ] State the truncation limit and why. Full jest output on the bff repo runs
+      to thousands of lines; the existing `truncateOutput` path already handles
+      the non-test case and should be reused
+- [ ] Report: seven consecutive features have produced a probe file —
+      `orderCardClubsListUrlDiscover`, `orderCardClubsListDebug`,
+      `orderCardClubsListFanOut` debug cycle, `orderCardClubsListUrlDiscovery`,
+      `vite-proxy-debug-scratch`, `country-selector-diag`, `_probe`. Every one
+      was the agent building an oracle because the harness gives it a verdict and
+      no reasoning. State whether this change is expected to end that pattern, and
+      what would show it had not
+- [ ] `151-scratch-pattern-misses-probe` — `SCRATCH_FILE_RE` is
+      `/(?:debug|scratch)(?![a-zA-Z0-9])/i`. `_probe.test.ts` matches neither, so
+      an eleven-turn thrash file would have counted as an authored acceptance
+      test. Add `probe`, and check the seven filenames above against the pattern
+- [ ] `152-reporter-guidance-did-not-hold` — Phase 45 added prompt text naming
+      `--reporter`, `--json` and `--outputFile` as harness-controlled. On the very
+      next run the agent supplied `--reporter=verbose` on turns 3, 4, 9, 17, 19,
+      21, 25, 27, 29, 31, 33, 35, 37 and 39 — every one stripped, as the resolved
+      line shows. Report whether the guidance is reaching the prompt at all, and
+      if it is, record that the instruction failed so the next attempt is a
+      mechanism rather than more text
+**Definition of Done:**
+- A test command producing zero tests returns the runner's own output
+- `_probe.test.ts` is excluded from the authored set
+- The reporter-guidance outcome is recorded in HANDOVER.md either way
+- Truncation limit stated with its reasoning
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1259 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A test agent that hits a zero-test result resolves it without writing a probe file
