@@ -199,7 +199,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 42 | The harness brief works at all | `3b50e71` | 2026-09-07 |
 | 43 | The vacuous detector earns its gate | `b9efa8f` | 2026-09-07 |
 | 44 | The loop guard counts what it means to count | `f439b52` | 2026-09-07 |
-| 45 | Coverage is only claimed where it can be proved | pending | 2026-09-07 |
+| 45 | Coverage is only claimed where it can be proved | `7f2c688` | 2026-09-07 |
 
 ---
 
