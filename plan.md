@@ -1614,3 +1614,47 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A test agent completes its orientation turns without a non-progress stop
+---
+## Phase 45 — Coverage is only claimed where it can be proved
+**Goal:** The test planner skips what the harness cannot express.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] `148-planner-skips-the-unprovable` — the test planner marked the Vite proxy
+      task covered, with this behaviour statement:
+      *"In the Vite dev server, a request to any /api/* path is proxied to
+      http://localhost:3000 and returns the correct API response; no absolute URLs
+      appear in client source; no CORS configuration exists on the server."*
+      That needs a running dev server and a running API to observe, and two of its
+      three clauses are absence proofs, which are not behaviours. Task
+      `2d185add` took two test-agent attempts; the parked run spent turns 13–31
+      fighting vitest configuration. The planner already skips correctly when the
+      deliverable is test code (*"not subject to acceptance testing"*) — extend
+      the same judgement to build and dev-server configuration, and to any
+      behaviour stated as the absence of something
+- [ ] Report the coverage counts. This plan covered five tasks; take-10 on the
+      same repo covered two and finished with 70 test-agent events against this
+      run's 244. State what the five covered tasks cost and what each proved
+- [ ] `149-reporter-flags-are-harness-controlled` — R-57. `toJsonReporterCommand`
+      strips `--json`, `--outputFile` and `--reporter` by design, since the
+      harness supplies its own. Nothing tells the agent this. On the world-clock
+      run it asked for `--reporter=verbose` (turn 13), `--reporter=dot` (14),
+      `--reporter=verbose` again (20, 27, 31) and received the same
+      JSON-derived summary every time, unable to see why its tests were not
+      running. State in the dev and test agent prompts that reporter and output
+      flags are controlled by the harness and cannot be overridden
+- [ ] Do not change the non-progress guard in this phase. It has been modified in
+      four of the last six phases, each fix creating the next failure, and it is
+      currently behaving correctly — it stopped a genuine dead end at turn 51
+**Definition of Done:**
+- A task whose behaviour is configuration or an absence proof is skipped, with
+  the reason recorded in the test plan
+- An agent supplying `--reporter` is told the flag is harness-controlled
+- Coverage counts for this run recorded in HANDOVER.md against take-10's
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1253 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A world-clock feature plans two or three covered tasks, not five
