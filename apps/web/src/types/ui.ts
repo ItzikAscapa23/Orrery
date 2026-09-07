@@ -106,7 +106,7 @@ export interface PrLink {
 /** A finding with its current resolution state. Optional test-agent fields
  *  are present when the finding originates from a test.report event. */
 export interface FindingEntry extends Finding {
-  resolution: 'accepted' | 'dismissed' | null;
+  resolution: 'accepted' | 'dismissed' | 'fixed' | null;
   test_name?: string | undefined;
   duration_ms?: number | undefined;
 }

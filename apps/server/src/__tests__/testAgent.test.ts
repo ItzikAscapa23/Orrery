@@ -169,6 +169,12 @@ describe('checkWriteAllowed — test directory jail', () => {
     const result = checkWriteAllowed(ROOT, '__orrery_harness_brief.md', TEST_DIR);
     expect(result).toBe(`${ROOT}/__orrery_harness_brief.md`);
   });
+
+  it('rejects __orrery_harness_brief.md written inside the test directory', () => {
+    expect(() =>
+      checkWriteAllowed(ROOT, `${TEST_DIR}/__orrery_harness_brief.md`, TEST_DIR),
+    ).toThrow(/must be written at the repository root/);
+  });
 });
 
 describe('checkTestBashAllowed — test-agent bash enforcement', () => {

@@ -69,7 +69,7 @@ const TEST_FILE_RE = /\.(test|spec)\./;
 // Checked against the basename only to avoid false-positives from directory names.
 // Negative lookahead ensures "debug" or "scratch" is a standalone word or terminal camelCase
 // segment, not a prefix in a compound name (e.g. debugPanel or scratchpadReducer are real files).
-const SCRATCH_FILE_RE = /(?:debug|scratch)(?![a-zA-Z0-9])/i;
+export const SCRATCH_FILE_RE = /(?:debug|scratch)(?![a-zA-Z0-9])/i;
 
 export function isSharedInfraPath(p: string): boolean {
   return p.split('/').includes('__mocks__');

@@ -131,7 +131,7 @@ export const ReviewFindingsPayloadSchema = z.object({
 export const FindingResolvedPayloadSchema = z.object({
   type: z.literal('finding.resolved'),
   finding_id: z.string(),
-  resolution: z.enum(['accepted', 'dismissed']),
+  resolution: z.enum(['accepted', 'dismissed', 'fixed']),
   reason: z.string().optional(),
 });
 

@@ -28,6 +28,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 **Key directories:**
 - `apps/server/src/lib/` — orchestrator, events, container, anthropic, spendGuard
+  - `harnessbrief.ts` — `loadHarnessBrief`, `injectHarnessBriefHashes`, `checkHarnessBriefFreshness`
   - `repoOrientation.ts` — `generateRepoOrientation()`, includes vendored-package + API-spec sections
   - `nonProgressError.ts` — `NonProgressError` class + `checkNonProgress()` helper
   - `bedrockPark.ts` — `parkTaskOnBedrockFailure`, `isEnvironmentalBedrockError`
@@ -54,7 +55,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 41 — The loop guard counts commands
+- **Current phase:** 42 — The harness brief works at all
 - **State:** `complete`
 - **Last updated:** 2026-09-07
 
@@ -62,9 +63,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [x] `134-count-commands-not-results` — `checkNonProgress` hashes only the command string; repeated invocations with varying output now accumulate
-- [x] `135-green-does-not-disarm` — unconditional buffer-clear on passing results removed; green results no longer disarm the guard
-- [x] Tests updated: new cases for varying-output fire and green-no-longer-clears; Phase 37 invariant retained
+*Next phase (43) tasks — all unticked.*
+
+- [ ] `139-detector-precision` — exempt `toBeDefined()` after `.find()`/`.get()`/index access; exempt `toHaveProperty(k)` when next statement asserts on `subject[k]`
+- [ ] `140-flag-the-two-that-matter` — sole-assertion-vacuous test and unguarded `forEach` reported distinctly
+- [ ] `141-tests-that-pass-against-base` — feasibility report on running authored tests against base commit
 
 ---
 
@@ -72,7 +75,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1231 passed across 92 files**, 2026-09-07 |
+| `npm test` (repo root) | passed — **1236 passed across 92 files**, 2026-09-07 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-07 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-07 |
 
@@ -80,46 +83,43 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **Phase 42: orchestrator computes brief hashes (`136`)** —
+  `HARNESS_BRIEF_WRITE_INSTRUCTION` now asks the agent to write a paths-only comment
+  `<!-- orrery-sources-paths: [...] -->` instead of asking it to supply SHA-256 hashes.
+  After the agent writes the brief, `injectHarnessBriefHashes` reads each path from disk
+  and rewrites the header to the `<!-- orrery-sources: {...} -->` format that
+  `checkHarnessBriefFreshness` verifies. The LLM can list paths correctly; it cannot
+  compute SHA-256. The freshness check is unchanged — it still validates hashes on load.
+  With real hashes in place, the brief is now reused across test tasks on unchanged repos.
+
+- **Phase 42: one canonical brief path (`137`)** —
+  `testAgent.ts:checkWriteAllowed` now rejects any write to a file named
+  `__orrery_harness_brief.md` that is not at the exact repo root. Previously, writing
+  `test/__orrery_harness_brief.md` passed the test-dir check and was silently lost
+  because `taskTestJob.ts` looked only at the root path.
+
+- **Phase 42: scratch + brief excluded from agent commit (`138`)** —
+  After `git add -A`, `taskTestJob.ts` now unstages files whose basename matches
+  `SCRATCH_FILE_RE` (`debug|scratch` word boundary) or equals `__orrery_harness_brief.md`.
+  This mirrors the existing lockfile exclusion pattern. Scratch test files were already
+  excluded from `getAuthoredTestFilesForTask` counts but were still being committed and
+  reaching PRs. Brief files written to the wrong path (pre-137 agents) are also excluded.
+
+- **Phase 42: `finding.resolved` schema extended to include `'fixed'` resolution** —
+  Phase 40 added `resolution: 'fixed'` to `persistFindings.ts` without updating the
+  shared Zod schema or `FindingEntry` UI type. Both now include `'fixed'`. The `by`
+  field (not in schema) was replaced with `reason: "auto-fixed by <agent>"`.
+
 - **Phase 41: command-only hashing (`134`, `135`)** —
-  `checkNonProgress` now hashes only `command`, not `{command, results}`.
-  A repeated command accumulates in the ring buffer regardless of output variation;
-  20 identical command invocations fire the guard even if every result is different.
-  The Phase 37 invariant (three distinct commands with identical output do not fire)
-  is preserved because distinct command strings still produce distinct hashes.
-  The Phase 34 green-clears rule is removed: it was added to prevent false positives
-  from distinct commands with identical output — command-only hashing already prevents
-  that, so the rule was both redundant and harmful (it permanently disarmed the guard
-  against passing scratch-file loops).
+  `checkNonProgress` now hashes only `command`, not `{command, results}`. A repeated
+  command accumulates in the ring buffer regardless of output variation. The Phase 37
+  invariant (three distinct commands with identical output do not fire) is preserved.
+  The Phase 34 green-clears rule is removed — it was redundant and harmful.
 
 - **Phase 40: warning findings open `code_review` gate (`133`)** —
-  `reviewJob.ts` now branches on both `blockers` and `warnings`.
-  A clean review (`blockers === 0 && warnings === 0`) passes immediately.
-  A warnings-only review (`blockers === 0 && warnings > 0`) opens the
-  `code_review` gate so every warning gets a recorded decision before advancing.
-  `featureReviewGate.ts` `POST /approve-review` and `featureFindings.ts`
-  auto-advance now check `severity: { in: ['blocker', 'warning'] }` for
-  CODE_REVIEW; TESTING still checks `severity: 'blocker'` only.
-  `persistFindings.ts` emits `finding.resolved(fixed)` for orphaned findings
-  before deleting them, completing the dismissed/fixed/never-reviewed trail.
-  Routing rule defined once in `reviewJob.ts`; both guard sites cite the same
-  severity set.
-
-- **Phase 39: edit-run loop fix (`130`)** —
-  `checkNonProgress` skips write_file/edit_file turns entirely (no buffer entry,
-  no clear). Only bash/read results are tracked. Write→bash→write→bash loops with
-  an identical bash result fire after N bash hashes accumulate. The old
-  `hadWriteOrEdit` reset was redundant: Phase 37's command-hash already prevented
-  false positives from different commands returning identical summaries.
-
-- **Phase 39: shared mock edits surfaced (`131`)** —
-  New `test.shared_infra_changed` event (path, tool, repo?) emitted whenever the
-  test agent writes/edits a file whose path contains `__mocks__` as a segment.
-
-- **Phase 39: URL-map feasibility (`132`)** —
-  Deferred; requires a real bff run to confirm the model uses the section.
-
-- **Phase 38: `generateRepoOrientation` adds vendored-package and API-spec sections (`127`)** —
-  Two new optional sections after tsconfig; zero cost on non-bff repos.
+  A warnings-only review opens the `code_review` gate; only a fully clean review
+  passes immediately. `persistFindings.ts` emits `finding.resolved(fixed)` for
+  orphaned findings before deleting them.
 
 - **`spec_approval` gate-open (Phase 29)** — 4 open paths: `awsReviewJob.ts` after review,
   `specSubmit.ts` no-charter fast-path, `awsReviewJob.ts` error final-attempt, missing-charter
@@ -194,6 +194,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 39 | A write does not excuse a loop | `178d109` | 2026-09-06 |
 | 40 | A correct finding has an effect | `937dba6` | 2026-09-07 |
 | 41 | The loop guard counts commands | `7b8baa5` | 2026-09-07 |
+| 42 | The harness brief works at all | pending | 2026-09-07 |
 
 ---
 

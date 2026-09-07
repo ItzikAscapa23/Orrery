@@ -17,6 +17,7 @@ import {
   getAuthoredTestFilesForTask,
   getExistingTestFilesWithDescribes,
   isSharedInfraPath,
+  SCRATCH_FILE_RE,
 } from './testJob.js';
 import {
   runTestAgent,
@@ -27,7 +28,11 @@ import {
 import type { ToolCallInfo } from '../agents/devAgent.js';
 import { usageEventPayload } from '../lib/usageEvent.js';
 import { scopeSpecByRefs, scopeContract } from '../lib/promptScope.js';
-import { loadHarnessBrief, HARNESS_BRIEF_WRITE_INSTRUCTION } from '../lib/harnessbrief.js';
+import {
+  loadHarnessBrief,
+  HARNESS_BRIEF_WRITE_INSTRUCTION,
+  injectHarnessBriefHashes,
+} from '../lib/harnessbrief.js';
 
 const GIT_AUTHOR_NAME = process.env['BOT_GIT_NAME'] ?? 'Orrery';
 const GIT_AUTHOR_EMAIL = process.env['BOT_GIT_EMAIL'] ?? 'orrery-bot@example.com';
@@ -368,7 +373,8 @@ export async function runTaskTestJob(
     // stays out of the feature branch and is stored only in the artifacts repo.
     const briefFilePath = path.join(worktreePath, '__orrery_harness_brief.md');
     if (fs.existsSync(briefFilePath)) {
-      const briefContent = fs.readFileSync(briefFilePath, 'utf-8');
+      const rawBrief = fs.readFileSync(briefFilePath, 'utf-8');
+      const briefContent = injectHarnessBriefHashes(worktreePath, rawBrief);
       commitArtifact(feature.slug, 'test-harness-brief.md', briefContent, 'test-harness-brief');
       fs.unlinkSync(briefFilePath);
       void appendEvent(getPrisma(), featureId, {
@@ -407,6 +413,20 @@ export async function runTaskTestJob(
           agent: 'orchestrator',
           severity: 'muted',
           text: `◦ unstaged ${lockfilesStaged.length} lockfile(s) from agent commit: ${lockfilesStaged.join(', ')}`,
+        });
+      }
+
+      const BRIEF_NAME = '__orrery_harness_brief.md';
+      const scratchOrBriefStaged = rawStaged.filter(
+        (f) => path.basename(f) === BRIEF_NAME || SCRATCH_FILE_RE.test(path.basename(f)),
+      );
+      if (scratchOrBriefStaged.length > 0) {
+        git(worktreePath, 'reset', 'HEAD', '--', ...scratchOrBriefStaged);
+        void appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'orchestrator',
+          severity: 'muted',
+          text: `◦ unstaged ${scratchOrBriefStaged.length} scratch/brief file(s) from agent commit: ${scratchOrBriefStaged.join(', ')}`,
         });
       }
 

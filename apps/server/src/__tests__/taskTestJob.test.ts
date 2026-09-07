@@ -92,6 +92,7 @@ const {
   mockGitCommit,
   mockGitStatus,
   mockGitAdd,
+  mockGitDiff,
   mockGitCheckout,
   mockGitClean,
   mockGetAuthoredTestFilesForTask,
@@ -99,6 +100,7 @@ const {
   mockGitCommit: vi.fn(),
   mockGitStatus: vi.fn().mockReturnValue('A src/__tests__/items.test.ts'),
   mockGitAdd: vi.fn(),
+  mockGitDiff: vi.fn().mockReturnValue(''),
   mockGitCheckout: vi.fn(),
   mockGitClean: vi.fn(),
   mockGetAuthoredTestFilesForTask: vi.fn().mockReturnValue(['src/__tests__/items.test.ts']),
@@ -112,6 +114,7 @@ vi.mock('../jobs/testJob.js', () => ({
   findingsFromTests: vi.fn().mockReturnValue([]),
   getAuthoredTestFiles: vi.fn().mockReturnValue([]),
   getExistingTestFilesWithDescribes: vi.fn().mockReturnValue([]),
+  SCRATCH_FILE_RE: /(?:debug|scratch)(?![a-zA-Z0-9])/i,
 }));
 
 const { mockReadClaudeMd } = vi.hoisted(() => ({
@@ -145,6 +148,7 @@ vi.mock('node:child_process', async (importActual) => {
     execFileSync: vi.fn().mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('status')) return mockGitStatus();
       if (args.includes('add')) return mockGitAdd();
+      if (args.includes('diff')) return mockGitDiff();
       if (args.includes('checkout')) return mockGitCheckout();
       if (args.includes('clean')) return mockGitClean();
       if (args.includes('commit')) {
@@ -194,6 +198,7 @@ beforeEach(async () => {
   await getPrisma().$executeRaw`TRUNCATE features CASCADE`;
   mockRunTestAgent.mockClear();
   mockGitCommit.mockClear();
+  mockGitDiff.mockReturnValue('');
   mockGitCheckout.mockClear();
   mockGitClean.mockClear();
   mockCreateWorktree.mockClear();
@@ -215,6 +220,7 @@ beforeEach(async () => {
     const a = (args ?? []) as ReadonlyArray<string>;
     if (a.includes('status')) return mockGitStatus();
     if (a.includes('add')) return mockGitAdd();
+    if (a.includes('diff')) return mockGitDiff();
     if (a.includes('checkout')) return mockGitCheckout();
     if (a.includes('clean')) return mockGitClean();
     if (a.includes('commit')) {
@@ -680,6 +686,73 @@ describe('runTaskTestJob — harness brief', () => {
         (e.payload as { text?: string }).text?.includes('did not write harness brief'),
     );
     expect(noBriefLog).toBeDefined();
+  });
+
+  it('136: brief-writing instruction uses paths-only format (no hashes)', async () => {
+    await runTaskTestJob(featureId, taskId, 'job-1', 'server');
+    const specArg = mockRunTestAgent.mock.calls[0]?.[1]?.specMarkdown as string;
+    expect(specArg).toContain('orrery-sources-paths');
+    expect(specArg).not.toContain('sha256');
+  });
+
+  it('136: agent writes paths-only brief; committed artifact has orchestrator-computed hashes', async () => {
+    const MOCK_CONTENT = 'mock source content for setup';
+    const expectedHash = createHash('sha256').update(MOCK_CONTENT).digest('hex');
+    const BRIEF_WITH_PATHS =
+      '<!-- orrery-sources-paths: ["__tests__/setup.ts"] -->\n' +
+      '# Test Harness Brief\n\n## Mocks\nsetup: stubs DB\n';
+    mockFsExistsSync.mockImplementation(
+      (p: unknown) =>
+        String(p).endsWith('__orrery_harness_brief.md') || String(p).endsWith('setup.ts'),
+    );
+    mockFsReadFileSync.mockImplementation((p: unknown) => {
+      if (String(p).endsWith('__orrery_harness_brief.md')) return BRIEF_WITH_PATHS;
+      if (String(p).endsWith('setup.ts')) return MOCK_CONTENT;
+      return '';
+    });
+
+    await runTaskTestJob(featureId, taskId, 'job-1', 'server');
+
+    expect(mockCommitArtifact).toHaveBeenCalledWith(
+      expect.any(String),
+      'test-harness-brief.md',
+      expect.stringContaining(`"__tests__/setup.ts":"${expectedHash}"`),
+      'test-harness-brief',
+    );
+  });
+});
+
+// ── 138: Scratch and brief files are excluded from the agent commit ─────────────
+
+describe('taskTestJob — scratch and brief file exclusion from commit (138)', () => {
+  it('scratch file in staged output is unstaged and not included in commit', async () => {
+    mockGitDiff.mockReturnValue('src/__tests__/itemsDebug.test.ts\nsrc/__tests__/items.test.ts');
+
+    await runTaskTestJob(featureId, taskId, 'job-138-scratch', 'server');
+
+    // git reset HEAD called for the scratch file
+    const { execFileSync } = await import('node:child_process');
+    const resetCalls = vi.mocked(execFileSync).mock.calls.filter((c) => {
+      const a = c[1] as string[];
+      return a.includes('reset') && a.some((x) => x.includes('Debug'));
+    });
+    expect(resetCalls.length).toBeGreaterThan(0);
+    // Commit still made
+    expect(mockGitCommit).toHaveBeenCalled();
+  });
+
+  it('harness brief appearing in staged output is excluded from commit', async () => {
+    mockGitDiff.mockReturnValue('src/__tests__/items.test.ts\n__orrery_harness_brief.md');
+
+    await runTaskTestJob(featureId, taskId, 'job-138-brief', 'server');
+
+    const { execFileSync } = await import('node:child_process');
+    const resetCalls = vi.mocked(execFileSync).mock.calls.filter((c) => {
+      const a = c[1] as string[];
+      return a.includes('reset') && a.some((x) => x.includes('__orrery_harness_brief'));
+    });
+    expect(resetCalls.length).toBeGreaterThan(0);
+    expect(mockGitCommit).toHaveBeenCalled();
   });
 });
 

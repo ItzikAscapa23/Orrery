@@ -300,8 +300,13 @@ export function checkWriteAllowed(
   }
 
   const abs = resolveReal(realRoot, requestedPath);
-  // Allow the harness brief at the repo root (written on first test-task only).
-  if (path.relative(realRoot, abs) === '__orrery_harness_brief.md') {
+  // Allow the harness brief only at the repo root; reject if written inside the test dir.
+  if (path.basename(abs) === '__orrery_harness_brief.md') {
+    if (path.relative(realRoot, abs) !== '__orrery_harness_brief.md') {
+      throw new Error(
+        `'__orrery_harness_brief.md' must be written at the repository root, not inside '${testDir}/'.`,
+      );
+    }
     return abs;
   }
   let absTestDir = path.resolve(realRoot, testDir);

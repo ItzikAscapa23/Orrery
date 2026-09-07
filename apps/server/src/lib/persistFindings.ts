@@ -60,7 +60,7 @@ export async function persistFindings(
       type: 'finding.resolved',
       finding_id: row.id,
       resolution: 'fixed',
-      by: agent,
+      reason: `auto-fixed by ${agent}`,
     });
   }
 
