@@ -98,4 +98,28 @@ describe('getAuthoredTestFiles — scratch-file filter', () => {
 
     expect(result).toContain(realFile);
   });
+
+  it('excludes _probe.test.ts — "probe" is a standalone terminal segment', async () => {
+    const probeFile = 'src/__tests__/_probe.test.ts';
+    const realFile = 'src/__tests__/orderCardClubsListStrongId.test.ts';
+
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValue(`\n${probeFile}\n${realFile}\n`);
+
+    const result = getAuthoredTestFiles('/fake/worktree', 'src/__tests__');
+
+    expect(result).toContain(realFile);
+    expect(result).not.toContain(probeFile);
+  });
+
+  it('retains probeService.test.ts — "probe" is a camelCase prefix, not a standalone scratch label', async () => {
+    const realFile = 'src/__tests__/probeService.test.ts';
+
+    const { execFileSync } = await import('node:child_process');
+    vi.mocked(execFileSync).mockReturnValue(`\n${realFile}\n`);
+
+    const result = getAuthoredTestFiles('/fake/worktree', 'src/__tests__');
+
+    expect(result).toContain(realFile);
+  });
 });

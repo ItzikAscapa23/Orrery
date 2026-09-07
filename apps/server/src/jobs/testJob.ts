@@ -65,11 +65,12 @@ function pushBranch(worktreePath: string, branch: string): void {
 }
 
 const TEST_FILE_RE = /\.(test|spec)\./;
-// Excludes debug/scratch files created by agents as temporary investigation aids.
+// Excludes debug/scratch/probe files created by agents as temporary investigation aids.
 // Checked against the basename only to avoid false-positives from directory names.
-// Negative lookahead ensures "debug" or "scratch" is a standalone word or terminal camelCase
-// segment, not a prefix in a compound name (e.g. debugPanel or scratchpadReducer are real files).
-export const SCRATCH_FILE_RE = /(?:debug|scratch)(?![a-zA-Z0-9])/i;
+// Negative lookahead ensures "debug", "scratch", or "probe" is a standalone word or terminal
+// camelCase segment, not a prefix in a compound name (e.g. debugPanel, scratchpadReducer,
+// probeService are real files).
+export const SCRATCH_FILE_RE = /(?:debug|scratch|probe)(?![a-zA-Z0-9])/i;
 
 export function isSharedInfraPath(p: string): boolean {
   return p.split('/').includes('__mocks__');

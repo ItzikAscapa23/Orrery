@@ -394,7 +394,7 @@ describe('summarizeBashTestRun', () => {
     expect(execCmds[0]).toContain('--json');
   });
 
-  it("returns raw output labeled 'zero tests reported' when JSON reports zero total", async () => {
+  it('returns raw runner output directly when JSON reports zero total', async () => {
     const reportJson = makePassingJson(0);
     const container = makeContainer((cmd) => {
       if (cmd.startsWith('npx vitest run --reporter=json'))
@@ -404,8 +404,7 @@ describe('summarizeBashTestRun', () => {
     });
     const result = await summarizeBashTestRun('npm test', container);
     expect(result).not.toBeNull();
-    expect(result?.summary).toContain('[raw output — zero tests reported]');
-    expect(result?.summary).toContain('some runner output');
+    expect(result?.summary).toBe('some runner output');
     expect(result?.summary).not.toContain('TESTS:');
   });
 

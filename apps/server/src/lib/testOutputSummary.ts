@@ -136,8 +136,11 @@ export async function summarizeBashTestRun(
 
   if ((parsed.passed ?? 0) + (parsed.failed ?? 0) === 0) {
     const raw = rawCombined || '(no output)';
+    // Truncate to 8192 chars — same limit as the parse-error fallback above — so the
+    // agent receives the runner's combined stdout+stderr directly, without a label prefix
+    // that names the case but hides the actual diagnostic evidence.
     return {
-      summary: `[raw output — zero tests reported]\n${raw.slice(-8192)}`,
+      summary: raw.slice(-8192),
       resolvedCommand: jsonCmd,
       reportPath: invocationPath,
     };

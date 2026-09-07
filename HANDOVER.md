@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 45 — Coverage is only claimed where it can be proved
+- **Current phase:** 46 — An agent can see why nothing ran
 - **State:** `complete`
 - **Last updated:** 2026-09-07
 
@@ -64,7 +64,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Next phase (46) tasks — none defined in plan.md yet.*
+- [x] `150` — Removed `[raw output — zero tests reported]` label prefix from `testOutputSummary.ts`; raw output returned directly
+- [x] `151` — Added `probe` to `SCRATCH_FILE_RE`; deletion instruction in `testAgent.ts` updated; 2 new tests in `getAuthoredTestFiles.test.ts`
+- [x] `152` — Documented: reporter guidance was present at `testAgent.ts:452` and model ignored it 14 times; mechanical fix required
 
 ---
 
@@ -72,13 +74,55 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1259 passed across 92 files**, 2026-09-07 |
+| `npm test` (repo root) | passed — **1261 passed across 92 files**, 2026-09-07 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-07 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-07 |
 
 ---
 
 ## Decisions
+
+- **Phase 46: zero-test summary delivers raw output directly (`150`)** —
+  `summarizeBashTestRun` in `apps/server/src/lib/testOutputSummary.ts` (lines 137–144)
+  previously returned `[raw output — zero tests reported]\n${raw.slice(-8192)}` — the
+  label named the case but added no diagnostic value, and agents received a verdict
+  without any evidence. The prefix was removed; the summary is now `raw.slice(-8192)`
+  with a comment citing the 8192-char limit and its alignment with the parse-error
+  fallback above it. This change is expected to reduce the seven-consecutive-probe-file
+  pattern (episodes: `orderCardClubsListUrlDiscover`, `orderCardClubsListDebug`,
+  `orderCardClubsListDebug-fanout`, `orderCardClubsListUrlDiscovery`,
+  `vite-proxy-debug-scratch`, `country-selector-diag`, `_probe`) because the agent now
+  receives the runner's own stdout/stderr rather than a classification label. Evidence
+  that it has NOT worked: subsequent runs still show agents creating probe/debug files
+  after a zero-test result where the raw output itself is non-diagnostic (empty, or "no
+  test files found" with no path context — not a runner configuration error).
+
+- **Phase 46: `SCRATCH_FILE_RE` extended to match `probe` (`151`)** —
+  `SCRATCH_FILE_RE` in `apps/server/src/jobs/testJob.ts` (line 72) widened from
+  `/(?:debug|scratch)(?![a-zA-Z0-9])/i` to `/(?:debug|scratch|probe)(?![a-zA-Z0-9])/i`.
+  Seven episode filenames checked against the new pattern:
+  `orderCardClubsListUrlDiscover` — no match (legitimate);
+  `orderCardClubsListDebug` — matched by `debug`, excluded;
+  `orderCardClubsListDebug-fanout` — matched by `debug`, excluded;
+  `orderCardClubsListUrlDiscovery` — no match (legitimate);
+  `vite-proxy-debug-scratch` — matched by `debug` + `scratch`, excluded;
+  `country-selector-diag` — no match (legitimate);
+  `_probe` — `probe` followed by `.` (not alphanumeric), matched, excluded.
+  `_probe` was the only filename the previous regex missed. The deletion instruction in
+  `testAgent.ts buildSystemPrompt()` (line 458) updated to name "probe" alongside
+  "debug" and "scratch".
+
+- **Phase 46: reporter-flag guidance present but model ignored it — mechanical fix required (`152`)** —
+  The rule "The --reporter, --json, and --outputFile flags are controlled by the harness
+  and cannot be overridden — pass only test-selection flags." is at
+  `apps/server/src/agents/testAgent.ts` line 452 in `buildSystemPrompt()` under
+  `## Rules`, sent with `cache_control: { type: 'ephemeral' }`. Despite this, the test
+  agent supplied `--reporter=verbose` on turns 3, 4, 9, 17, 19, 21, 25, 27, 29, 31, 33,
+  35, 37, and 39 of one observed run (every flagged turn stripped by the harness). Adding
+  more prompt text will not fix this — the guidance was explicit, cached, and present.
+  The next fix must be mechanical: strip `--reporter`, `--outputFile`, and `--json` flags
+  from bash tool calls at the harness layer before command execution, so compliance is
+  enforced regardless of model behaviour.
 
 - **Phase 45: coverage inflation from one unprovable task (`148`)** —
   World-clock run covered 5 tasks / 244 test-agent events vs take-10's 2 tasks / 70 events.
@@ -200,6 +244,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 43 | The vacuous detector earns its gate | `b9efa8f` | 2026-09-07 |
 | 44 | The loop guard counts what it means to count | `f439b52` | 2026-09-07 |
 | 45 | Coverage is only claimed where it can be proved | `7f2c688` | 2026-09-07 |
+| 46 | An agent can see why nothing ran | `<commit>` | 2026-09-07 |
 
 ---
 

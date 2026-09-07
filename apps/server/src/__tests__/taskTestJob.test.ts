@@ -114,7 +114,7 @@ vi.mock('../jobs/testJob.js', () => ({
   findingsFromTests: vi.fn().mockReturnValue([]),
   getAuthoredTestFiles: vi.fn().mockReturnValue([]),
   getExistingTestFilesWithDescribes: vi.fn().mockReturnValue([]),
-  SCRATCH_FILE_RE: /(?:debug|scratch)(?![a-zA-Z0-9])/i,
+  SCRATCH_FILE_RE: /(?:debug|scratch|probe)(?![a-zA-Z0-9])/i,
 }));
 
 const { mockReadClaudeMd } = vi.hoisted(() => ({

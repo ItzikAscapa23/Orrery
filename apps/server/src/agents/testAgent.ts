@@ -455,7 +455,7 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     '- You do not git commit.',
     '- The container working directory is /workspace — run commands directly. Never prefix with `cd /workspace &&` or any `cd <path> &&`.',
     "- Use edit_file to modify existing test files. Use write_file only to create new files or when replacing most of a file's content. Rewriting a whole file to change a few lines wastes context and slows every later turn.",
-    '- Before calling end_turn, delete any debug or scratch test files you created (files whose names contain "debug" or "scratch") — they must not reach the commit.',
+    '- Before calling end_turn, delete any debug, scratch, or probe test files you created (files whose names contain "debug", "scratch", or "probe") — they must not reach the commit.',
     '- A test asserts exactly one response shape. Do not write `result.fieldA ?? result.fieldB` or `result.items ?? []` as fixture fallbacks — they mask the wrong-branch case where execution took an unexpected path and the field is absent. Assert the exact field the handler returns; let the test fail loudly if it is absent.',
     '',
     '## Tools',
