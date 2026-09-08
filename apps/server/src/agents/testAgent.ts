@@ -841,7 +841,14 @@ export async function runTestAgent(
             const { path: filePath = '' } = block.input as { path?: string };
             callPath = filePath;
             const absPath = checkReadAllowed(worktreePath, filePath, ctx.testDir);
-            const execResult = await container.exec(`node ${absPath}`);
+            let realWorktreeRoot = worktreePath;
+            try {
+              realWorktreeRoot = fs.realpathSync.native(worktreePath);
+            } catch {
+              /* ok */
+            }
+            const containerRelPath = path.relative(realWorktreeRoot, absPath);
+            const execResult = await container.exec(`node ${containerRelPath}`);
             const raw =
               [execResult.stdout, execResult.stderr].filter(Boolean).join('\n') || '(no output)';
             result = truncateOutput(raw);

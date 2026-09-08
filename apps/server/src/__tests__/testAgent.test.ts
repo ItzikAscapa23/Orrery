@@ -1532,13 +1532,112 @@ describe('testAgent — inspect_file tool', () => {
     return { resultContent: JSON.stringify(block?.content ?? ''), execCommands };
   }
 
-  it('runs node <abs_path> and returns stdout to the agent', async () => {
+  it('runs node and returns stdout to the agent', async () => {
     const { resultContent, execCommands } = await captureInspectResult(
       `${TEST_SUBDIR}/debug.mjs`,
       'the sort order is: a, b, c\n',
     );
     expect(resultContent).toContain('the sort order is');
-    expect(execCommands.some((c) => c.startsWith('node ') && c.includes(TEST_SUBDIR))).toBe(true);
+    expect(
+      execCommands.some(
+        (c) =>
+          c.startsWith('node ') &&
+          c.includes(TEST_SUBDIR) &&
+          !nodePath.isAbsolute(c.split(' ')[1]!),
+      ),
+    ).toBe(true);
+  });
+
+  it('passes a container-relative path — absolute host paths would fail inside Docker', async () => {
+    const fileName = `${TEST_SUBDIR}/inspect_known.mjs`;
+    nodeFs.writeFileSync(
+      nodePath.join(tmpRoot, TEST_SUBDIR, 'inspect_known.mjs'),
+      'console.log("orrery-inspect-abc");\n',
+      'utf-8',
+    );
+
+    const execCommands: string[] = [];
+    const container: ContainerHandle = {
+      name: 'test-container',
+      exec: (cmd: string) => {
+        execCommands.push(cmd);
+        const filePart = cmd.replace(/^node\s+/, '');
+        if (nodePath.isAbsolute(filePart)) {
+          // Simulate Docker: absolute host paths do not exist inside the container
+          return Promise.resolve({
+            stdout: '',
+            stderr: `Error: Cannot find module '${filePart}'\n`,
+            exitCode: 1,
+          });
+        }
+        return Promise.resolve({ stdout: 'orrery-inspect-abc\n', stderr: '', exitCode: 0 });
+      },
+      stop: () => Promise.resolve(),
+    };
+
+    const ctx = {
+      featureId: 'feat-inspect',
+      specMarkdown: '# spec',
+      contractYaml: 'openapi: "3.0.0"',
+      repoClaudeMd: '',
+      testDir: TEST_SUBDIR,
+    };
+
+    const calls: Array<{ messages: Anthropic.MessageParam[] }> = [];
+    mockCreateMessageStream.mockImplementation((params: { messages: Anthropic.MessageParam[] }) => {
+      calls.push({ messages: params.messages.slice() });
+      if (calls.length === 1) {
+        return Promise.resolve({
+          finalMessage: () =>
+            Promise.resolve({
+              id: 'insp2',
+              type: 'message',
+              role: 'assistant',
+              model: 'claude-sonnet-5',
+              stop_reason: 'tool_use',
+              stop_sequence: null,
+              usage: { input_tokens: 10, output_tokens: 10 },
+              content: [
+                {
+                  type: 'tool_use',
+                  id: 'tu_insp2',
+                  name: 'inspect_file',
+                  input: { path: fileName },
+                },
+              ],
+            } as unknown as Anthropic.Message),
+        });
+      }
+      return Promise.resolve({
+        finalMessage: () =>
+          Promise.resolve({
+            id: 'end2',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-sonnet-5',
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 5, output_tokens: 5 },
+            content: [{ type: 'text', text: 'done' }],
+          } as unknown as Anthropic.Message),
+      });
+    });
+
+    await runTestAgent('feat-inspect', ctx, container, tmpRoot);
+
+    const second = calls[1]!.messages;
+    const last = second[second.length - 1];
+    const block = (last?.content as Anthropic.ToolResultBlockParam[]).find(
+      (b) => b.type === 'tool_result',
+    );
+    const resultContent = JSON.stringify(block?.content ?? '');
+
+    expect(resultContent).toContain('orrery-inspect-abc');
+    expect(resultContent).not.toContain('MODULE_NOT_FOUND');
+    expect(resultContent).not.toMatch(/Cannot find module/);
+    expect(
+      execCommands.some((c) => c.startsWith('node ') && !nodePath.isAbsolute(c.split(' ')[1]!)),
+    ).toBe(true);
   });
 
   it('rejects inspect_file path outside test directory', async () => {

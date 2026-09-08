@@ -56,15 +56,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 47 — The agent can read a value
+- **Current phase:** 48 — inspect_file actually runs the file
 - **State:** `complete`
-- **Last updated:** 2026-09-08
+- **Last updated:** 2026-09-09
 
 ---
 
 ## Current phase progress
 
-*No phase 48 spec written yet. The next handover will populate this.*
+*No phase 49 spec written yet. The next handover will populate this.*
 
 ---
 
@@ -72,13 +72,40 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1269 passed across 92 files**, 2026-09-08 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-08 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-08 |
+| `npm test` (repo root) | passed — **1270 passed across 92 files**, 2026-09-09 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-09 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-09 |
 
 ---
 
 ## Decisions
+
+- **Phase 48: `inspect_file` now passes a container-relative path (`156`)** —
+  `testAgent.ts:844` previously called `container.exec(`node ${absPath}`)` where
+  `absPath` was the host-absolute path returned by `checkReadAllowed`. Inside the
+  Docker container (worktree mounted at `/workspace`, workdir `/workspace`) that path
+  does not exist. Fix: compute `path.relative(realWorktreeRoot, absPath)` and pass the
+  relative path instead. `realpathSync` is applied to `worktreePath` before the
+  subtraction because macOS symlinks (`/tmp` → `/private/tmp`) otherwise cause
+  `path.relative` to return a traversal path rather than a simple relative one.
+
+- **Phase 48: regression test simulates Docker failure mode (`157`)** —
+  New test in the `inspect_file` suite provides a mock `ContainerHandle` whose `exec`
+  rejects absolute paths (returns `Error: Cannot find module '...'`) and accepts
+  relative ones. This gates the behavior the production container depends on; a plain
+  mock that ignores the path would not catch a regression.
+
+- **Phase 48: dedicated `inspect_file` log branch in `testJob.ts` + `devJob.ts` (`158`)** —
+  Added `} else if (info.toolName === 'inspect_file')` before the generic `else`
+  fallback. The new branch includes `info.path` in the log line, matching `bash` and
+  `read_file` style. `devJob.ts` got the same branch for consistency; `inspect_file` is
+  test-agent-only but the `ToolCallInfo` type and logging pattern are shared.
+
+- **Phase 48: probe-file pattern — measurable signal recorded** —
+  With `inspect_file` passing container-relative paths, agents can now read runtime
+  values without writing probe files. Observable signal: ten consecutive features with
+  client-side test tasks complete without any `probe_*.mjs` / `probe_*.ts` written to
+  the worktree.
 
 - **Phase 47: failure message cap scaled by failure count (`153`)** —
   `formatTestSummary` in `testOutputSummary.ts` changed `t.message.slice(0, 200)`
@@ -95,7 +122,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 - **Phase 47: `inspect_file` tool added to test agent (`155`)** —
   Agents built probe files eight times to print a runtime value. `inspect_file(path)`
-  runs `node <abs_path>` and returns stdout, path-jailed via `checkReadAllowed` to
+  runs `node <rel_path>` and returns stdout, path-jailed via `checkReadAllowed` to
   the test directory. `node ` was already in the container's `ALLOWED_PREFIXES` —
   no allowlist changes needed. Tool documented in the system prompt after `list_files`.
 
@@ -195,6 +222,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 45 | Coverage is only claimed where it can be proved | `7f2c688` | 2026-09-07 |
 | 46 | An agent can see why nothing ran | `891cb40` | 2026-09-07 |
 | 47 | The agent can read a value | `f0e408b` | 2026-09-08 |
+| 48 | inspect_file actually runs the file | pending | 2026-09-09 |
 
 ---
 
@@ -204,4 +232,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `npm run lint` exits 0.
 - No feature mid-run when editing the orchestrator.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
-- A feature completes with no probe file written (the phase 47 changes hold).
+- A client-side test task completes without writing a probe file (the phase 48 fix holds).
