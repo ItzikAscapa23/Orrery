@@ -1772,3 +1772,55 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A feature completes with no probe file written
+---
+## Phase 48 — inspect_file actually runs the file
+**Goal:** The capability Phase 47 added works, and cannot silently stop working.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `156-inspect-file-uses-a-container-path` — `testAgent.ts:844` calls
+      `container.exec(\`node ${absPath}\`)` where `absPath` comes from
+      `checkReadAllowed`, which returns a **host** absolute path
+      (`/private/tmp/orrery-worktrees/…`). Inside the container the worktree is
+      mounted at `/workspace`, so that path does not exist and node exits with
+      `MODULE_NOT_FOUND`. Pass the path relative to the worktree root instead;
+      `checkReadAllowed` stays as the security check and only the string handed
+      to `container.exec` changes
+- [ ] Evidence. On world-clock take-17 the test agent called `inspect_file` four
+      times — turns 6, 12, 19 and 21 across two jobs — and every call returned
+      **535–540 characters**. Running the exact command by hand against that
+      worktree produces 517 characters of `MODULE_NOT_FOUND`; the agent's four
+      results are that error plus the lines `head -12` truncated. The same file
+      run with a container-relative path prints `probe` and exits 0. **The tool
+      has never executed a file.** The agent wrote, in `probe_app.mjs`:
+      `// This is a node inspect helper (not a test)` /
+      `// We can't run this directly, but we can check through vitest output` —
+      an accurate report of what it observed
+- [ ] `157-a-test-that-would-have-caught-it` — Phase 47 shipped with no test
+      asserting `inspect_file` returns a file's output. Add one: a file that
+      prints a known string, asserting the result **is** that string and does not
+      contain `MODULE_NOT_FOUND` or `Error`. A tool whose failure mode is
+      "returns an error message as if it were output" needs an assertion on the
+      content, not on the call
+- [ ] `158-inspect-results-are-logged-like-bash` — the `agent.log` line for
+      `inspect_file` reads `◦ turn 21 · inspect_file (535 chars)` with no result
+      preview, while `bash` lines carry `→ TESTS: …`. `onToolCall` is passed
+      `resultFirstLine` and it is dropped for this tool. Four identical failures
+      were invisible in the log for that reason
+- [ ] Report: with `inspect_file` working, does the probe-file pattern stop?
+      Ten consecutive features have produced one — take-17 produced seven in a
+      single worktree (`probe_app.mjs`, `probe_app.test.ts`,
+      `probe_appmodule.test.ts`, `probe_fetch.test.tsx`, `probe_render.test.tsx`,
+      `probe_single.test.tsx`, `probe_vitest_env.test.ts`). State what would show
+      it had not
+**Definition of Done:**
+- `inspect_file` on a file that prints returns the printed output
+- A test asserts the returned content, not merely that the tool was callable
+- The `inspect_file` log line carries a result preview
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1269 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A client-side test task completes without writing a probe file
