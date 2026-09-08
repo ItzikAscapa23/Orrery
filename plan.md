@@ -1706,3 +1706,69 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A test agent that hits a zero-test result resolves it without writing a probe file
+---
+## Phase 47 — The agent can read a value
+**Goal:** An agent that needs a runtime value can print it, instead of building an instrument.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] Context, established by turn-by-turn analysis of seven runs (3,533 events):
+      eight consecutive features produced a throwaway probe file. The cause is one
+      function. `formatTestSummary` returns a bare count line when nothing fails,
+      and `· "name" — ${t.message.slice(0, 200)}` when something does. So a probe
+      that *passes* yields zero bits — the agent must make it fail to learn
+      anything — and a probe that fails yields 200 bytes. take-24 turns 45–62 are
+      the proof: eleven distinct one-line edits, **eight byte-identical 619-char
+      results in a row**, because everything the agent changed sat past character
+      200. It broke through at turn 77 and hit the 80-turn cap at 80. Of eight
+      probe episodes, **one ended in knowledge** — and that answer was then lost
+- [ ] `153-scale-the-failure-message-cap` — `t.message.slice(0, 200)` is right for
+      a 27-failure run and absurd for a one-failure run. Scale it by failure
+      count: `slice(0, failed <= 3 ? 4000 : 200)`. The whole summary is already
+      capped at 8,192 elsewhere. Cheapest change on this list and it directly
+      widens the channel the agent is already using
+- [ ] `154-return-console-output` — `summarizeBashTestRun` builds
+      `rawCombined = [stdout, stderr].join('\n')` on every call and uses it only
+      when the JSON fails to parse. On every successful run it is discarded. The
+      orchestrator logs that same stream in full — take-25 seq 264 shows
+      `probe exec: … stderr: PASS … ● Console … console.log …`. **The orchestrator
+      has the console output; the agent never does.** Append a tail of it to the
+      summary
+- [ ] The two runners differ and the fix must handle both. On jest, `rawCombined`
+      holds the console. On vitest it is empty, because the resolved command is
+      `npx vitest run <file> --reporter=json --outputFile=…` and vitest writes the
+      report to the file while printing nothing to stdout — which is why Phase
+      46's raw path fired on at least eight consecutive turns of world-clock
+      take-12 and returned 34 characters, the label and nothing after it. On
+      vitest, take the console from the JSON report's per-file entries
+- [ ] `155-inspect-tool` — add a tool that runs one node/ts file in the container
+      and returns its stdout, path-jailed to the test directory, no assertions
+      involved. This is the capability the agent has hand-built eight times.
+      `src/__tests__/debug_sort.mjs`, on disk in the take-14 server worktree, is a
+      complete specification: nine lines, no assertions, five `console.log`s, one
+      question — what order does `localeCompare` give `"Côte d'Ivoire"` and
+      `"Croatia"`. It was committed unread, because `node` is not on the
+      test-agent allowlist and nothing reads print
+- [ ] Do not add prompt guidance for this. Phase 45 told the agent that
+      `--reporter` is harness-controlled; world-clock take-12 requested
+      `--reporter=verbose` on eleven consecutive turns and take-13 requested
+      `--reporter=tap`. Every one was rewritten to `--reporter=json`, and it must
+      be — the summariser reads a JSON report. Asking the agent not to want
+      verbose output is asking it not to want the thing it needs
+- [ ] Do not change the non-progress guard. It is working: it fired correctly on
+      take-26, world-clock take-12 and take-13. But note what it bought — seven
+      of eight probe episodes now end in a cap, a park or a spend gate rather
+      than an answer. Capping the loop converted take-25's $1.59 answer into five
+      cheaper non-answers. This phase is the reason the guard will stop mattering
+**Definition of Done:**
+- A one-failure test run returns the full assertion message, not 200 characters
+- A test run's console output reaches the agent, on both jest and vitest
+- An agent can run a file and read its stdout without writing an assertion
+- Fail-first output shown for the cap and the console cases
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1261 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- A feature completes with no probe file written
