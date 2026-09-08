@@ -205,7 +205,11 @@ describe('formatTestSummary', () => {
 
   it('truncates failure messages at 200 chars when 4 or more failures', () => {
     const longMessage = 'x'.repeat(300);
-    const makeFailure = (name: string) => ({ test_name: name, status: 'failed' as const, message: longMessage });
+    const makeFailure = (name: string) => ({
+      test_name: name,
+      status: 'failed' as const,
+      message: longMessage,
+    });
     const parsed: ParsedTestOutput = {
       passed: 0,
       failed: 4,
@@ -234,7 +238,11 @@ describe('formatTestSummary', () => {
 
   it('returns up to 4000 chars of message when exactly 3 failures (boundary)', () => {
     const longMessage = 'z'.repeat(4500);
-    const makeFailure = (name: string) => ({ test_name: name, status: 'failed' as const, message: longMessage });
+    const makeFailure = (name: string) => ({
+      test_name: name,
+      status: 'failed' as const,
+      message: longMessage,
+    });
     const parsed: ParsedTestOutput = {
       passed: 0,
       failed: 3,
@@ -456,11 +464,15 @@ describe('summarizeBashTestRun', () => {
     const reportWithConsole = JSON.stringify({
       numPassedTests: 2,
       numFailedTests: 0,
-      testResults: [{ assertionResults: [{ fullName: 't1', status: 'passed', duration: 5 }], message: 'debug line from vitest\n' }],
+      testResults: [
+        {
+          assertionResults: [{ fullName: 't1', status: 'passed', duration: 5 }],
+          message: 'debug line from vitest\n',
+        },
+      ],
     });
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('npx vitest run'))
-        return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('npx vitest run')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportWithConsole, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });
@@ -473,8 +485,7 @@ describe('summarizeBashTestRun', () => {
   it('does not append CONSOLE section when output is empty', async () => {
     const reportJson = makePassingJson(2);
     const container = makeContainer((cmd) => {
-      if (cmd.startsWith('npx vitest run'))
-        return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('npx vitest run')) return { exitCode: 0, stdout: '', stderr: '' };
       if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
       throw new Error(`unexpected command: ${cmd}`);
     });

@@ -56,17 +56,17 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 46 — An agent can see why nothing ran
-- **State:** `complete`
-- **Last updated:** 2026-09-07
+- **Current phase:** 47 — The agent can read a value
+- **State:** `in-progress`
+- **Last updated:** 2026-09-08
 
 ---
 
 ## Current phase progress
 
-- [x] `150` — Removed `[raw output — zero tests reported]` label prefix from `testOutputSummary.ts`; raw output returned directly
-- [x] `151` — Added `probe` to `SCRATCH_FILE_RE`; deletion instruction in `testAgent.ts` updated; 2 new tests in `getAuthoredTestFiles.test.ts`
-- [x] `152` — Documented: reporter guidance was present at `testAgent.ts:452` and model ignored it 14 times; mechanical fix required
+- [x] `153` — Scale failure message cap in `formatTestSummary`
+- [x] `154` — Return console output in test summaries
+- [x] `155` — Add `inspect_file` tool to test agent
 
 ---
 

@@ -1,14 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 27 27">
-  <defs>
-    <radialGradient id="g" cx="35%" cy="30%" r="65%">
-      <stop offset="0%"   stop-color="#ffd9a0"/>
-      <stop offset="55%"  stop-color="#ff5b45"/>
-      <stop offset="100%" stop-color="#a01f12"/>
-    </radialGradient>
-    <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="0" stdDeviation="2.5"
-                    flood-color="rgba(255,91,69,0.5)"/>
-    </filter>
-  </defs>
-  <circle cx="13.5" cy="13.5" r="11.5" fill="url(#g)" filter="url(#s)"/>
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Orrery">
+  <rect width="32" height="32" rx="7.5" fill="#0E1626"/>
+  <g transform="rotate(-30 16 16)">
+    <ellipse cx="16" cy="16" rx="12.4" ry="5.2" fill="none" stroke="#6F86A0" stroke-width="2.3"/>
+  </g>
+  <line x1="16" y1="16" x2="4.6" y2="20.4" stroke="#C89434" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="4.6" cy="20.4" r="2.8" fill="#EDE6D6"/>
+  <circle cx="16" cy="16" r="3.9" fill="#C89434"/>
 </svg>

@@ -1489,7 +1489,14 @@ describe('testAgent — inspect_file tool', () => {
               stop_reason: 'tool_use',
               stop_sequence: null,
               usage: { input_tokens: 10, output_tokens: 10 },
-              content: [{ type: 'tool_use', id: 'tu_insp', name: 'inspect_file', input: { path: filePath } }],
+              content: [
+                {
+                  type: 'tool_use',
+                  id: 'tu_insp',
+                  name: 'inspect_file',
+                  input: { path: filePath },
+                },
+              ],
             } as unknown as Anthropic.Message),
         });
       }
@@ -1539,7 +1546,10 @@ describe('testAgent — inspect_file tool', () => {
     const execCommands: string[] = [];
     const container: ContainerHandle = {
       name: 'test-container',
-      exec: (cmd: string) => { execCommands.push(cmd); return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }); },
+      exec: (cmd: string) => {
+        execCommands.push(cmd);
+        return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
+      },
       stop: () => Promise.resolve(),
     };
     const ctx = {
@@ -1563,7 +1573,14 @@ describe('testAgent — inspect_file tool', () => {
               stop_reason: 'tool_use',
               stop_sequence: null,
               usage: { input_tokens: 10, output_tokens: 10 },
-              content: [{ type: 'tool_use', id: 'tu_insp2', name: 'inspect_file', input: { path: 'src/index.ts' } }],
+              content: [
+                {
+                  type: 'tool_use',
+                  id: 'tu_insp2',
+                  name: 'inspect_file',
+                  input: { path: 'src/index.ts' },
+                },
+              ],
             } as unknown as Anthropic.Message),
         });
       }

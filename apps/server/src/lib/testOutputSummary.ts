@@ -188,9 +188,7 @@ export async function summarizeBashTestRun(
   // everything to the JSON report file and stdout is empty — extract per-file message
   // fields from the already-fetched report JSON instead.
   const consoleOutput = extractConsoleOutput(jsonCmd, rawCombined, catResult.stdout);
-  const summary = consoleOutput
-    ? `${baseSummary}\nCONSOLE:\n${consoleOutput}`
-    : baseSummary;
+  const summary = consoleOutput ? `${baseSummary}\nCONSOLE:\n${consoleOutput}` : baseSummary;
 
   return {
     summary,
