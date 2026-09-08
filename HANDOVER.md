@@ -222,7 +222,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 45 | Coverage is only claimed where it can be proved | `7f2c688` | 2026-09-07 |
 | 46 | An agent can see why nothing ran | `891cb40` | 2026-09-07 |
 | 47 | The agent can read a value | `f0e408b` | 2026-09-08 |
-| 48 | inspect_file actually runs the file | pending | 2026-09-09 |
+| 48 | inspect_file actually runs the file | `4ba82b5` | 2026-09-09 |
 
 ---
 
