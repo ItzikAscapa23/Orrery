@@ -1430,4 +1430,169 @@ describe('buildSystemPrompt — existingTestFiles injection', () => {
     expect(prompt).toContain('__tests__/a.test.ts');
     expect(prompt).toContain('__tests__/b.test.ts');
   });
+
+  it('includes inspect_file tool documentation in the system prompt', () => {
+    const prompt = buildSystemPrompt(BASE_CTX);
+    expect(prompt).toContain('inspect_file');
+  });
+});
+
+// ── inspect_file tool ─────────────────────────────────────────────────────────
+
+describe('testAgent — inspect_file tool', () => {
+  let tmpRoot: string;
+  const TEST_SUBDIR = '__tests__';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpRoot = nodeFs.mkdtempSync(nodePath.join(os.tmpdir(), 'orrery-inspect-'));
+    nodeFs.mkdirSync(nodePath.join(tmpRoot, TEST_SUBDIR), { recursive: true });
+  });
+
+  afterEach(() => {
+    nodeFs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  async function captureInspectResult(
+    filePath: string,
+    nodeOutput: string,
+  ): Promise<{ resultContent: string; execCommands: string[] }> {
+    const execCommands: string[] = [];
+    const container: ContainerHandle = {
+      name: 'test-container',
+      exec: (cmd: string) => {
+        execCommands.push(cmd);
+        return Promise.resolve({ stdout: nodeOutput, stderr: '', exitCode: 0 });
+      },
+      stop: () => Promise.resolve(),
+    };
+
+    const ctx = {
+      featureId: 'feat-inspect',
+      specMarkdown: '# spec',
+      contractYaml: 'openapi: "3.0.0"',
+      repoClaudeMd: '',
+      testDir: TEST_SUBDIR,
+    };
+
+    const calls: Array<{ messages: Anthropic.MessageParam[] }> = [];
+    mockCreateMessageStream.mockImplementation((params: { messages: Anthropic.MessageParam[] }) => {
+      calls.push({ messages: params.messages.slice() });
+      if (calls.length === 1) {
+        return Promise.resolve({
+          finalMessage: () =>
+            Promise.resolve({
+              id: 'insp',
+              type: 'message',
+              role: 'assistant',
+              model: 'claude-sonnet-5',
+              stop_reason: 'tool_use',
+              stop_sequence: null,
+              usage: { input_tokens: 10, output_tokens: 10 },
+              content: [{ type: 'tool_use', id: 'tu_insp', name: 'inspect_file', input: { path: filePath } }],
+            } as unknown as Anthropic.Message),
+        });
+      }
+      return Promise.resolve({
+        finalMessage: () =>
+          Promise.resolve({
+            id: 'end',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-sonnet-5',
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 5, output_tokens: 5 },
+            content: [{ type: 'text', text: 'done' }],
+          } as unknown as Anthropic.Message),
+      });
+    });
+
+    // Write the script file so checkReadAllowed sees a real path
+    nodeFs.writeFileSync(
+      nodePath.join(tmpRoot, TEST_SUBDIR, nodePath.basename(filePath)),
+      'console.log("hello");\n',
+      'utf-8',
+    );
+
+    await runTestAgent('feat-inspect', ctx, container, tmpRoot);
+
+    const second = calls[1]!.messages;
+    const last = second[second.length - 1];
+    const block = (last?.content as Anthropic.ToolResultBlockParam[]).find(
+      (b) => b.type === 'tool_result',
+    );
+    return { resultContent: JSON.stringify(block?.content ?? ''), execCommands };
+  }
+
+  it('runs node <abs_path> and returns stdout to the agent', async () => {
+    const { resultContent, execCommands } = await captureInspectResult(
+      `${TEST_SUBDIR}/debug.mjs`,
+      'the sort order is: a, b, c\n',
+    );
+    expect(resultContent).toContain('the sort order is');
+    expect(execCommands.some((c) => c.startsWith('node ') && c.includes(TEST_SUBDIR))).toBe(true);
+  });
+
+  it('rejects inspect_file path outside test directory', async () => {
+    // checkReadAllowed throws for paths outside testDir — the handler returns an error result
+    const execCommands: string[] = [];
+    const container: ContainerHandle = {
+      name: 'test-container',
+      exec: (cmd: string) => { execCommands.push(cmd); return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }); },
+      stop: () => Promise.resolve(),
+    };
+    const ctx = {
+      featureId: 'feat-inspect',
+      specMarkdown: '# spec',
+      contractYaml: 'openapi: "3.0.0"',
+      repoClaudeMd: '',
+      testDir: TEST_SUBDIR,
+    };
+    const calls: Array<{ messages: Anthropic.MessageParam[] }> = [];
+    mockCreateMessageStream.mockImplementation((params: { messages: Anthropic.MessageParam[] }) => {
+      calls.push({ messages: params.messages.slice() });
+      if (calls.length === 1) {
+        return Promise.resolve({
+          finalMessage: () =>
+            Promise.resolve({
+              id: 'insp2',
+              type: 'message',
+              role: 'assistant',
+              model: 'claude-sonnet-5',
+              stop_reason: 'tool_use',
+              stop_sequence: null,
+              usage: { input_tokens: 10, output_tokens: 10 },
+              content: [{ type: 'tool_use', id: 'tu_insp2', name: 'inspect_file', input: { path: 'src/index.ts' } }],
+            } as unknown as Anthropic.Message),
+        });
+      }
+      return Promise.resolve({
+        finalMessage: () =>
+          Promise.resolve({
+            id: 'end2',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-sonnet-5',
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 5, output_tokens: 5 },
+            content: [{ type: 'text', text: 'done' }],
+          } as unknown as Anthropic.Message),
+      });
+    });
+
+    await runTestAgent('feat-inspect', ctx, container, tmpRoot);
+
+    // No node command should have been run — the path jail rejected it
+    expect(execCommands.some((c) => c.startsWith('node '))).toBe(false);
+    // The tool result should contain an error message
+    const second = calls[1]!.messages;
+    const last = second[second.length - 1];
+    const block = (last?.content as Anthropic.ToolResultBlockParam[]).find(
+      (b) => b.type === 'tool_result',
+    );
+    const content = JSON.stringify(block?.content ?? '');
+    expect(content).toContain('implementation directory');
+  });
 });

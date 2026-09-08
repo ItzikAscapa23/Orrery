@@ -186,6 +186,25 @@ const LIST_FILES_TOOL: Anthropic.Tool = {
   },
 };
 
+const INSPECT_FILE_TOOL: Anthropic.Tool = {
+  name: 'inspect_file',
+  description:
+    'Run a .js or .mjs file with node and return its stdout. ' +
+    'Use this to print runtime values without writing assertions. ' +
+    'Path must be inside the test directory. ' +
+    'Write console.log statements in the file, then call inspect_file to read them.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      path: {
+        type: 'string',
+        description: 'File path relative to repo root — must be inside the test directory.',
+      },
+    },
+    required: ['path'],
+  },
+};
+
 // ── Path jail ─────────────────────────────────────────────────────────────────
 
 // Implementation directories that the Test Agent must never read.
@@ -472,6 +491,10 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     '',
     '**list_files(dir)** — List file names in the test directory (use instead of ls/find).',
     '',
+    `**inspect_file(path)** — Run a .js or .mjs file with node and return its stdout.`,
+    `Write console.log statements in the file, then call inspect_file to read them.`,
+    `Path must be inside ${ctx.testDir}/. No assertions required — this is for printing values.`,
+    '',
     '**bash(command)** — Run a test-runner command only.',
     `Allowed: ${TEST_BASH_ALLOWED_PREFIXES.join(', ')}.`,
     'Prefer `npx jest --ci` or `npx vitest run` over `npm test` — `npm test` is a script alias' +
@@ -582,7 +605,7 @@ export async function runTestAgent(
             cache_control: { type: 'ephemeral' },
           } as Anthropic.TextBlockParam,
         ],
-        tools: [BASH_TOOL, WRITE_FILE_TOOL, EDIT_FILE_TOOL, READ_FILE_TOOL, LIST_FILES_TOOL],
+        tools: [BASH_TOOL, WRITE_FILE_TOOL, EDIT_FILE_TOOL, READ_FILE_TOOL, LIST_FILES_TOOL, INSPECT_FILE_TOOL],
         messages: withLastMessageCached(messages),
       },
       featureId,
@@ -805,6 +828,24 @@ export async function runTestAgent(
                 toolName: 'list_files',
                 resultSize: result.length,
                 resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
+              });
+            continue;
+          } else if (block.name === 'inspect_file') {
+            const { path: filePath = '' } = block.input as { path?: string };
+            callPath = filePath;
+            const absPath = checkReadAllowed(worktreePath, filePath, ctx.testDir);
+            const execResult = await container.exec(`node ${absPath}`);
+            const raw =
+              [execResult.stdout, execResult.stderr].filter(Boolean).join('\n') || '(no output)';
+            result = truncateOutput(raw);
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+            if (onToolCall)
+              await onToolCall({
+                turn,
+                toolName: 'inspect_file',
+                resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
+                path: filePath,
               });
             continue;
           } else {
