@@ -79,13 +79,48 @@ export function formatTestSummary(parsed: ParsedTestOutput): string {
     .filter((t) => t.status === 'failed')
     .map((t) => {
       if (t.message) {
-        return `· "${t.test_name}" — ${t.message.slice(0, 200)}`;
+        // Scale cap by failure count: a one-failure run gets 4000 chars so the
+        // full assertion message is visible; high-failure runs stay compact.
+        return `· "${t.test_name}" — ${t.message.slice(0, failed <= 3 ? 4000 : 200)}`;
       }
       return `· "${t.test_name}"`;
     })
     .join('\n');
 
   return `${header}\nFAILURES:\n${failures}`;
+}
+
+const CONSOLE_TAIL_CHARS = 2048;
+
+/**
+ * Extract console output from a test run.
+ * Jest prints console to stdout (rawCombined); vitest writes to the JSON report
+ * file and stdout is empty — collect per-file `message` fields from the report JSON.
+ */
+function extractConsoleOutput(
+  resolvedCommand: string,
+  rawCombined: string,
+  reportJson: string,
+): string {
+  if (resolvedCommand.startsWith('npx jest')) {
+    const trimmed = rawCombined.trim();
+    return trimmed ? trimmed.slice(-CONSOLE_TAIL_CHARS) : '';
+  }
+  // vitest: extract message fields from JSON report testResults entries.
+  try {
+    const jsonStart = reportJson.indexOf('{');
+    if (jsonStart === -1) return '';
+    const json = JSON.parse(reportJson.slice(jsonStart)) as {
+      testResults?: Array<{ message?: string }>;
+    };
+    const messages = (json.testResults ?? [])
+      .map((r) => (r.message ?? '').trim())
+      .filter(Boolean)
+      .join('\n');
+    return messages ? messages.slice(-CONSOLE_TAIL_CHARS) : '';
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -146,8 +181,19 @@ export async function summarizeBashTestRun(
     };
   }
 
+  const baseSummary = formatTestSummary(parsed);
+
+  // Append a tail of console output so the agent can read runtime values without
+  // building a probe file. Jest prints console to stdout (rawCombined); vitest writes
+  // everything to the JSON report file and stdout is empty — extract per-file message
+  // fields from the already-fetched report JSON instead.
+  const consoleOutput = extractConsoleOutput(jsonCmd, rawCombined, catResult.stdout);
+  const summary = consoleOutput
+    ? `${baseSummary}\nCONSOLE:\n${consoleOutput}`
+    : baseSummary;
+
   return {
-    summary: formatTestSummary(parsed),
+    summary,
     resolvedCommand: jsonCmd,
     reportPath: invocationPath,
   };

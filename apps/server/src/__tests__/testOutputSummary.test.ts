@@ -203,19 +203,48 @@ describe('formatTestSummary', () => {
     expect(result).toContain('failing test');
   });
 
-  it('truncates failure messages at 200 chars', () => {
+  it('truncates failure messages at 200 chars when 4 or more failures', () => {
     const longMessage = 'x'.repeat(300);
+    const makeFailure = (name: string) => ({ test_name: name, status: 'failed' as const, message: longMessage });
     const parsed: ParsedTestOutput = {
       passed: 0,
-      failed: 1,
-      tests: [{ test_name: 'foo', status: 'failed', message: longMessage }],
+      failed: 4,
+      tests: [makeFailure('a'), makeFailure('b'), makeFailure('c'), makeFailure('d')],
       authoredPassed: 0,
       authoredFailed: 0,
     };
     const result = formatTestSummary(parsed);
-    // The failure line should contain the truncated message (200 chars of x)
     expect(result).toContain('x'.repeat(200));
     expect(result).not.toContain('x'.repeat(201));
+  });
+
+  it('returns up to 4000 chars of message when only 1 failure', () => {
+    const longMessage = 'y'.repeat(4500);
+    const parsed: ParsedTestOutput = {
+      passed: 0,
+      failed: 1,
+      tests: [{ test_name: 'solo', status: 'failed', message: longMessage }],
+      authoredPassed: 0,
+      authoredFailed: 0,
+    };
+    const result = formatTestSummary(parsed);
+    expect(result).toContain('y'.repeat(4000));
+    expect(result).not.toContain('y'.repeat(4001));
+  });
+
+  it('returns up to 4000 chars of message when exactly 3 failures (boundary)', () => {
+    const longMessage = 'z'.repeat(4500);
+    const makeFailure = (name: string) => ({ test_name: name, status: 'failed' as const, message: longMessage });
+    const parsed: ParsedTestOutput = {
+      passed: 0,
+      failed: 3,
+      tests: [makeFailure('a'), makeFailure('b'), makeFailure('c')],
+      authoredPassed: 0,
+      authoredFailed: 0,
+    };
+    const result = formatTestSummary(parsed);
+    expect(result).toContain('z'.repeat(4000));
+    expect(result).not.toContain('z'.repeat(4001));
   });
 
   it('formats a failure without a message', () => {
@@ -406,6 +435,52 @@ describe('summarizeBashTestRun', () => {
     expect(result).not.toBeNull();
     expect(result?.summary).toBe('some runner output');
     expect(result?.summary).not.toContain('TESTS:');
+  });
+
+  it('appends console output to passing jest summary', async () => {
+    const reportJson = makePassingJson(3);
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('npx jest'))
+        return { exitCode: 0, stdout: '  console.log\n    debug value: 42\n', stderr: '' };
+      if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    const result = await summarizeBashTestRun('npx jest --ci', container);
+    expect(result).not.toBeNull();
+    expect(result?.summary).toContain('TESTS:');
+    expect(result?.summary).toContain('CONSOLE:');
+    expect(result?.summary).toContain('debug value: 42');
+  });
+
+  it('appends vitest console from per-file message in JSON report', async () => {
+    const reportWithConsole = JSON.stringify({
+      numPassedTests: 2,
+      numFailedTests: 0,
+      testResults: [{ assertionResults: [{ fullName: 't1', status: 'passed', duration: 5 }], message: 'debug line from vitest\n' }],
+    });
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('npx vitest run'))
+        return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportWithConsole, stderr: '' };
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    const result = await summarizeBashTestRun('npm test', container);
+    expect(result).not.toBeNull();
+    expect(result?.summary).toContain('CONSOLE:');
+    expect(result?.summary).toContain('debug line from vitest');
+  });
+
+  it('does not append CONSOLE section when output is empty', async () => {
+    const reportJson = makePassingJson(2);
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('npx vitest run'))
+        return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    const result = await summarizeBashTestRun('npm test', container);
+    expect(result).not.toBeNull();
+    expect(result?.summary).not.toContain('CONSOLE:');
   });
 
   it('returns null for a command with a real pipe (| is still blocked)', async () => {
