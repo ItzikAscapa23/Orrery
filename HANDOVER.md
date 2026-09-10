@@ -214,7 +214,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 46 | An agent can see why nothing ran | `891cb40` | 2026-09-07 |
 | 47 | The agent can read a value | `f0e408b` | 2026-09-08 |
 | 48 | inspect_file actually runs the file | `4ba82b5` | 2026-09-09 |
-| 49 | Writing nothing is a valid outcome | pending | 2026-09-10 |
+| 49 | Writing nothing is a valid outcome | `8aa8dbb` | 2026-09-10 |
 
 ---
 
