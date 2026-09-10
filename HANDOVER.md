@@ -56,15 +56,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 48 — inspect_file actually runs the file
+- **Current phase:** 49 — Writing nothing is a valid outcome
 - **State:** `complete`
-- **Last updated:** 2026-09-09
+- **Last updated:** 2026-09-10
 
 ---
 
 ## Current phase progress
 
-*No phase 49 spec written yet. The next handover will populate this.*
+*No phase 50 spec written yet. The next handover will populate this.*
 
 ---
 
@@ -72,84 +72,75 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1270 passed across 92 files**, 2026-09-09 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-09 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-09 |
+| `npm test` (repo root) | passed — **1272 passed across 92 files**, 2026-09-10 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-10 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-10 |
 
 ---
 
 ## Decisions
 
+- **Phase 49: empty staged set after lockfile unstaging skips git commit (`159`)** —
+  `testJob.ts` previously called `gitCommit` unconditionally inside the
+  `if (statusOut !== '')` block. When the agent correctly writes nothing new and
+  Phase 36's lockfile unstaging drains the staged set to empty, `git commit` exited
+  non-zero (target repo's pre-commit hook: "No relevant files staged"). Fix: wrap the
+  staged-file log + `gitCommit` + `pushBranch` in `if (stagedLines.length > 0)`;
+  the `else` branch emits an `agent.log` with `severity: ok`. The durable authored-file
+  computation and `_advanceTestPass()` run unchanged in both branches — the feature
+  advances on the existing `git log` authored set.
+
 - **Phase 48: `inspect_file` now passes a container-relative path (`156`)** —
   `testAgent.ts:844` previously called `container.exec(`node ${absPath}`)` where
-  `absPath` was the host-absolute path returned by `checkReadAllowed`. Inside the
-  Docker container (worktree mounted at `/workspace`, workdir `/workspace`) that path
-  does not exist. Fix: compute `path.relative(realWorktreeRoot, absPath)` and pass the
-  relative path instead. `realpathSync` is applied to `worktreePath` before the
-  subtraction because macOS symlinks (`/tmp` → `/private/tmp`) otherwise cause
-  `path.relative` to return a traversal path rather than a simple relative one.
+  `absPath` was the host-absolute path. Inside the Docker container (worktree mounted
+  at `/workspace`) that path doesn't exist. Fix: compute
+  `path.relative(realpathSync(worktreePath), absPath)` and pass the relative path.
+  `realpathSync` is needed because macOS `/tmp` → `/private/tmp` symlink otherwise
+  causes `path.relative` to return a traversal path.
 
 - **Phase 48: regression test simulates Docker failure mode (`157`)** —
-  New test in the `inspect_file` suite provides a mock `ContainerHandle` whose `exec`
-  rejects absolute paths (returns `Error: Cannot find module '...'`) and accepts
-  relative ones. This gates the behavior the production container depends on; a plain
-  mock that ignores the path would not catch a regression.
-
-- **Phase 48: dedicated `inspect_file` log branch in `testJob.ts` + `devJob.ts` (`158`)** —
-  Added `} else if (info.toolName === 'inspect_file')` before the generic `else`
-  fallback. The new branch includes `info.path` in the log line, matching `bash` and
-  `read_file` style. `devJob.ts` got the same branch for consistency; `inspect_file` is
-  test-agent-only but the `ToolCallInfo` type and logging pattern are shared.
-
-- **Phase 48: probe-file pattern — measurable signal recorded** —
-  With `inspect_file` passing container-relative paths, agents can now read runtime
-  values without writing probe files. Observable signal: ten consecutive features with
-  client-side test tasks complete without any `probe_*.mjs` / `probe_*.ts` written to
-  the worktree.
+  New test provides a mock `ContainerHandle` whose `exec` rejects absolute paths. A
+  plain mock that ignores the path would not catch a regression.
 
 - **Phase 47: failure message cap scaled by failure count (`153`)** —
-  `formatTestSummary` in `testOutputSummary.ts` changed `t.message.slice(0, 200)`
-  to `slice(0, failed <= 3 ? 4000 : 200)`. Root cause: take-24 turns 45–62 showed
-  eight byte-identical 619-char results because the assertion content started past
-  character 200. A one-failure run now returns the full diff. High-failure runs keep
-  the compact form to avoid bloating the summary.
+  `formatTestSummary` changed `t.message.slice(0, 200)` to
+  `slice(0, failed <= 3 ? 4000 : 200)`. A one-failure run now returns the full diff.
+  High-failure runs keep the compact form.
 
 - **Phase 47: console output appended to test summaries (`154`)** —
-  `summarizeBashTestRun` now appends `\nCONSOLE:\n<tail>` (2048 chars) to every
-  structured summary. Jest: from `rawCombined` (stdout+stderr already captured).
-  Vitest: from per-file `message` fields in the JSON report (vitest stdout is empty
-  when `--outputFile` is set). Section omitted when output is empty.
+  `summarizeBashTestRun` appends `\nCONSOLE:\n<tail>` (2048 chars). Jest: from
+  `rawCombined`. Vitest: from per-file `message` fields (vitest stdout is empty when
+  `--outputFile` is set).
 
 - **Phase 47: `inspect_file` tool added to test agent (`155`)** —
   Agents built probe files eight times to print a runtime value. `inspect_file(path)`
-  runs `node <rel_path>` and returns stdout, path-jailed via `checkReadAllowed` to
-  the test directory. `node ` was already in the container's `ALLOWED_PREFIXES` —
-  no allowlist changes needed. Tool documented in the system prompt after `list_files`.
+  runs `node <rel_path>` and returns stdout, path-jailed via `checkReadAllowed`.
+  `node ` was already in `ALLOWED_PREFIXES` — no allowlist changes needed.
 
-- **Phase 46: reporter-flag guidance present but model ignored it — mechanical fix required (`152`)** —
+- **Phase 46: reporter-flag stripping is mechanical, not prompt-based (`152`)** —
+  `--reporter`, `--outputFile`, `--json` stripped at the harness layer.
   `--reporter=verbose` was requested 14 times despite the rules block forbidding it.
-  Next fix must strip `--reporter`, `--outputFile`, `--json` at the harness layer
-  mechanically, not via more prompt text.
 
 - **Phase 46: `SCRATCH_FILE_RE` extended to match `probe` (`151`)** —
-  `/(?:debug|scratch|probe)(?![a-zA-Z0-9])/i` at `testJob.ts:72`. `_probe.test.ts`
-  was the only previously-missed filename; seven episode names verified against the
-  new pattern.
+  `/(?:debug|scratch|probe)(?![a-zA-Z0-9])/i` at `testJob.ts:72`.
 
 - **Phase 42: brief hashes computed by orchestrator (`136`–`138`)** —
-  Agent writes paths-only comment; orchestrator hashes the files and rewrites the header.
-  One canonical path (`<worktreeRoot>/__orrery_harness_brief.md`) enforced at both ends.
+  Agent writes paths-only comment; orchestrator hashes the files and rewrites the
+  header. One canonical path (`<worktreeRoot>/__orrery_harness_brief.md`) enforced
+  at both ends.
 
 - **Phase 40: warning findings open `code_review` gate (`133`)** —
-  A warnings-only review opens the `code_review` gate; only a fully clean review passes immediately.
+  A warnings-only review opens the `code_review` gate; only a fully clean review
+  passes immediately.
 
-- **`spec_approval` gate-open (Phase 29)** — 4 open paths: `awsReviewJob.ts` after review,
-  `specSubmit.ts` no-charter fast-path, `awsReviewJob.ts` error final-attempt, missing-charter
-  guard. 1 approve path: `POST /features/:id/approve`.
+- **`spec_approval` gate-open (Phase 29)** — 4 open paths: `awsReviewJob.ts` after
+  review, `specSubmit.ts` no-charter fast-path, `awsReviewJob.ts` error final-attempt,
+  missing-charter guard. 1 approve path: `POST /features/:id/approve`.
 
-- **Test-file boundary + finding identity (Phases 28, core)** — `write_file`/`edit_file` in
-  dev agents call `getTestAuthoredSet` at startup and reject test-trailer files. Finding ids
-  (`f1`, `f2`) recur per cycle — lookups must use composite `(featureId, specRev, id)`.
+- **Test-file boundary + finding identity (Phases 28, core)** — `write_file`/`edit_file`
+  in dev agents call `getTestAuthoredSet` at startup and reject test-trailer files.
+  Finding ids (`f1`, `f2`) recur per cycle — lookups must use composite
+  `(featureId, specRev, id)`.
 
 ---
 
@@ -223,6 +214,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 46 | An agent can see why nothing ran | `891cb40` | 2026-09-07 |
 | 47 | The agent can read a value | `f0e408b` | 2026-09-08 |
 | 48 | inspect_file actually runs the file | `4ba82b5` | 2026-09-09 |
+| 49 | Writing nothing is a valid outcome | pending | 2026-09-10 |
 
 ---
 
@@ -232,4 +224,4 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `npm run lint` exits 0.
 - No feature mid-run when editing the orchestrator.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
-- A client-side test task completes without writing a probe file (the phase 48 fix holds).
+- Feature `01c70dcc` reaches a test report on retry-test without a commit (phase 49 fix verified in production).

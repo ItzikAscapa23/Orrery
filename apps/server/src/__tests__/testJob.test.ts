@@ -943,6 +943,87 @@ describe('runTestJob — TEST_PASS gate: authored files in git log (round-1 dura
   });
 });
 
+describe('runTestJob — empty staged set after lockfile unstaging → skips commit, reaches gate', () => {
+  it('skips git commit when only lockfiles were staged', async () => {
+    const { execFileSync } = await import('node:child_process');
+    let cachedCalls = 0;
+    vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+      const gitArgs = args[1] as string[];
+      if (gitArgs.includes('--porcelain')) return 'M package-lock.json\n';
+      if (gitArgs.includes('--cached') && gitArgs.includes('--name-only')) {
+        cachedCalls++;
+        return cachedCalls === 1 ? 'package-lock.json\n' : '';
+      }
+      if (gitArgs.includes('log')) return 'src/__tests__/feature.test.ts\n';
+      return '';
+    });
+
+    await runTestJob(featureId);
+
+    const commitCalls = vi
+      .mocked(execFileSync)
+      .mock.calls.filter((c) => (c[1] as string[]).includes('commit'));
+    expect(commitCalls).toHaveLength(0);
+
+    const events = await getPrisma().event.findMany({
+      where: { featureId },
+      orderBy: { seq: 'asc' },
+    });
+    const report = events.find((e) => e.type === 'test.report');
+    expect(report).toBeDefined();
+    const payload = report?.payload as { authored_passed?: number };
+    expect(payload.authored_passed ?? 0).toBeGreaterThan(0);
+
+    const feature = await getPrisma().feature.findUnique({ where: { id: featureId } });
+    expect(feature?.status).toBe('DONE');
+  });
+
+  it('still commits when non-lockfile test files are staged alongside lockfiles', async () => {
+    const testFilePath = 'src/__tests__/new.test.ts';
+    const absTestPath = `/tmp/test-worktrees/test-job-feature-demo-server-work/${testFilePath}`;
+
+    const { startContainer } = await import('../lib/container.js');
+    vi.mocked(startContainer).mockReturnValue({
+      name: 'test-container',
+      exec: vi.fn().mockResolvedValue({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          numPassedTests: 1,
+          numFailedTests: 0,
+          testResults: [
+            {
+              name: absTestPath,
+              assertionResults: [{ fullName: 'new test passes', status: 'passed', duration: 5 }],
+            },
+          ],
+        }),
+        stderr: '',
+      }),
+      stop: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const { execFileSync } = await import('node:child_process');
+    let cachedCalls = 0;
+    vi.mocked(execFileSync).mockImplementation((...args: unknown[]) => {
+      const gitArgs = args[1] as string[];
+      if (gitArgs.includes('--porcelain')) return `M package-lock.json\nA ${testFilePath}\n`;
+      if (gitArgs.includes('--cached') && gitArgs.includes('--name-only')) {
+        cachedCalls++;
+        return cachedCalls === 1 ? `package-lock.json\n${testFilePath}\n` : `${testFilePath}\n`;
+      }
+      if (gitArgs.includes('log')) return `${testFilePath}\n`;
+      return '';
+    });
+
+    await runTestJob(featureId);
+
+    const commitCalls = vi
+      .mocked(execFileSync)
+      .mock.calls.filter((c) => (c[1] as string[]).includes('commit'));
+    expect(commitCalls.length).toBeGreaterThan(0);
+  });
+});
+
 // ── C-4 + C-5 integration: file-based report ─────────────────────────────────
 
 const AUTHORED_TEST_FILE = 'src/__tests__/feature.test.ts';

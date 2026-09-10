@@ -927,25 +927,34 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
         .split('\n')
         .filter(Boolean);
 
-      await appendEvent(getPrisma(), featureId, {
-        type: 'agent.log',
-        agent: 'orchestrator',
-        severity: 'muted',
-        text:
-          `◦ staged ${stagedLines.length} test file(s): ` +
-          `${stagedLines.slice(0, 10).join(', ')}` +
-          (stagedLines.length > 10 ? ` … (+${stagedLines.length - 10} more)` : ''),
-      });
+      if (stagedLines.length > 0) {
+        await appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'orchestrator',
+          severity: 'muted',
+          text:
+            `◦ staged ${stagedLines.length} test file(s): ` +
+            `${stagedLines.slice(0, 10).join(', ')}` +
+            (stagedLines.length > 10 ? ` … (+${stagedLines.length - 10} more)` : ''),
+        });
 
-      gitCommit(worktreePath, `test: acceptance tests for feature\n\nX-Orrery-Agent: test`);
-      pushBranch(worktreePath, featureBranch);
+        gitCommit(worktreePath, `test: acceptance tests for feature\n\nX-Orrery-Agent: test`);
+        pushBranch(worktreePath, featureBranch);
 
-      await appendEvent(getPrisma(), featureId, {
-        type: 'agent.log',
-        agent: 'orchestrator',
-        severity: 'ok',
-        text: `✓ test files committed and pushed to ${featureBranch}`,
-      });
+        await appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'orchestrator',
+          severity: 'ok',
+          text: `✓ test files committed and pushed to ${featureBranch}`,
+        });
+      } else {
+        await appendEvent(getPrisma(), featureId, {
+          type: 'agent.log',
+          agent: 'orchestrator',
+          severity: 'ok',
+          text: '◦ no new test files staged; existing authored tests will be used for the gate',
+        });
+      }
     }
 
     // Compute the durable authored set from git log (files added by the orchestrator
