@@ -1824,3 +1824,45 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - A client-side test task completes without writing a probe file
+---
+## Phase 49 — Writing nothing is a valid outcome
+**Goal:** A test agent that correctly adds no files does not crash the job.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `159-skip-the-empty-commit` — R-59. The feature-level test job stages, then
+      commits unconditionally. On feature `01c70dcc` the agent read the existing
+      acceptance file (23,722 chars, authored by the task-level agent at turn 19),
+      ran it — `TESTS: 41 passed, 0 failed (1 file)` — ran the wider pattern —
+      `TESTS: 50 passed, 0 failed (2 files)` — and correctly concluded there was
+      nothing to add. Four turns, no probe files, sound judgement. The
+      orchestrator then committed with an empty staged set and the target repo's
+      pre-commit hook failed:
+      `Running Prettier on staged files... No relevant files staged, skipping Prett`
+      The job threw, and the feature stopped in TESTING with no test report, no
+      gate, and no park — nothing to approve and nothing to act on. Skip the
+      commit when nothing is staged
+- [ ] Zero new test files is the *expected* outcome at the final gate when the
+      task-level agents have already covered every covered task. Emit it as a
+      normal event — "no new test files authored; N existing authored tests
+      passed" — and let the gate proceed on the existing authored set. Do not
+      treat it as a failure and do not use `--no-verify`, which would disable the
+      target repo's own lint hook
+- [ ] Note the interaction that produced it: Phase 36 correctly unstages lockfile
+      drift from agent commits (`unstaged 3 lockfile(s) from agent commit`), and
+      on this run that left the staged set empty. Both behaviours are right; the
+      combination is unhandled
+- [ ] Tests, fail-first: an empty staged set skips the commit and the job
+      completes; a non-empty staged set still commits; the resulting event names
+      the count of pre-existing authored tests
+**Definition of Done:**
+- A test job with nothing to stage completes without invoking git commit
+- The feature reaches its test-report gate on the existing authored set
+- The no-new-files case is a distinct, non-error event
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1270 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+**Entry conditions for next phase:**
+- Feature `01c70dcc` reaches a test report on retry-test without a commit
