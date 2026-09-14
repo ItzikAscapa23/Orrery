@@ -238,7 +238,7 @@ as `covered: false` with a skip reason.
 | 49 | Writing nothing is a valid outcome | `8aa8dbb` | 2026-09-10 |
 | 50 | A call that never returns is not a running task | `44cea4f` | 2026-09-14 |
 | 51 | A test may not exercise its own stand-in | `575ef5c` | 2026-09-14 |
-| 52 | Client component coverage: decide, then act | pending | 2026-09-14 |
+| 52 | Client component coverage: decide, then act | `49130d4` | 2026-09-14 |
 
 ---
 
