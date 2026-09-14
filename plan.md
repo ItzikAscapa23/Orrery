@@ -1866,3 +1866,113 @@ npm run lint      # must stay clean (exit 0)
 ```
 **Entry conditions for next phase:**
 - Feature `01c70dcc` reaches a test report on retry-test without a commit
+---
+## Phase 50 — A call that never returns is not a running task
+**Goal:** No feature is stranded by a request with no deadline.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] `160-request-timeout` — R-48. Bedrock/Anthropic calls have no request
+      timeout. Feature `8cabb35c`: ten calls succeeded with cache reads climbing
+      17,590 → 20,555, the eleventh never returned. 26 minutes of silence, the
+      container idle on `sleep infinity`, the task still `running`, credentials
+      valid throughout. Feature `33b4d931`: four hours between the last event and
+      discovery, two containers alive, jobs 937 and 938 still in BullMQ's active
+      list. Set an explicit timeout on the API client and route it through
+      `bedrockPark`, which already handles environmental failure without
+      consuming a retry slot
+- [ ] `161-a-killed-process-releases-its-jobs` — recovery from both incidents
+      required manual surgery: kill the server, `docker rm -f` the containers,
+      `LREM bull:agent-jobs:active` per job id, then `UPDATE tasks SET
+      status='pending', bull_job_id=NULL`. A killed process leaves its job in
+      BullMQ's `active` list, so `taskReconciler` — which checks liveness against
+      that list — reports the job as running and skips the task. Redispatch does
+      not help either: it only resurrects `parked` tasks, and these were
+      `running`. State what the recovery path should be and implement it
+- [ ] Report the timeout value and its reasoning. A dev agent turn on the bff
+      repo legitimately runs minutes; the cap must not fire on healthy work. The
+      observed hangs were 26 minutes and 4 hours
+**Definition of Done:**
+- A request exceeding the timeout parks the task, without consuming a retry slot
+- A task whose job is stale is recoverable from the UI, with no Redis or
+  Postgres edits
+- Timeout value and reasoning recorded in HANDOVER.md
+**Verification:**
+```bash
+npm test          # baseline 92 files / 1272 tests — must not decrease
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+---
+## Phase 51 — A test may not exercise its own stand-in
+**Goal:** An acceptance test imports the implementation, not a fake the agent just wrote.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `162-no-self-authored-subjects` — R-58. On world-clock take-17 the test
+      agent wrote `src/__tests__/helpers/CountrySelectorStub.tsx` and
+      `ResultRegionStub.tsx`, then wrote acceptance tests importing those:
+      `country-selector.test.tsx:17` → `./helpers/CountrySelectorStub`,
+      `result-region.test.tsx:12` → `./helpers/ResultRegionStub`. The real
+      `src/components/CountrySelector.tsx` and `ResultRegion.tsx` existed and were
+      never imported. 28KB of tests, all green, verifying nothing. The review
+      agent caught it; four gates did not. Reject an agent-authored test that
+      imports a module the same agent authored in the same run
+- [ ] `163-mock-dirs-are-declared` — the exemption is per-repo vocabulary, not
+      orchestrator knowledge. Add `mock_dirs` to `RepoEntry`, e.g.
+      `["__mocks__", "fixtures"]`; a self-authored import under a declared mock
+      directory is allowed. Absent means no exemption. This follows
+      `probe_command` (Phase 19) and `review_charter` (Phase 21) — the rule lives
+      in Orrery, the vocabulary lives in the manifest
+- [ ] Do not adopt the broader rule "a test must import something outside the
+      test directory". An investigation of the bff suite found **145 of 231 files
+      (63%) have no relative import outside `test/`** — they reach implementation
+      through Prism HTTP or through layer package names like `dcs-apis`. That
+      rule would flag a working suite. The self-authored rule scores zero on the
+      same suite: its only intra-test imports are `__mocks__/`, `utils/`,
+      `dataMockFiles/` and one cross-scenario data file
+- [ ] Tests, fail-first: the take-17 shape is rejected; an import from a declared
+      mock dir is allowed; a repo with no `mock_dirs` still passes on a test that
+      imports only implementation
+**Definition of Done:**
+- An acceptance test importing a same-run self-authored module is rejected, with
+  the file and the import named
+- A `mock_dirs` import is not rejected
+- No bff test file would be rejected by this rule
+**Verification:**
+```bash
+npm test
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
+---
+## Phase 52 — Client component coverage: decide, then act
+**Goal:** Stop paying for a coverage mode that has never completed.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] Report first, no code. Client component tasks have been covered four times
+      and completed zero times, each failing differently: take-12 fake-timer
+      install order (46 turns); take-17 tests written against stubs; take-18 an
+      untestable CSS-layout task marked covered; and an earlier run lost to probe
+      loops from the then-broken `inspect_file`. Server tasks completed in every
+      one of those runs. Quantify it — for each of takes 10, 12, 13, 16, 17, 18:
+      covered client tasks, covered server tasks, outcome per task, cost
+- [ ] State whether anything in the four causes is now fixed. `inspect_file`
+      works as of Phase 48; the fake-timer fact is in the client repo's
+      `CLAUDE.md`; the stub rule is Phase 51. Only the untestable-task cause is
+      untouched, and Phase 45 already skips CSS layout — establish why take-18's
+      `App shell: header and page layout` was covered anyway
+- [ ] Recommend one of: keep client coverage and fix what remains; drop it and
+      make the light path the declared default for client repos; or make it a
+      per-repo manifest setting so the bank repos and the demo repos can differ.
+      Give the cost of each. take-16 covered server only and completed for ~$2;
+      take-13 covered five and reached $27
+- [ ] Do not implement the recommendation in this phase
+**Definition of Done:**
+- Per-take table recorded in HANDOVER.md with costs and outcomes
+- Each of the four causes marked fixed, partly fixed, or open
+- One recommendation stated with its cost
+**Verification:**
+```bash
+npm test
+npm run typecheck
+npm run lint      # must stay clean (exit 0)
+```
