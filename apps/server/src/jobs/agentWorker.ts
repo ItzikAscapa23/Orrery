@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import { env } from '../lib/env.js';
 import type { AgentJobPayload } from '../lib/queue.js';
 import { sweepOrphanContainers } from '../lib/container.js';
-import { resumeOrphanStalledFeatures } from '../lib/startupResume.js';
+import { resumeOrphanStalledFeatures, resetStaleRunningTasks } from '../lib/startupResume.js';
 import { runAwsReviewJob } from './awsReviewJob.js';
 import { runSimulate, runSimulateResume } from './simulatorJob.js';
 import { runPlannerJob } from './plannerJob.js';
@@ -36,6 +36,7 @@ export function startAgentWorker(): Worker<AgentJobPayload> {
   const connection = { host: url.hostname, port: Number(url.port || 6379) };
 
   void sweepOrphanContainers(); // remove leftover containers from a prior crash
+  void resetStaleRunningTasks(); // after sweep, any still-running task is provably stale
   void resumeOrphanStalledFeatures(); // resume IMPLEMENTING features stalled by orphan-parks
   try {
     validateProbeCommands();

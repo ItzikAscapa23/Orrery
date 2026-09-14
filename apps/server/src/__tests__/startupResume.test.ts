@@ -23,7 +23,7 @@ vi.mock('../lib/dispatch.js', () => ({
 
 import { getPrisma, disconnectPrisma } from '../lib/prisma.js';
 import { createFeature } from '../lib/features.js';
-import { resumeOrphanStalledFeatures } from '../lib/startupResume.js';
+import { resumeOrphanStalledFeatures, resetStaleRunningTasks } from '../lib/startupResume.js';
 import { dispatchUnblockedTasks } from '../lib/dispatch.js';
 
 let featureId: string;
@@ -121,5 +121,48 @@ describe('resumeOrphanStalledFeatures', () => {
     await resumeOrphanStalledFeatures();
 
     expect(dispatchUnblockedTasks).not.toHaveBeenCalled();
+  });
+});
+
+describe('resetStaleRunningTasks', () => {
+  it('resets running tasks to pending and clears bullJobId', async () => {
+    await makeTask({ status: 'running', title: 'stuck task' });
+    // patch bullJobId on the task (makeTask helper does not expose it)
+    await getPrisma().task.updateMany({
+      where: { featureId, status: 'running' },
+      data: { bullJobId: 'job-123' },
+    });
+
+    await resetStaleRunningTasks();
+
+    const tasks = await getPrisma().task.findMany({ where: { featureId } });
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.status).toBe('pending');
+    expect(tasks[0]?.bullJobId).toBeNull();
+  });
+
+  it('does not touch pending or parked tasks', async () => {
+    await makeTask({ status: 'pending', title: 'pending task' });
+    await makeTask({ status: 'parked', parkReason: 'orphan', title: 'parked task' });
+
+    await resetStaleRunningTasks();
+
+    const tasks = await getPrisma().task.findMany({
+      where: { featureId },
+      orderBy: { title: 'asc' },
+    });
+    const statuses = tasks.map((t) => t.status);
+    expect(statuses).toContain('parked');
+    expect(statuses).toContain('pending');
+    expect(statuses).not.toContain('running');
+  });
+
+  it('is a no-op when no tasks are running', async () => {
+    await makeTask({ status: 'pending', title: 'idle task' });
+
+    await expect(resetStaleRunningTasks()).resolves.toBeUndefined();
+
+    const tasks = await getPrisma().task.findMany({ where: { featureId } });
+    expect(tasks[0]?.status).toBe('pending');
   });
 });

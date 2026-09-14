@@ -22,6 +22,7 @@ import {
   createMessageStream,
   resetClientForTesting,
   withLastMessageCached,
+  REQUEST_TIMEOUT_MS,
 } from '../lib/anthropic.js';
 import type { UsageRecord } from '../lib/anthropic.js';
 
@@ -286,15 +287,19 @@ describe('withLastMessageCached', () => {
 });
 
 describe('createMessageStream', () => {
-  it('calls messages.stream with given params and returns the stream', async () => {
+  it('calls messages.stream with given params and the request timeout', async () => {
     const params = {
       model: 'claude-3-5-sonnet-20241022' as const,
       max_tokens: 100,
       messages: [{ role: 'user' as const, content: 'Hello' }],
     };
     const stream = await createMessageStream(params);
-    expect(mockStream).toHaveBeenCalledWith(params);
+    expect(mockStream).toHaveBeenCalledWith(params, { timeout: REQUEST_TIMEOUT_MS });
     expect(stream).toBe(mockStreamObj);
+  });
+
+  it('REQUEST_TIMEOUT_MS is 15 minutes', () => {
+    expect(REQUEST_TIMEOUT_MS).toBe(15 * 60 * 1000);
   });
 
   it('logs usage when the message event fires on the stream', async () => {

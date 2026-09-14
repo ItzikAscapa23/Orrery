@@ -2,6 +2,29 @@ import { getPrisma } from './prisma.js';
 import { dispatchUnblockedTasks } from './dispatch.js';
 
 /**
+ * After sweepOrphanContainers() kills all containers from the prior process,
+ * every task still in 'running' state is provably stale — its container no
+ * longer exists. Reset them to pending so the reconciler and startup sweep can
+ * dispatch them normally.
+ *
+ * Called at worker startup between sweepOrphanContainers and resumeOrphanStalledFeatures.
+ */
+export async function resetStaleRunningTasks(): Promise<void> {
+  const count = await getPrisma().task.updateMany({
+    where: { status: 'running' },
+    data: { status: 'pending', bullJobId: null },
+  });
+  if (count.count > 0) {
+    console.error(
+      JSON.stringify({
+        event: 'startup_stale_tasks_reset',
+        count: count.count,
+      }),
+    );
+  }
+}
+
+/**
  * On worker startup, scan for IMPLEMENTING features whose tasks are all
  * parked-by-orphan (parkReason === 'orphan') with no genuine failures.
  * These tasks were parked by a previous reconciler run after a crash and

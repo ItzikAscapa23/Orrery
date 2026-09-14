@@ -14,6 +14,7 @@ export function isEnvironmentalBedrockError(err: unknown): boolean {
   return (
     msg.startsWith('bedrock credentials expired') ||
     msg.startsWith('bedrock unreachable') ||
+    msg.startsWith('request timed out') ||
     (status === 503 && (msg.includes('file blocked') || msg.includes('503 file blocked')))
   );
 }

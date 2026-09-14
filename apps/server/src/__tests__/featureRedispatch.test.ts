@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 process.env['ANTHROPIC_API_KEY'] = 'test-key';
 process.env['ARTIFACTS_REPO_PATH'] = '/tmp/test-artifacts';
 
-const { mockEnqueueJob } = vi.hoisted(() => ({
+const { mockEnqueueJob, mockGetQueue } = vi.hoisted(() => ({
   mockEnqueueJob: vi.fn().mockResolvedValue(undefined),
+  mockGetQueue: vi.fn(),
 }));
 
 vi.mock('../lib/queue.js', () => ({
   enqueueJob: mockEnqueueJob,
-  getQueue: vi.fn(),
+  getQueue: mockGetQueue,
   closeQueue: vi.fn(),
 }));
 
@@ -244,5 +245,62 @@ describe('POST /features/:id/redispatch', () => {
     const task = await getPrisma().task.findFirst({ where: { featureId } });
     expect(task?.status).toBe('pending');
     expect(task?.attemptCount).toBe(1);
+  });
+
+  it('releases stuck-running tasks: removes their BullMQ job and transitions to pending', async () => {
+    const mockRemove = vi.fn().mockResolvedValue(undefined);
+    mockGetQueue.mockReturnValue({
+      getJob: vi.fn().mockResolvedValue({ remove: mockRemove }),
+      getActive: vi.fn().mockResolvedValue([]),
+      getWaiting: vi.fn().mockResolvedValue([]),
+      getDelayed: vi.fn().mockResolvedValue([]),
+    });
+
+    const task = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Stuck running task',
+        description: 'Was running when server died.',
+        specRefs: [],
+        dependsOn: [],
+        status: 'running',
+        bullJobId: 'job-stuck-42',
+      },
+    });
+
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/redispatch` });
+    expect(res.statusCode).toBe(200);
+
+    // BullMQ job was removed
+    expect(mockRemove).toHaveBeenCalledOnce();
+
+    // Task ends up pending (reconciler reset it after job removal)
+    const updated = await getPrisma().task.findUnique({ where: { id: task.id } });
+    expect(updated?.status).toBe('pending');
+    expect(updated?.bullJobId).toBeNull();
+  });
+
+  it('does not call getJob when no running tasks exist', async () => {
+    const mockGetJob = vi.fn();
+    mockGetQueue.mockReturnValue({ getJob: mockGetJob });
+
+    // Only a parked task — no running
+    await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Parked task',
+        description: 'desc',
+        specRefs: [],
+        dependsOn: [],
+        status: 'parked',
+      },
+    });
+
+    await app.inject({ method: 'POST', url: `/features/${featureId}/redispatch` });
+    expect(mockGetJob).not.toHaveBeenCalled();
   });
 });

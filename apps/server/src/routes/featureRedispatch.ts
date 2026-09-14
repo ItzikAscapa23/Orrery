@@ -4,6 +4,7 @@ import { getPrisma } from '../lib/prisma.js';
 import { dispatchForState } from '../lib/dispatch.js';
 import { appendEvent } from '../lib/events.js';
 import { reconcileOrphanedTasks } from '../lib/taskReconciler.js';
+import { getQueue } from '../lib/queue.js';
 import type { PlanProposedTask } from '@orrery/shared';
 
 /**
@@ -104,6 +105,20 @@ export async function featureRedispatchRoutes(app: FastifyInstance): Promise<voi
           }
         }
       }
+    }
+
+    // Force-release running tasks: operator explicitly requested recovery, so
+    // remove their BullMQ jobs even if still in BullMQ active state (e.g. the
+    // lockDuration window has not yet expired after a hard kill). After removal,
+    // reconcileOrphanedTasks() will see them as absent from the live set and
+    // reset them to pending.
+    const stuckRunningTasks = await getPrisma().task.findMany({
+      where: { featureId: feature.id, status: 'running', bullJobId: { not: null } },
+      select: { id: true, bullJobId: true },
+    });
+    for (const task of stuckRunningTasks) {
+      const job = await getQueue().getJob(task.bullJobId!);
+      if (job) await job.remove().catch(() => {}); // no-op if already gone
     }
 
     // Pre-park any zombie tasks stuck in 'running' with no live BullMQ job.

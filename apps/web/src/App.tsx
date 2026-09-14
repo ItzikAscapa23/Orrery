@@ -46,7 +46,7 @@ export function App() {
     [events, tasks],
   );
   const showRedispatch =
-    tasks.some((t) => t.status === 'parked') &&
+    tasks.some((t) => t.status === 'parked' || t.status === 'running') &&
     (runState.currentPhase === 'IMPLEMENTING' || runState.currentPhase === 'LIGHT_IMPLEMENTING');
   const usageEventCount = useMemo(
     () => events.filter((e) => e.payload.type === 'usage.recorded').length,

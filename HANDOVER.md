@@ -56,15 +56,16 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 49 — Writing nothing is a valid outcome
-- **State:** `complete`
-- **Last updated:** 2026-09-10
+- **Current phase:** 51 — A test may not exercise its own stand-in
+- **State:** `in-progress`
+- **Last updated:** 2026-09-14
 
 ---
 
 ## Current phase progress
 
-*No phase 50 spec written yet. The next handover will populate this.*
+- [ ] `162-no-self-authored-subjects` — reject acceptance tests that import same-run self-authored modules
+- [ ] `163-mock-dirs-are-declared` — add `mock_dirs` to `RepoEntry`; self-authored imports under declared mock dirs are allowed
 
 ---
 
@@ -72,13 +73,30 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1272 passed across 92 files**, 2026-09-10 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-10 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-10 |
+| `npm test` (repo root) | passed — **1285 passed across 93 files**, 2026-09-14 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-14 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-14 |
 
 ---
 
 ## Decisions
+
+- **Phase 50: REQUEST_TIMEOUT_MS = 900 000 ms (15 min) on all Anthropic stream calls (`160`)** —
+  Passes `{ timeout: REQUEST_TIMEOUT_MS }` as the second arg to `c.messages.stream(...)`.
+  Exported constant so tests assert the value without magic numbers. Classified as
+  environmental in `isEnvironmentalBedrockError()` (`msg.startsWith('request timed out')`)
+  so a hung call parks the task without consuming a retry slot.
+  Reasoning: longest healthy turn observed well under 10 min; 15 min fires at 58% of
+  the 26-min observed hang.
+
+- **Phase 50: Two-prong stale-job recovery (`161`)** —
+  Prong A: `resetStaleRunningTasks()` in `startupResume.ts` runs after
+  `sweepOrphanContainers()` at startup — every `running` task is provably stale once
+  all containers are gone. Prong B: `featureRedispatch.ts` calls `job.remove()` on
+  any BullMQ job still listed as active before `reconcileOrphanedTasks()`, then the
+  existing reset loop transitions those tasks to `pending`. UI REDISPATCH button now
+  enables when any task is `running` (not only `parked`) in an
+  IMPLEMENTING/LIGHT_IMPLEMENTING feature.
 
 - **Phase 49: empty staged set after lockfile unstaging skips git commit (`159`)** —
   `testJob.ts` previously called `gitCommit` unconditionally inside the
@@ -86,9 +104,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   Phase 36's lockfile unstaging drains the staged set to empty, `git commit` exited
   non-zero (target repo's pre-commit hook: "No relevant files staged"). Fix: wrap the
   staged-file log + `gitCommit` + `pushBranch` in `if (stagedLines.length > 0)`;
-  the `else` branch emits an `agent.log` with `severity: ok`. The durable authored-file
-  computation and `_advanceTestPass()` run unchanged in both branches — the feature
-  advances on the existing `git log` authored set.
+  the `else` branch emits an `agent.log` with `severity: ok`.
 
 - **Phase 48: `inspect_file` now passes a container-relative path (`156`)** —
   `testAgent.ts:844` previously called `container.exec(`node ${absPath}`)` where
@@ -98,31 +114,16 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   `realpathSync` is needed because macOS `/tmp` → `/private/tmp` symlink otherwise
   causes `path.relative` to return a traversal path.
 
-- **Phase 48: regression test simulates Docker failure mode (`157`)** —
-  New test provides a mock `ContainerHandle` whose `exec` rejects absolute paths. A
-  plain mock that ignores the path would not catch a regression.
-
 - **Phase 47: failure message cap scaled by failure count (`153`)** —
   `formatTestSummary` changed `t.message.slice(0, 200)` to
   `slice(0, failed <= 3 ? 4000 : 200)`. A one-failure run now returns the full diff.
-  High-failure runs keep the compact form.
 
 - **Phase 47: console output appended to test summaries (`154`)** —
   `summarizeBashTestRun` appends `\nCONSOLE:\n<tail>` (2048 chars). Jest: from
-  `rawCombined`. Vitest: from per-file `message` fields (vitest stdout is empty when
-  `--outputFile` is set).
-
-- **Phase 47: `inspect_file` tool added to test agent (`155`)** —
-  Agents built probe files eight times to print a runtime value. `inspect_file(path)`
-  runs `node <rel_path>` and returns stdout, path-jailed via `checkReadAllowed`.
-  `node ` was already in `ALLOWED_PREFIXES` — no allowlist changes needed.
+  `rawCombined`. Vitest: from per-file `message` fields.
 
 - **Phase 46: reporter-flag stripping is mechanical, not prompt-based (`152`)** —
   `--reporter`, `--outputFile`, `--json` stripped at the harness layer.
-  `--reporter=verbose` was requested 14 times despite the rules block forbidding it.
-
-- **Phase 46: `SCRATCH_FILE_RE` extended to match `probe` (`151`)** —
-  `/(?:debug|scratch|probe)(?![a-zA-Z0-9])/i` at `testJob.ts:72`.
 
 - **Phase 42: brief hashes computed by orchestrator (`136`–`138`)** —
   Agent writes paths-only comment; orchestrator hashes the files and rewrites the
@@ -215,6 +216,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 47 | The agent can read a value | `f0e408b` | 2026-09-08 |
 | 48 | inspect_file actually runs the file | `4ba82b5` | 2026-09-09 |
 | 49 | Writing nothing is a valid outcome | `8aa8dbb` | 2026-09-10 |
+| 50 | A call that never returns is not a running task | pending | 2026-09-14 |
 
 ---
 
@@ -224,4 +226,3 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - `npm run lint` exits 0.
 - No feature mid-run when editing the orchestrator.
 - Worker commit verified — `worker_registered` in the server log carries the SHA.
-- Feature `01c70dcc` reaches a test report on retry-test without a commit (phase 49 fix verified in production).

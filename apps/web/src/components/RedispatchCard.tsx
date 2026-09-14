@@ -50,7 +50,7 @@ export function RedispatchCard({ featureId, onAction }: RedispatchCardProps) {
             textTransform: 'uppercase',
           }}
         >
-          Tasks Parked
+          Tasks Parked or Stuck
         </span>
       </div>
 
@@ -63,7 +63,8 @@ export function RedispatchCard({ featureId, onAction }: RedispatchCardProps) {
           lineHeight: 1.45,
         }}
       >
-        One or more tasks are parked. Redispatch to retry them with a fresh attempt budget.
+        One or more tasks are parked or stuck running. Redispatch to release them and retry with a
+        fresh attempt budget.
       </div>
 
       {error !== null && (

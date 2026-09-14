@@ -15,12 +15,15 @@ export interface UsageRecord {
   cache_read_input_tokens?: number;
 }
 
+/** 15-minute cap on each API call. Covers the full stream, not just connection time. */
+export const REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
+
 // Minimal interface shared by both Anthropic and AnthropicBedrock clients.
 // Both expose the same .messages.create / .messages.stream surface.
 interface MessagesClient {
   messages: {
     create(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message>;
-    stream(params: Anthropic.MessageStreamParams): MessageStream;
+    stream(params: Anthropic.MessageStreamParams, options?: { timeout?: number }): MessageStream;
   };
 }
 
@@ -172,10 +175,10 @@ export async function createMessageStream(
 ): Promise<MessageStream> {
   try {
     const c = await getClient();
-    const stream = c.messages.stream({
-      ...params,
-      model: normaliseModelId(params.model),
-    });
+    const stream = c.messages.stream(
+      { ...params, model: normaliseModelId(params.model) },
+      { timeout: REQUEST_TIMEOUT_MS },
+    );
     stream.on('message', (msg: Anthropic.Message) => {
       const streamUsage = msg.usage as UsageWithCache;
       const record: UsageRecord = {
