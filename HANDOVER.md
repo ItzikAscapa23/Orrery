@@ -235,7 +235,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 48 | inspect_file actually runs the file | `4ba82b5` | 2026-09-09 |
 | 49 | Writing nothing is a valid outcome | `8aa8dbb` | 2026-09-10 |
 | 50 | A call that never returns is not a running task | `44cea4f` | 2026-09-14 |
-| 51 | A test may not exercise its own stand-in | pending | 2026-09-14 |
+| 51 | A test may not exercise its own stand-in | `575ef5c` | 2026-09-14 |
 
 ---
 
