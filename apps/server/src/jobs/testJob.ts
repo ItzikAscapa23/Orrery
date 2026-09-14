@@ -118,6 +118,64 @@ export function getAuthoredTestFiles(worktreePath: string, testDir: string): str
     .filter((f) => f && TEST_FILE_RE.test(f) && !SCRATCH_FILE_RE.test(path.basename(f)));
 }
 
+function extractRelativeImports(content: string): string[] {
+  const specifiers: string[] = [];
+  const fromRe = /\bfrom\s+['"](\.[^'"]+)['"]/g;
+  const requireRe = /require\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = fromRe.exec(content)) !== null) specifiers.push(m[1]!);
+  while ((m = requireRe.exec(content)) !== null) specifiers.push(m[1]!);
+  return specifiers;
+}
+
+function resolveRelativeImport(
+  testFile: string,
+  importSpec: string,
+  stagedSet: Set<string>,
+): string | null {
+  const base = path.normalize(path.join(path.dirname(testFile), importSpec));
+  const candidates = [
+    base,
+    base + '.ts',
+    base + '.tsx',
+    base + '.js',
+    base + '.jsx',
+    base + '/index.ts',
+    base + '/index.tsx',
+    base + '/index.js',
+  ];
+  for (const c of candidates) {
+    if (stagedSet.has(c)) return c;
+  }
+  return null;
+}
+
+export function detectSelfAuthoredSubjects(
+  worktreePath: string,
+  stagedFiles: string[],
+  mockDirs: string[],
+): Array<{ testFile: string; importPath: string; resolvedFile: string }> {
+  const stagedSet = new Set(stagedFiles);
+  const violations: Array<{ testFile: string; importPath: string; resolvedFile: string }> = [];
+  for (const testFile of stagedFiles) {
+    if (!TEST_FILE_RE.test(testFile)) continue;
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(worktreePath, testFile), 'utf-8');
+    } catch {
+      continue;
+    }
+    for (const imp of extractRelativeImports(content)) {
+      const resolved = resolveRelativeImport(testFile, imp, stagedSet);
+      if (!resolved) continue;
+      const inMockDir = mockDirs.some((dir) => resolved.split('/').includes(dir));
+      if (inMockDir) continue;
+      violations.push({ testFile, importPath: imp, resolvedFile: resolved });
+    }
+  }
+  return violations;
+}
+
 export function extractDescribeBlocks(worktreePath: string, relPath: string): string[] {
   try {
     const content = fs.readFileSync(path.join(worktreePath, relPath), 'utf-8');
@@ -928,6 +986,30 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
         .filter(Boolean);
 
       if (stagedLines.length > 0) {
+        const selfAuthoredViolations = detectSelfAuthoredSubjects(
+          worktreePath,
+          stagedLines,
+          repoEntry.mock_dirs ?? [],
+        );
+        if (selfAuthoredViolations.length > 0) {
+          git(worktreePath, 'reset', 'HEAD');
+          for (const v of selfAuthoredViolations) {
+            await appendEvent(getPrisma(), featureId, {
+              type: 'agent.log',
+              agent: 'orchestrator',
+              severity: 'action',
+              text: `· rejected: ${v.testFile} imports same-run authored stand-in "${v.importPath}" (${v.resolvedFile})`,
+            });
+          }
+          await _handleSelfAuthoredSubjects(
+            featureId,
+            specRev,
+            selfAuthoredViolations.length,
+            priorTestRounds,
+          );
+          return;
+        }
+
         await appendEvent(getPrisma(), featureId, {
           type: 'agent.log',
           agent: 'orchestrator',
@@ -1241,6 +1323,62 @@ async function _handleNoAuthoredTests(
     agent: 'test',
     severity: 'action',
     text: '· no authored test files detected — re-dispatching test agent (round 0 of 1); the gate requires at least one new test file committed by the test agent',
+  });
+  await appendEvent(getPrisma(), featureId, {
+    type: 'agent.status',
+    agent: 'test',
+    status: 'done',
+  });
+
+  await dispatchJob(featureId, 'test');
+}
+
+async function _handleSelfAuthoredSubjects(
+  featureId: string,
+  specRev: number,
+  violationCount: number,
+  priorTestRounds: number,
+): Promise<void> {
+  const syntheticFinding: import('@orrery/shared').TestFinding = {
+    id: 'self-authored-subjects',
+    severity: 'blocker',
+    test_name: '(self-authored subjects)',
+    section: 'acceptance tests',
+    issue: `${violationCount} test file(s) import a module authored in the same run — tests must exercise the implementation, not stand-ins.`,
+  };
+
+  await appendEvent(getPrisma(), featureId, {
+    type: 'test.report',
+    agent: 'test',
+    spec_rev: specRev,
+    passed: null,
+    failed: 1,
+    authored_passed: 0,
+    authored_failed: 0,
+    findings: [syntheticFinding],
+  });
+
+  if (priorTestRounds >= 1) {
+    await appendEvent(getPrisma(), featureId, {
+      type: 'gate.opened',
+      gate: 'test_report',
+      summary: 'Test files import same-run authored stand-ins — human review required',
+      revision: specRev,
+      counts: { blockers: 1, warnings: 0, suggestions: 0 },
+    });
+    await appendEvent(getPrisma(), featureId, {
+      type: 'agent.status',
+      agent: 'test',
+      status: 'waiting',
+    });
+    return;
+  }
+
+  await appendEvent(getPrisma(), featureId, {
+    type: 'agent.log',
+    agent: 'test',
+    severity: 'action',
+    text: '· tests import same-run authored stand-ins — re-dispatching test agent (round 0 of 1)',
   });
   await appendEvent(getPrisma(), featureId, {
     type: 'agent.status',

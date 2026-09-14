@@ -18,6 +18,7 @@ import {
   getExistingTestFilesWithDescribes,
   isSharedInfraPath,
   SCRATCH_FILE_RE,
+  detectSelfAuthoredSubjects,
 } from './testJob.js';
 import {
   runTestAgent,
@@ -428,6 +429,46 @@ export async function runTaskTestJob(
           severity: 'muted',
           text: `◦ unstaged ${scratchOrBriefStaged.length} scratch/brief file(s) from agent commit: ${scratchOrBriefStaged.join(', ')}`,
         });
+      }
+
+      const stagedAfterUnstage = git(worktreePath, 'diff', '--cached', '--name-only')
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+
+      const selfAuthoredViolations = detectSelfAuthoredSubjects(
+        worktreePath,
+        stagedAfterUnstage,
+        repoEntry.mock_dirs ?? [],
+      );
+      if (selfAuthoredViolations.length > 0) {
+        git(worktreePath, 'reset', 'HEAD');
+        for (const v of selfAuthoredViolations) {
+          await appendEvent(getPrisma(), featureId, {
+            type: 'agent.log',
+            agent: 'orchestrator',
+            severity: 'action',
+            text: `· rejected: ${v.testFile} imports same-run authored stand-in "${v.importPath}" (${v.resolvedFile})`,
+          });
+        }
+        await getPrisma().task.update({
+          where: { id: taskId },
+          data: { status: 'parked', parkReason: 'self_authored_subjects', bullJobId: null },
+        });
+        await appendEvent(getPrisma(), featureId, {
+          type: 'task.failed',
+          repo: task.repo,
+          task_id: taskId,
+          reason: `test files import ${selfAuthoredViolations.length} same-run authored stand-in(s) — use REDISPATCH to retry`,
+          attempt: task.testTaskAttempts + 1,
+          final: false,
+        });
+        await appendEvent(getPrisma(), featureId, {
+          type: 'agent.status',
+          agent: 'test',
+          status: 'failed',
+        });
+        return;
       }
 
       const commitMessage = [

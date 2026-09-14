@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 51 — A test may not exercise its own stand-in
+- **Current phase:** 52 — Client component coverage: decide, then act
 - **State:** `in-progress`
 - **Last updated:** 2026-09-14
 
@@ -64,8 +64,9 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-- [ ] `162-no-self-authored-subjects` — reject acceptance tests that import same-run self-authored modules
-- [ ] `163-mock-dirs-are-declared` — add `mock_dirs` to `RepoEntry`; self-authored imports under declared mock dirs are allowed
+- [ ] Report first, no code: for takes 10, 12, 13, 16, 17, 18 — covered client tasks, covered server tasks, outcome per task, cost
+- [ ] State whether each of the four failure causes is now fixed (inspect_file, fake-timer, stub rule, untestable-task)
+- [ ] Recommend one option: keep client coverage, drop it, or make it a per-repo manifest setting — with cost
 
 ---
 
@@ -73,13 +74,30 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1285 passed across 93 files**, 2026-09-14 |
+| `npm test` (repo root) | passed — **1288 passed across 93 files**, 2026-09-14 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-14 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-14 |
 
 ---
 
 ## Decisions
+
+- **Phase 51: `detectSelfAuthoredSubjects` uses `stagedSet.has()` not `fs.existsSync` (`162`)** —
+  The check only needs to know whether an imported file was staged in the same run.
+  Checking `stagedSet.has(candidate)` (with common extension variants) is O(1) per
+  candidate, requires no disk access, and produces zero false positives. A file not
+  in `stagedSet` is never flagged regardless of what's on disk.
+
+- **Phase 51: `mock_dirs` matched by directory name, not path prefix (`163`)** —
+  `resolved.split('/').includes(dir)` matches any directory segment named `helpers`
+  (e.g. `src/__tests__/helpers/MyStub.tsx`) without requiring a full path in the
+  manifest. Consistent with how `probe_command` and `review_charter` work: the rule
+  lives in Orrery, the vocabulary in the manifest.
+
+- **Phase 51: bounce-back from `_handleSelfAuthoredSubjects` mirrors `_handleNoAuthoredTests`** —
+  Round 0 re-dispatches; round 1+ opens `test_report` gate for human review. This is
+  the right recovery path because the violation is a test-quality defect, not an
+  infrastructure failure — the operator should see it rather than retrying forever.
 
 - **Phase 50: REQUEST_TIMEOUT_MS = 900 000 ms (15 min) on all Anthropic stream calls (`160`)** —
   Passes `{ timeout: REQUEST_TIMEOUT_MS }` as the second arg to `c.messages.stream(...)`.
@@ -217,6 +235,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 48 | inspect_file actually runs the file | `4ba82b5` | 2026-09-09 |
 | 49 | Writing nothing is a valid outcome | `8aa8dbb` | 2026-09-10 |
 | 50 | A call that never returns is not a running task | `44cea4f` | 2026-09-14 |
+| 51 | A test may not exercise its own stand-in | pending | 2026-09-14 |
 
 ---
 

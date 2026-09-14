@@ -153,6 +153,7 @@ import {
   extractDescribeBlocks,
   getExistingTestFilesWithDescribes,
   getAuthoredTestFiles,
+  detectSelfAuthoredSubjects,
 } from '../jobs/testJob.js';
 import { getRepoEntry } from '../jobs/devJob.js';
 import type { FastifyInstance } from 'fastify';
@@ -1391,5 +1392,50 @@ describe('getExistingTestFilesWithDescribes', () => {
     expect(getExistingTestFilesWithDescribes('/wt', '__tests__')).toEqual([
       { path: '__tests__/suite.test.ts', describes: ['my suite'] },
     ]);
+  });
+});
+
+describe('detectSelfAuthoredSubjects', () => {
+  beforeEach(() => {
+    mockReadFileSync.mockReturnValue('');
+  });
+
+  it('rejects a test that imports a same-run authored stand-in (take-17 shape)', () => {
+    const stagedFiles = [
+      'src/__tests__/country.test.tsx',
+      'src/__tests__/helpers/CountrySelectorStub.tsx',
+    ];
+    mockReadFileSync.mockReturnValueOnce(
+      `import CountrySelectorStub from './helpers/CountrySelectorStub';\n`,
+    );
+    const violations = detectSelfAuthoredSubjects('/wt', stagedFiles, []);
+    expect(violations).toEqual([
+      {
+        testFile: 'src/__tests__/country.test.tsx',
+        importPath: './helpers/CountrySelectorStub',
+        resolvedFile: 'src/__tests__/helpers/CountrySelectorStub.tsx',
+      },
+    ]);
+  });
+
+  it('allows a self-authored import that falls under a declared mock dir', () => {
+    const stagedFiles = [
+      'src/__tests__/country.test.tsx',
+      'src/__tests__/helpers/CountrySelectorStub.tsx',
+    ];
+    mockReadFileSync.mockReturnValueOnce(
+      `import CountrySelectorStub from './helpers/CountrySelectorStub';\n`,
+    );
+    const violations = detectSelfAuthoredSubjects('/wt', stagedFiles, ['helpers']);
+    expect(violations).toEqual([]);
+  });
+
+  it('does not reject a test that imports only non-staged implementation files', () => {
+    const stagedFiles = ['src/__tests__/country.test.tsx'];
+    mockReadFileSync.mockReturnValueOnce(
+      `import CountrySelector from '../../components/CountrySelector';\n`,
+    );
+    const violations = detectSelfAuthoredSubjects('/wt', stagedFiles, []);
+    expect(violations).toEqual([]);
   });
 });

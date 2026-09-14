@@ -112,6 +112,7 @@ export interface RepoEntry {
   bootstrap?: string; // custom install command; when set, replaces the npm ci path
   max_turns?: number;
   review_charter?: string; // path to operator charter file; absence skips AWS review
+  mock_dirs?: string[]; // directory names whose self-authored imports are allowed (e.g. ['__mocks__', 'fixtures'])
 }
 
 export function getRepoEntry(repoId: string): RepoEntry {
