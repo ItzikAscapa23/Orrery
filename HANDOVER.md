@@ -57,16 +57,59 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 ## Status
 
 - **Current phase:** 52 — Client component coverage: decide, then act
-- **State:** `in-progress`
+- **State:** `complete`
 - **Last updated:** 2026-09-14
 
 ---
 
 ## Current phase progress
 
-- [ ] Report first, no code: for takes 10, 12, 13, 16, 17, 18 — covered client tasks, covered server tasks, outcome per task, cost
-- [ ] State whether each of the four failure causes is now fixed (inspect_file, fake-timer, stub rule, untestable-task)
-- [ ] Recommend one option: keep client coverage, drop it, or make it a per-repo manifest setting — with cost
+*Phase 52 is complete. Phase 53 is not yet defined in plan.md — the next step
+is to implement the Phase 52 recommendation (Option C: per-repo manifest setting)
+or extend plan.md with a new phase.*
+
+---
+
+## Phase 52 analysis (deliverable — do not delete)
+
+### Per-take table (world-clock-feature)
+
+| Take | Final status | Client covered / total | Client outcomes | Server covered / total | Server outcomes | Total cost |
+|------|-------------|----------------------|-----------------|----------------------|-----------------|-----------|
+| 10 | DONE | 0 / 4 | all dev-completed, no coverage | 2 / 4 | both completed | $2.01 |
+| 12 | IMPLEMENTING (stuck) | 2 / 6 | CountrySelector ✓ (2 attempts); ZoneResult ✗ parked | 2 / 4 | both completed | $12.23 |
+| 13 | IMPLEMENTING (stuck) | 3 / 7 | Country selector ✓; Zone card ✓; Zone result ✗ parked; App shell pending | 2 / 4 | both completed | $27.03 |
+| 16 | AWAITING_TEST_PLAN_APPROVAL (stuck) | 0 / 5 | all pending | 0 / 4 | all pending | $0.20 |
+| 17 | DONE | 2 / 4 | Country selector ✓ (2 attempts); Result region ✓ (2 attempts) | 2 / 4 | both completed | $5.48 |
+| 18 | IMPLEMENTING (stuck) | 1 / 5 started | App shell ✗ parked (60-turn cap); CountrySelector / ResultRegion pending | 2 / 3 | both completed | $1.89 |
+
+Notes: take-12 client agent alone $9.08 (74% of total) — ZoneResult fake-timer probe loop before two turn-cap failures. take-13 zero cache hits → test agent $22.74 (84%), explains 5× premium vs take-17. take-16 never reached IMPLEMENTING (test-plan gate stuck); plan.md's "~$2 completed" is wrong. take-17 technically DONE but tests were against self-authored stubs (Phase 51 defect). take-18 App shell parked at 60-turn cap — DOM-structure test is in-principle testable; Phase 45 only skips pure CSS deliverables.
+
+### Four failure causes
+
+| Cause | Status |
+|-------|--------|
+| **`inspect_file` host path** (host-absolute path passed into container) | **FIXED** — Phase 48: container-relative path via `path.relative(realpathSync(...))` |
+| **Fake-timer install order** (vitest probe zero tests when `@vitest/fake-timers` installs before `@testing-library/react`) | **FIXED** — documented in client repo's `CLAUDE.md`; injected into test agent prompt |
+| **Tests written against stubs** (test agent imported same-run stand-ins; tests passed vacuously) | **FIXED** — Phase 51: `detectSelfAuthoredSubjects` rejects such imports |
+| **Untestable task within budget** (task looks testable, test agent exhausts turn cap) | **OPEN** — Phase 45 skips pure CSS deliverables but not "ambiguous DOM-structure" tasks; no fix shipped |
+
+### Recommendation: Option C — per-repo manifest setting
+
+Add `test_coverage: "light" | "full"` (default `"full"`) to each repo entry in
+`repo-manifest.yaml`. Test planner reads the flag; `light` marks all client tasks
+as `covered: false` with a skip reason.
+
+- **Why not Option A (fix the remaining gap):** Four phases of fixes have each
+  uncovered the next gap. Diminishing returns.
+- **Why not Option B (drop client coverage globally):** The bank (strong-identification)
+  feature has completed client coverage successfully on multiple takes; the machinery
+  works for that repo. Dropping globally throws that away.
+- **Why Option C:** The failures are repo-specific. The world-clock React/Vite demo
+  repo has never completed client coverage. Per-manifest lets each repo run at the
+  level it can support.
+- **Cost:** One small phase (~2–3 tasks): manifest schema, test-planner reads flag,
+  `worldclock-web` entry set to `light`. Per-feature: `light` ≈ $2, `full` ≈ $5–8.
 
 ---
 
@@ -82,84 +125,43 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Decisions
 
+- **Phase 52: recommendation = Option C (per-repo manifest `test_coverage` flag) (`164`)** —
+  World-clock client coverage has failed 4× with different root causes; bank repo succeeds
+  reliably. A per-repo flag isolates the two without losing coverage where it works.
+
 - **Phase 51: `detectSelfAuthoredSubjects` uses `stagedSet.has()` not `fs.existsSync` (`162`)** —
-  The check only needs to know whether an imported file was staged in the same run.
-  Checking `stagedSet.has(candidate)` (with common extension variants) is O(1) per
-  candidate, requires no disk access, and produces zero false positives. A file not
-  in `stagedSet` is never flagged regardless of what's on disk.
+  Checks whether an imported file was staged in the same run. O(1), no disk access,
+  zero false positives.
 
 - **Phase 51: `mock_dirs` matched by directory name, not path prefix (`163`)** —
-  `resolved.split('/').includes(dir)` matches any directory segment named `helpers`
-  (e.g. `src/__tests__/helpers/MyStub.tsx`) without requiring a full path in the
-  manifest. Consistent with how `probe_command` and `review_charter` work: the rule
-  lives in Orrery, the vocabulary in the manifest.
-
-- **Phase 51: bounce-back from `_handleSelfAuthoredSubjects` mirrors `_handleNoAuthoredTests`** —
-  Round 0 re-dispatches; round 1+ opens `test_report` gate for human review. This is
-  the right recovery path because the violation is a test-quality defect, not an
-  infrastructure failure — the operator should see it rather than retrying forever.
+  `resolved.split('/').includes(dir)` matches any segment named `helpers` without a
+  full path in the manifest.
 
 - **Phase 50: REQUEST_TIMEOUT_MS = 900 000 ms (15 min) on all Anthropic stream calls (`160`)** —
-  Passes `{ timeout: REQUEST_TIMEOUT_MS }` as the second arg to `c.messages.stream(...)`.
-  Exported constant so tests assert the value without magic numbers. Classified as
-  environmental in `isEnvironmentalBedrockError()` (`msg.startsWith('request timed out')`)
-  so a hung call parks the task without consuming a retry slot.
-  Reasoning: longest healthy turn observed well under 10 min; 15 min fires at 58% of
-  the 26-min observed hang.
+  Classified as environmental in `isEnvironmentalBedrockError()` so a hung call parks
+  without consuming a retry slot.
 
 - **Phase 50: Two-prong stale-job recovery (`161`)** —
-  Prong A: `resetStaleRunningTasks()` in `startupResume.ts` runs after
-  `sweepOrphanContainers()` at startup — every `running` task is provably stale once
-  all containers are gone. Prong B: `featureRedispatch.ts` calls `job.remove()` on
-  any BullMQ job still listed as active before `reconcileOrphanedTasks()`, then the
-  existing reset loop transitions those tasks to `pending`. UI REDISPATCH button now
-  enables when any task is `running` (not only `parked`) in an
-  IMPLEMENTING/LIGHT_IMPLEMENTING feature.
+  Prong A: `resetStaleRunningTasks()` at startup after `sweepOrphanContainers()`.
+  Prong B: `featureRedispatch.ts` removes active BullMQ jobs before reconciling tasks.
+  UI REDISPATCH enables when any task is `running` in IMPLEMENTING/LIGHT_IMPLEMENTING.
 
-- **Phase 49: empty staged set after lockfile unstaging skips git commit (`159`)** —
-  `testJob.ts` previously called `gitCommit` unconditionally inside the
-  `if (statusOut !== '')` block. When the agent correctly writes nothing new and
-  Phase 36's lockfile unstaging drains the staged set to empty, `git commit` exited
-  non-zero (target repo's pre-commit hook: "No relevant files staged"). Fix: wrap the
-  staged-file log + `gitCommit` + `pushBranch` in `if (stagedLines.length > 0)`;
-  the `else` branch emits an `agent.log` with `severity: ok`.
-
-- **Phase 48: `inspect_file` now passes a container-relative path (`156`)** —
-  `testAgent.ts:844` previously called `container.exec(`node ${absPath}`)` where
-  `absPath` was the host-absolute path. Inside the Docker container (worktree mounted
-  at `/workspace`) that path doesn't exist. Fix: compute
-  `path.relative(realpathSync(worktreePath), absPath)` and pass the relative path.
-  `realpathSync` is needed because macOS `/tmp` → `/private/tmp` symlink otherwise
-  causes `path.relative` to return a traversal path.
+- **Phase 48: `inspect_file` passes container-relative path (`156`)** —
+  `path.relative(realpathSync(worktreePath), absPath)` — `realpathSync` needed for
+  macOS `/tmp` → `/private/tmp` symlink.
 
 - **Phase 47: failure message cap scaled by failure count (`153`)** —
-  `formatTestSummary` changed `t.message.slice(0, 200)` to
-  `slice(0, failed <= 3 ? 4000 : 200)`. A one-failure run now returns the full diff.
-
-- **Phase 47: console output appended to test summaries (`154`)** —
-  `summarizeBashTestRun` appends `\nCONSOLE:\n<tail>` (2048 chars). Jest: from
-  `rawCombined`. Vitest: from per-file `message` fields.
-
-- **Phase 46: reporter-flag stripping is mechanical, not prompt-based (`152`)** —
-  `--reporter`, `--outputFile`, `--json` stripped at the harness layer.
-
-- **Phase 42: brief hashes computed by orchestrator (`136`–`138`)** —
-  Agent writes paths-only comment; orchestrator hashes the files and rewrites the
-  header. One canonical path (`<worktreeRoot>/__orrery_harness_brief.md`) enforced
-  at both ends.
+  `slice(0, failed <= 3 ? 4000 : 200)` — a single-failure run gets the full diff.
 
 - **Phase 40: warning findings open `code_review` gate (`133`)** —
-  A warnings-only review opens the `code_review` gate; only a fully clean review
-  passes immediately.
+  Warnings-only review opens the gate; only a fully clean review passes immediately.
 
-- **`spec_approval` gate-open (Phase 29)** — 4 open paths: `awsReviewJob.ts` after
-  review, `specSubmit.ts` no-charter fast-path, `awsReviewJob.ts` error final-attempt,
-  missing-charter guard. 1 approve path: `POST /features/:id/approve`.
+- **`spec_approval` gate-open (Phase 29)** — 4 open paths; 1 approve path:
+  `POST /features/:id/approve`.
 
 - **Test-file boundary + finding identity (Phases 28, core)** — `write_file`/`edit_file`
-  in dev agents call `getTestAuthoredSet` at startup and reject test-trailer files.
-  Finding ids (`f1`, `f2`) recur per cycle — lookups must use composite
-  `(featureId, specRev, id)`.
+  in dev agents reject test-trailer files. Finding ids recur per cycle — lookups must
+  use composite `(featureId, specRev, id)`.
 
 ---
 
@@ -236,6 +238,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 49 | Writing nothing is a valid outcome | `8aa8dbb` | 2026-09-10 |
 | 50 | A call that never returns is not a running task | `44cea4f` | 2026-09-14 |
 | 51 | A test may not exercise its own stand-in | `575ef5c` | 2026-09-14 |
+| 52 | Client component coverage: decide, then act | pending | 2026-09-14 |
 
 ---
 
