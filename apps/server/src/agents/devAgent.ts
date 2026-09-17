@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
 import { createMessageStream, withLastMessageCached } from '../lib/anthropic.js';
 import type { UsageRecord } from '../lib/anthropic.js';
@@ -126,6 +127,27 @@ const READ_FILE_TOOL: Anthropic.Tool = {
         type: 'number',
         description:
           'Last line to return (1-based, inclusive). Omitted or beyond EOF → last line of file.',
+      },
+    },
+    required: ['path'],
+  },
+};
+
+const INSPECT_FILE_TOOL: Anthropic.Tool = {
+  name: 'inspect_file',
+  description:
+    'Run a .js or .mjs file with node and return its stdout. ' +
+    'Use this to print runtime values without writing assertions. ' +
+    'Path must be inside the repository worktree. ' +
+    'Write console.log statements in the file, then call inspect_file to read them. ' +
+    'Output is capped at 8 KB / 200 lines — truncation is shown as a prefix message.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      path: {
+        type: 'string',
+        description:
+          'File path relative to repo root — must be a .js or .mjs file inside the worktree.',
       },
     },
     required: ['path'],
@@ -408,6 +430,12 @@ export function buildSystemPrompt(task: DevTask, ctx: DevContext): string {
     'editing it. Supply start_line and end_line (1-based, inclusive) to read a slice — slices are returned in full.',
     'Whole-file output is capped at 200 lines / 8 KB.',
     '',
+    '**inspect_file(path)** — Run a .js or .mjs file with node and return its stdout.',
+    'Use this to observe runtime values: write console.log(value) in the file, then call inspect_file.',
+    'Output is capped at 8 KB / 200 lines — truncation is shown as a prefix message.',
+    'Never write a sentinel assertion like expect(x).toBe(999) to read x —',
+    'that is a workaround for a missing channel. Use inspect_file with console.log instead.',
+    '',
     '**bash(command)** — Run a single shell command. Use only for: npx jest / npx vitest run (not npm test — see Rules),',
     'npm run lint, npm run typecheck, read-only exploration',
     '(cat, ls, find, grep, head, tail, wc, pwd), and running scripts with node <file>.',
@@ -530,6 +558,7 @@ export async function runDevAgent(
   let violationCount = 0;
   const nonProgressThreshold = env.NON_PROGRESS_THRESHOLD;
   const recentToolHashes: string[] = [];
+  let lastWrittenHash: string | undefined;
 
   while (turn < maxTurns) {
     turn++;
@@ -564,6 +593,7 @@ export async function runDevAgent(
           WRITE_FILE_TOOL,
           EDIT_FILE_TOOL,
           READ_FILE_TOOL,
+          INSPECT_FILE_TOOL,
           PROPOSE_AMENDMENT_TOOL,
           REPORT_BLOCKED_TOOL,
         ],
@@ -663,6 +693,7 @@ export async function runDevAgent(
             const absPath = resolveWorktreePath(worktreePath, filePath);
             fs.mkdirSync(path.dirname(absPath), { recursive: true });
             fs.writeFileSync(absPath, content, 'utf-8');
+            lastWrittenHash = createHash('sha256').update(content).digest('hex');
             result = `Written ${filePath} (${content.length} bytes)`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
@@ -740,6 +771,7 @@ export async function runDevAgent(
               continue;
             }
             fs.writeFileSync(absPath, current.replace(old_str, new_str), 'utf-8');
+            lastWrittenHash = createHash('sha256').update(new_str).digest('hex');
             result = `Edited ${filePath} (${old_str.length} → ${new_str.length} chars)`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
@@ -861,6 +893,31 @@ export async function runDevAgent(
               conflictingAssertion: conflicting_assertion,
               taskId: task.id,
             };
+          } else if (block.name === 'inspect_file') {
+            const { path: filePath = '' } = block.input as { path?: string };
+            callPath = filePath;
+            const absPath = resolveWorktreePath(worktreePath, filePath);
+            let realWorktreeRoot = worktreePath;
+            try {
+              realWorktreeRoot = fs.realpathSync.native(worktreePath);
+            } catch {
+              /* ok */
+            }
+            const containerRelPath = path.relative(realWorktreeRoot, absPath);
+            const execResult = await container.exec(`node ${containerRelPath}`);
+            const raw =
+              [execResult.stdout, execResult.stderr].filter(Boolean).join('\n') || '(no output)';
+            result = truncateOutput(raw);
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+            if (onToolCall)
+              await onToolCall({
+                turn,
+                toolName: 'inspect_file',
+                resultSize: result.length,
+                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
+                path: filePath,
+              });
+            continue;
           } else {
             result = `Unknown tool: ${block.name}`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
@@ -995,6 +1052,7 @@ export async function runDevAgent(
         toolName,
         fullCommand,
         firstLine,
+        lastWrittenHash,
       );
       if (npErr) throw npErr;
 
@@ -1048,6 +1106,7 @@ export async function runLightDevAgent(
 
   const nonProgressThreshold = env.NON_PROGRESS_THRESHOLD;
   const recentToolHashes: string[] = [];
+  let lastWrittenHash: string | undefined;
 
   let turn = 0;
 
@@ -1123,6 +1182,7 @@ export async function runLightDevAgent(
             const absPath = resolveWorktreePath(worktreePath, filePath);
             fs.mkdirSync(path.dirname(absPath), { recursive: true });
             fs.writeFileSync(absPath, content, 'utf-8');
+            lastWrittenHash = createHash('sha256').update(content).digest('hex');
             result = `Written ${filePath} (${content.length} bytes)`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
@@ -1197,6 +1257,7 @@ export async function runLightDevAgent(
               continue;
             }
             fs.writeFileSync(absPath, current.replace(old_str, new_str), 'utf-8');
+            lastWrittenHash = createHash('sha256').update(new_str).digest('hex');
             result = `Edited ${filePath} (${old_str.length} → ${new_str.length} chars)`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
@@ -1301,6 +1362,7 @@ export async function runLightDevAgent(
         toolNameLight,
         fullCommandLight,
         firstLineLight,
+        lastWrittenHash,
       );
       if (npErrLight) throw npErrLight;
 

@@ -177,4 +177,72 @@ describe('checkNonProgress', () => {
       NonProgressError,
     );
   });
+
+  // --- task 176 fail-first: modified file does not trigger stop ---
+
+  it('repeated command against modified file does not increment counter — phase 55 fix', () => {
+    const buf: string[] = [];
+    // Each run uses a different lastWrittenHash (file was rewritten between runs) — should never fire.
+    expect(
+      checkNonProgress(
+        buf,
+        result('TESTS: 0 passed, 1 failed'),
+        N,
+        'bash',
+        CMD,
+        'TESTS: 0 passed, 1 failed',
+        'hash-v1',
+      ),
+    ).toBeNull();
+    expect(
+      checkNonProgress(
+        buf,
+        result('TESTS: 0 passed, 1 failed'),
+        N,
+        'bash',
+        CMD,
+        'TESTS: 0 passed, 1 failed',
+        'hash-v2',
+      ),
+    ).toBeNull();
+    expect(
+      checkNonProgress(
+        buf,
+        result('TESTS: 0 passed, 1 failed'),
+        N,
+        'bash',
+        CMD,
+        'TESTS: 0 passed, 1 failed',
+        'hash-v3',
+      ),
+    ).toBeNull();
+  });
+
+  it('repeated command against unmodified file still fires — N consecutive with same lastWrittenHash', () => {
+    const buf: string[] = [];
+    // Same command, same lastWrittenHash each time (file was not modified) — should fire.
+    for (let i = 0; i < N - 1; i++) {
+      expect(
+        checkNonProgress(
+          buf,
+          result('TESTS: 0 passed, 1 failed'),
+          N,
+          'bash',
+          CMD,
+          'TESTS: 0 passed, 1 failed',
+          'hash-v1',
+        ),
+      ).toBeNull();
+    }
+    const err = checkNonProgress(
+      buf,
+      result('TESTS: 0 passed, 1 failed'),
+      N,
+      'bash',
+      CMD,
+      'TESTS: 0 passed, 1 failed',
+      'hash-v1',
+    );
+    expect(err).toBeInstanceOf(NonProgressError);
+  });
 });

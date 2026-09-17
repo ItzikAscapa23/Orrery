@@ -568,6 +568,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     repoEntry.id,
   );
   const worktreePath = worktreeInfo.worktreePath;
+  const priorAttemptDiff = git(worktreePath, 'diff', 'HEAD').trim() || undefined;
   git(worktreePath, 'checkout', '.');
   git(worktreePath, 'clean', '-fd');
   await appendEvent(getPrisma(), featureId, {
@@ -721,6 +722,7 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
         ...(maxTurns !== undefined ? { maxTurns } : {}),
         ...(repoEntry.probe_command ? { probeCommand: repoEntry.probe_command } : {}),
         ...(existingTestFiles.length > 0 ? { existingTestFiles } : {}),
+        ...(priorAttemptDiff ? { priorAttemptDiff } : {}),
       },
       container,
       worktreePath,

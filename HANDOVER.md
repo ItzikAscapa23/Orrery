@@ -28,65 +28,66 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 **Key directories:**
 - `apps/server/src/lib/` — orchestrator, events, container, anthropic, spendGuard
-  - `vacuousAssertions.ts` — `detectVacuousAssertions`; detects vacuous, sole-assertion-vacuous, unguarded-forEach
-  - `harnessbrief.ts` — `loadHarnessBrief`, `injectHarnessBriefHashes`, `checkHarnessBriefFreshness`
-  - `repoOrientation.ts` — `generateRepoOrientation()`, includes vendored-package + API-spec sections
   - `nonProgressError.ts` — `NonProgressError` class + `checkNonProgress()` helper
+  - `testOutputSummary.ts` — `summarizeBashTestRun`, `extractConsoleOutput`
+  - `repoOrientation.ts` — `generateRepoOrientation()`
   - `bedrockPark.ts` — `parkTaskOnBedrockFailure`, `isEnvironmentalBedrockError`
-  - `testOutputSummary.ts` — `summarizeBashTestRun`, `toJsonReporterCommand`, `extractProbeFlags`, `extractConsoleOutput`
 - `apps/server/src/jobs/` — devJob, testJob, taskTestJob, createAdoPrJob, agentWorker
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derived from folding the event log
 - `packages/shared/` — event payload schemas; `docs/agents/repo-manifest.yaml` — operator config
-- `scripts/orientation-probe.ts` — measure orientation block size for a given repo path
 
 **Conventions:**
 - No default exports. Zod for all external input. No `any` without a comment.
 - Commit format `feat|fix|chore(scope): description`.
 - Every Anthropic call goes through `lib/anthropic.ts`.
-- Transitions only through the orchestrator; each persists status and appends
-  `phase.changed` in the same transaction.
-- One task = one brief. Briefs carry evidence, numbered requirements, fail-first
-  tests, and an acceptance block.
+- One task = one brief. Briefs carry evidence, numbered requirements, fail-first tests, acceptance block.
 - **Backlog entries in `docs/phase-6.md` are deleted on close, not annotated.**
-  The phase commit is the evidence for each closed item, reachable via the phase
-  log table below.
 
 ---
 
 ## Status
 
-- **Current phase:** 54 — A retry starts warmer than the attempt before it
+- **Current phase:** 55 — The agent can ask a question
 - **State:** `complete`
-- **Last updated:** 2026-09-17
+- **Last updated:** 2026-09-18
 
 ---
 
 ## Current phase progress
 
-*Phase 54 complete. No Phase 55 defined yet — awaiting new spec.*
+*Phase 55 complete. Awaiting Phase 56 spec.*
+
+---
+
+## Output-path audit (Phase 55 deliverable)
+
+| Path | Mechanism | Cap | Truncation visible? |
+|---|---|---|---|
+| Test run summary | `formatTestSummary` via `summarizeBashTestRun` | 4000 chars / 200 chars (4+ failures); `parseTestOutput` pre-caps stored msgs at 300 chars | Yes — `FAILURES:` section |
+| Console in test run | `extractConsoleOutput` → `CONSOLE:` section | 2048 chars | Silent tail, no notice |
+| `inspect_file` result | `truncateOutput` | 8 KB / 200 lines | Yes — `(truncated…)` prefix |
+| Bash non-test result | `truncateOutput` | 8 KB / 200 lines | Yes — `(truncated…)` prefix |
+| `agent.log` event | `resultFirstLine` | 120 chars | No — first line only |
+| `test.report` findings | `parseTestOutput` → DB | 300 chars per message | No — stored truncated |
+| Host-side exec diagnostic | partial stderr | 300 chars | No |
+
+Notable gap: full tool-result bodies never reach the DB — only `resultFirstLine` (120 chars) is persisted in `agent.log` events.
 
 ---
 
 ## Guard/release audit (Phase 53 deliverable)
 
-All park reasons in the orchestrator, their guards, and whether the release path
-clears the state the guard reads.
-
 | Park reason | Guard reads | Release route | Clears guard state? |
 |---|---|---|---|
-| `spend_limit` | `usage.recorded` event count since last `gate.resolved` anchor | `POST /features/:id/spend-gate` (appends `gate.resolved`) | **YES** — after Phase 53 fix; anchor advances the count window |
-| `bedrock_unreachable` | connectivity at job run time | REDISPATCH (reset status; job re-runs) | YES — guard re-evaluates on next job |
-| `failure` | prior agent outcome (non-environmental) | REDISPATCH (`attemptCount` reset) | YES — fresh attempt |
-| `non_progress` | recent writes to worktree in current run | REDISPATCH | YES — next job starts fresh |
-| `allowlist_violation` | allowlist at job run time | REDISPATCH | YES — guard re-evaluates |
-| `self_authored_subjects` | imported subjects vs staged set | REDISPATCH | YES — next run has a different staged set |
-| `orphan` | heartbeat absence | auto-resumed at startup (`startupResume.ts`) | YES — auto-cleared to `pending` |
-| `orphan_cap` | orphan count ≥ 3 | REDISPATCH only (no auto) | YES — REDISPATCH resets `parkReason` |
-
-Before Phase 53: `spend_limit` was the only park reason whose release path never
-updated the state the guard reads. Fixed by scoping the `$queryRaw` to
-`seq > MAX(gate.resolved.seq)` for the task.
+| `spend_limit` | `usage.recorded` events since last `gate.resolved` anchor | `POST /features/:id/spend-gate` | **YES** — Phase 53 fix |
+| `bedrock_unreachable` | connectivity at job run time | REDISPATCH | YES — re-evaluates on next job |
+| `failure` | prior agent outcome | REDISPATCH (`attemptCount` reset) | YES — fresh attempt |
+| `non_progress` | recent writes in current run | REDISPATCH | YES — next job starts fresh |
+| `allowlist_violation` | allowlist at run time | REDISPATCH | YES — re-evaluates |
+| `self_authored_subjects` | imported subjects vs staged set | REDISPATCH | YES — different staged set |
+| `orphan` | heartbeat absence | auto-resumed at startup (`startupResume.ts`) | YES — auto-cleared |
+| `orphan_cap` | orphan count ≥ 3 | REDISPATCH only | YES — resets `parkReason` |
 
 ---
 
@@ -94,23 +95,23 @@ updated the state the guard reads. Fixed by scoping the `$queryRaw` to
 
 ### Per-take table (world-clock-feature)
 
-| Take | Final status | Client covered / total | Client outcomes | Server covered / total | Server outcomes | Total cost |
-|------|-------------|----------------------|-----------------|----------------------|-----------------|-----------|
-| 10 | DONE | 0 / 4 | all dev-completed, no coverage | 2 / 4 | both completed | $2.01 |
-| 12 | IMPLEMENTING (stuck) | 2 / 6 | CountrySelector ✓ (2 attempts); ZoneResult ✗ parked | 2 / 4 | both completed | $12.23 |
-| 13 | IMPLEMENTING (stuck) | 3 / 7 | Country selector ✓; Zone card ✓; Zone result ✗ parked; App shell pending | 2 / 4 | both completed | $27.03 |
-| 16 | AWAITING_TEST_PLAN_APPROVAL (stuck) | 0 / 5 | all pending | 0 / 4 | all pending | $0.20 |
-| 17 | DONE | 2 / 4 | Country selector ✓ (2 attempts); Result region ✓ (2 attempts) | 2 / 4 | both completed | $5.48 |
-| 18 | IMPLEMENTING (stuck) | 1 / 5 started | App shell ✗ parked (60-turn cap); CountrySelector / ResultRegion pending | 2 / 3 | both completed | $1.89 |
+| Take | Final status | Client covered / total | Server covered / total | Total cost |
+|------|-------------|----------------------|----------------------|-----------|
+| 10 | DONE | 0 / 4 | 2 / 4 | $2.01 |
+| 12 | IMPLEMENTING (stuck) | 2 / 6 | 2 / 4 | $12.23 |
+| 13 | IMPLEMENTING (stuck) | 3 / 7 | 2 / 4 | $27.03 |
+| 16 | AWAITING_TEST_PLAN_APPROVAL (stuck) | 0 / 5 | 0 / 4 | $0.20 |
+| 17 | DONE | 2 / 4 | 2 / 4 | $5.48 |
+| 18 | IMPLEMENTING (stuck) | 1 / 5 started | 2 / 3 | $1.89 |
 
 ### Four failure causes
 
 | Cause | Status |
 |-------|--------|
-| **`inspect_file` host path** | **FIXED** — Phase 48 |
-| **Fake-timer install order** | **FIXED** — documented in client repo's `CLAUDE.md` |
-| **Tests written against stubs** | **FIXED** — Phase 51: `detectSelfAuthoredSubjects` |
-| **Untestable task within budget** | **OPEN** — no fix shipped |
+| `inspect_file` host path | FIXED — Phase 48 |
+| Fake-timer install order | FIXED — documented in client repo's `CLAUDE.md` |
+| Tests written against stubs | FIXED — Phase 51 |
+| Untestable task within budget | OPEN — no fix shipped |
 
 ### Recommendation: Option C — per-repo manifest `test_coverage` flag
 
@@ -124,85 +125,62 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1312 passed across 95 files**, 2026-09-17 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-17 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-17 |
+| `npm test` (repo root) | passed — **1314 passed across 95 files**, 2026-09-18 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-18 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-18 |
 
 ---
 
 ## Decisions
 
-- **Phase 54: prior-attempt diff carried in memory, no schema change (`167`)** —
-  `priorAttemptDiff` captured via `git diff HEAD` immediately before
-  `git checkout . && git clean -fd`. Passed through `DevContext` and injected as
-  a `## Prior attempt` section in `buildSystemPrompt`, capped at 6000 chars.
-  No artifact file, no DB column — pure in-memory carry. Avoids schema migration
-  and keeps the diff ephemeral (not retained across restarts).
+- **Phase 55: `inspect_file` is the agent print channel (`172–174`)** —
+  Already existed in `testAgent.ts` since Phase 48; added identical implementation
+  to `devAgent.ts`. Chose over console passthrough (test-run-only, 2048-char cap,
+  unreachable from dev agent). Sentinel assertions (`expect(x).toBe(999)`) are now
+  prohibited in rules blocks of both agents; `inspect_file` with `console.log` is
+  the sanctioned channel.
 
-- **Phase 54: scratch-file stripping is host-side + agent rule, not allowlist change (`168`)** —
-  `devJob.ts` strips files matching `SCRATCH_FILE_RE` (same regex as `testJob.ts`)
-  after `git add -A` at commit time. `devAgent.ts` rule block tells the agent
-  not to clean up scratch files. Chosen over adding `rm` to the allowlist:
-  the allowlist boundary is a security constraint; agent education + silent host
-  strip is sufficient and adds zero attack surface.
+- **Phase 55: `checkNonProgress` includes `lastWrittenHash` in hash (`176`)** —
+  Hash now covers `fullCommand + (lastWrittenHash ?? '')`. Same command after
+  file rewrite → different hash → counter doesn't fire. Same command, unchanged
+  file → same hash → fires after N (Phase 41 invariant preserved). Phase 37 invariant
+  (distinct commands same output) unaffected. `lastWrittenHash` is tracked in both
+  dev and test agent loops after each `write_file`/`edit_file` success.
+
+- **Phase 55: `priorAttemptDiff` extended to test agent (`177`)** —
+  `testJob.ts` captures `git diff HEAD` before worktree reset on every attempt
+  (empty string → `undefined` on a fresh worktree). Passed through `TestAgentContext`.
+  Injected identically to `devAgent.ts` as a `## Prior attempt` section capped at
+  6000 chars. No `attempt` counter needed — the diff is naturally empty on attempt 1.
+
+- **Phase 54: prior-attempt diff in memory only (`167`)** —
+  `priorAttemptDiff` in `DevContext` — no DB column, no artifact file, ephemeral.
+
+- **Phase 54: scratch-file stripping is host-side + agent rule (`168`)** —
+  `devJob.ts` strips `SCRATCH_FILE_RE` files after `git add -A`. Chosen over
+  allowlist change to avoid widening the security boundary.
 
 - **Phase 54: `git rev-parse` validity check in `createWorktree` (`169`)** —
-  `git rev-parse --git-dir` for the bare-repo path, `--is-inside-work-tree` for
-  the worktree path. On failure, `rmSync` + let the normal creation path run.
-  Simple, idempotent, tested with real git repos.
+  `--git-dir` for bare repo, `--is-inside-work-tree` for worktree; on failure `rmSync` + recreate.
 
 - **Phase 54: `showRedispatch` checks `parked` only, not `running` (`170`)** —
-  Removed `t.status === 'running'` from the `App.tsx` condition.
-  Orphaned running tasks are auto-recovered by `reconcileOrphanedTasks` every 60s;
-  `featureRedispatch.ts` also handles them reactively when the button is clicked.
-  The banner clears as soon as REDISPATCH dispatches work.
-
-- **Phase 54: `toSlug` exported, regression tests added (`171`)** —
-  Current implementation is correct (applies `replace` before `slice`). Exported
-  for direct testing. Five regression tests guard against the leading-char loss
-  observed in take-14 paths. Root cause of historical artifact is not recoverable
-  from squashed history.
-
-- **Phase 54: `vi.mock` for `devAgent.js` upgraded to `importOriginal` (`devJobProbe.test.ts`)** —
-  The factory previously replaced the entire module; `buildSystemPrompt` was
-  unreachable. Now uses `importOriginal` to pass through all pure exports;
-  only `runDevAgent` and `measurePromptSections` are mocked. Same fix applied to
-  `container.js` (needed `ALLOWED_COMMANDS_HINT`) and `testJob.js` in
-  `devJobAcceptance.test.ts` (needed `SCRATCH_FILE_RE`).
+  Orphaned running tasks are auto-recovered; banner clears on REDISPATCH.
 
 - **Phase 53: spend guard counts after `gate.resolved` anchor (`164`)** —
-  Scope `$queryRaw` to `seq > COALESCE(MAX(gate.resolved.seq), 0)` for the task.
-  Each RESUME grants one fresh `SPEND_GUARD_MAX_TURNS` window. Zero-migration fix.
-
-- **Phase 53: noop result asserts zero failures before throwing (`165`)** —
-  `assessNoopResult(ParsedTestOutput): 'pass'|'fail'` extracted from the noop branch.
+  `$queryRaw` scoped to `seq > COALESCE(MAX(gate.resolved.seq), 0)`. Zero-migration.
 
 - **Phase 53: `depAlreadyHasTests` skips test-agent dispatch (`166`)** —
-  If any same-repo dependency already has `testsWritten=true`, the covered task
-  routes directly to dev. Reads `testsWritten` from the already-loaded task array.
+  If any same-repo dependency has `testsWritten=true`, covered task routes directly to dev.
 
-- **Phase 52: recommendation = Option C (per-repo manifest `test_coverage` flag) (`164`)** —
-  World-clock client coverage has failed 4× with different root causes.
+- **Phase 52: recommendation = Option C (per-repo manifest `test_coverage` flag)** —
+  World-clock client coverage failed 4× with different root causes.
 
-- **Phase 51: `detectSelfAuthoredSubjects` uses `stagedSet.has()` not `fs.existsSync` (`162`)** —
-  O(1), no disk access, zero false positives.
+- **Phase 51: `detectSelfAuthoredSubjects` uses `stagedSet.has()` (`162`)** —
+  O(1), no disk access, zero false positives on imported subject detection.
 
-- **Phase 50: REQUEST_TIMEOUT_MS = 900 000 ms (15 min) on all Anthropic stream calls (`160`)** —
-  Classified as environmental in `isEnvironmentalBedrockError()`.
-
-- **Phase 48: `inspect_file` passes container-relative path (`156`)** —
-  `path.relative(realpathSync(worktreePath), absPath)` — `realpathSync` needed for
-  macOS `/tmp` → `/private/tmp` symlink.
-
-- **Phase 40: warning findings open `code_review` gate (`133`)** —
-  Warnings-only review opens the gate; only a fully clean review passes immediately.
-
-- **`spec_approval` gate-open (Phase 29)** — 4 open paths; 1 approve path:
-  `POST /features/:id/approve`.
-
-- **Test-file boundary + finding identity (Phases 28, core)** — `write_file`/`edit_file`
-  in dev agents reject test-trailer files. Finding ids recur per cycle — lookups must
-  use composite `(featureId, specRev, id)`.
+- **Test-file boundary + finding identity (Phases 28, core)** —
+  `write_file`/`edit_file` in dev agents reject test-trailer files. Finding ids recur
+  per cycle — lookups must use composite `(featureId, specRev, id)`.
 
 ---
 
@@ -282,6 +260,7 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 | 52 | Client component coverage: decide, then act | `49130d4` | 2026-09-14 |
 | 53 | A guard and its override must read the same state | `a70e02f` | 2026-09-17 |
 | 54 | A retry starts warmer than the attempt before it | `d63e5b8` | 2026-09-17 |
+| 55 | The agent can ask a question | TBD | 2026-09-18 |
 
 ---
 

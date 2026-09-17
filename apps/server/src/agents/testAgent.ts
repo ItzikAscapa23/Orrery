@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
 import { createMessageStream, withLastMessageCached } from '../lib/anthropic.js';
 import type { UsageRecord } from '../lib/anthropic.js';
@@ -192,7 +193,8 @@ const INSPECT_FILE_TOOL: Anthropic.Tool = {
     'Run a .js or .mjs file with node and return its stdout. ' +
     'Use this to print runtime values without writing assertions. ' +
     'Path must be inside the test directory. ' +
-    'Write console.log statements in the file, then call inspect_file to read them.',
+    'Write console.log statements in the file, then call inspect_file to read them. ' +
+    'Output is capped at 8 KB / 200 lines — truncation is shown as a prefix message.',
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -422,6 +424,10 @@ export interface TestAgentContext {
   // Optional: test files already authored by the test agent for this feature.
   // When populated, the system prompt instructs the agent to extend rather than duplicate.
   existingTestFiles?: { path: string; describes: string[] }[];
+  // Optional: git diff from the prior attempt before the worktree was reset.
+  // When set, the system prompt shows what the prior attempt established so the
+  // agent can build on it rather than starting from zero (Phase 55 task 177).
+  priorAttemptDiff?: string;
 }
 
 export type TestAgentOutcome = { kind: 'completed' };
@@ -464,6 +470,19 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
           '',
         ]
       : []),
+    ...(ctx.priorAttemptDiff
+      ? [
+          '## Prior attempt',
+          'A prior attempt at this task made the following uncommitted changes before hitting the turn cap.',
+          'Review them — they may contain test setup, configuration, or partial coverage worth reusing.',
+          'The worktree was reset to HEAD before this attempt began.',
+          '',
+          '```diff',
+          ctx.priorAttemptDiff.slice(0, 6000),
+          '```',
+          '',
+        ]
+      : []),
     '## Rules',
     `- Write test files ONLY to the test directory: ${ctx.testDir}/`,
     '- Do not import from src/, lib/, app/, or any implementation directory.',
@@ -494,6 +513,9 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     `**inspect_file(path)** — Run a .js or .mjs file with node and return its stdout.`,
     `Write console.log statements in the file, then call inspect_file to read them.`,
     `Path must be inside ${ctx.testDir}/. No assertions required — this is for printing values.`,
+    `Output is capped at 8 KB / 200 lines — truncation is shown as a prefix message.`,
+    `Never write a sentinel assertion like expect(callCount).toBe(999) to read callCount —`,
+    `that is a workaround for a missing channel. Use inspect_file with console.log instead.`,
     '',
     '**bash(command)** — Run a test-runner command only.',
     `Allowed: ${TEST_BASH_ALLOWED_PREFIXES.join(', ')}.`,
@@ -579,6 +601,7 @@ export async function runTestAgent(
   let violationCount = 0;
   const nonProgressThreshold = env.NON_PROGRESS_THRESHOLD;
   const recentToolHashes: string[] = [];
+  let lastWrittenHash: string | undefined;
 
   while (turn < maxTurns) {
     turn++;
@@ -701,6 +724,7 @@ export async function runTestAgent(
             const absPath = checkWriteAllowed(worktreePath, filePath, ctx.testDir);
             fs.mkdirSync(path.dirname(absPath), { recursive: true });
             fs.writeFileSync(absPath, content, 'utf-8');
+            lastWrittenHash = createHash('sha256').update(content).digest('hex');
             result = `Written ${filePath} (${content.length} bytes)`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
@@ -766,6 +790,7 @@ export async function runTestAgent(
               continue;
             }
             fs.writeFileSync(absPath, current.replace(old_str, new_str), 'utf-8');
+            lastWrittenHash = createHash('sha256').update(new_str).digest('hex');
             result = `Edited ${filePath} (${old_str.length} → ${new_str.length} chars)`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
             if (onToolCall)
@@ -990,6 +1015,7 @@ export async function runTestAgent(
         toolName,
         fullCommand,
         firstLine,
+        lastWrittenHash,
       );
       if (npErr) throw npErr;
 
