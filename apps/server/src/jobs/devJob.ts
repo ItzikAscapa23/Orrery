@@ -56,6 +56,7 @@ import {
   detectJsonCommand,
   findingsFromTests,
   TEST_REPORT_FILE,
+  type ParsedTestOutput,
 } from './testJob.js';
 import { formatTestSummary } from '../lib/testOutputSummary.js';
 import { generateRepoOrientation } from '../lib/repoOrientation.js';
@@ -201,6 +202,18 @@ export function assessProbeResult(
       ? `toolchain probe failed: test command exited ${execExitCode} (report ${byteCount} bytes${byteCount ? `, parse error: ${parsed.parseError}` : ', no output'})`
       : `toolchain probe failed: report file ${byteCount === 0 ? 'missing' : 'unreadable'} (${byteCount} bytes${byteCount ? `, parse error: ${parsed.parseError}` : ''})`;
   return { ok: false, reason };
+}
+
+/**
+ * Returns 'pass' when an empty-diff noop run should complete the task rather
+ * than fail it. An exit code != 0 with zero parsed failures is treated as
+ * passing: the report may be stale (Phase 35) or the probe may return non-zero
+ * when no test files match the pattern, and neither is genuine work absence.
+ * Only called in the exitCode !== 0 branch (exitCode === 0 is always a pass).
+ */
+export function assessNoopResult(parsed: ParsedTestOutput): 'pass' | 'fail' {
+  if (!parsed.parseError && (parsed.failed ?? 0) === 0) return 'pass';
+  return 'fail';
 }
 
 // ── Host-side git operations ──────────────────────────────────────────────────
@@ -938,6 +951,32 @@ export async function runDevJob(
       }
       const noopCatResult = await container.exec(`cat ${TEST_REPORT_FILE}`);
       const noopParsed = parseTestOutput(noopCatResult.stdout, noopTestResult.stderr);
+      if (assessNoopResult(noopParsed) === 'pass') {
+        // Exit code non-zero but zero parsed failures: stale report or no-file
+        // probe result — both halves must hold; an empty diff with a green suite
+        // completes the task.
+        if (task.coveredByTestPlan && !task.testsWritten) {
+          await getPrisma().task.update({
+            where: { id: taskId },
+            data: { status: 'awaiting_tests' },
+          });
+          await appendEvent(getPrisma(), featureId, {
+            type: 'agent.log',
+            agent: task.side,
+            repo: task.repo,
+            severity: 'info',
+            text: `◦ task ${task.id} noop-success — awaiting acceptance tests`,
+          });
+          await appendEvent(getPrisma(), featureId, {
+            type: 'agent.status',
+            agent: task.side,
+            repo: task.repo,
+            status: 'waiting',
+          });
+          return 'completed';
+        }
+        return completeTask(featureId, taskId, task, worktreeInfo, undefined);
+      }
       const noopDetail = noopParsed.parseError
         ? `${noopTestResult.stdout}\n${noopTestResult.stderr}`.slice(0, 800)
         : formatTestSummary(noopParsed);

@@ -98,8 +98,8 @@ vi.mock('../lib/repoOrientation.js', () => ({
 
 // testJob.js is intentionally NOT mocked — assessProbeResult must use real parseTestOutput.
 
-import { assessProbeResult } from '../jobs/devJob.js';
-import { plainTestCommand } from '../jobs/testJob.js';
+import { assessProbeResult, assessNoopResult } from '../jobs/devJob.js';
+import { plainTestCommand, parseTestOutput } from '../jobs/testJob.js';
 
 const PASSING_REPORT = JSON.stringify({ numPassedTests: 3, numFailedTests: 0, testResults: [] });
 const FAILING_REPORT = JSON.stringify({ numPassedTests: 1, numFailedTests: 2, testResults: [] });
@@ -161,6 +161,31 @@ describe('assessProbeResult — exit-code-aware reasons', () => {
   it('ok=true is unaffected by exit code — report content is the only health signal', () => {
     expect(assessProbeResult(PASSING_REPORT, 0).ok).toBe(true);
     expect(assessProbeResult(FAILING_REPORT, 0).ok).toBe(true);
+  });
+});
+
+// Fail-first evidence for task 165: empty diff + green suite must complete, not fail.
+// assessNoopResult is called only in the exitCode !== 0 branch; exitCode === 0 is
+// always a pass and never reaches this helper.
+describe('assessNoopResult', () => {
+  it('returns pass when report is parseable and failed = 0 (the spec case: exit≠0, green suite)', () => {
+    const parsed = parseTestOutput(PASSING_REPORT, '');
+    expect(assessNoopResult(parsed)).toBe('pass');
+  });
+
+  it('returns fail when failed > 0 (genuine test failures — both halves hold)', () => {
+    const parsed = parseTestOutput(FAILING_REPORT, '');
+    expect(assessNoopResult(parsed)).toBe('fail');
+  });
+
+  it('returns fail when parseError (unknown outcome — conservative)', () => {
+    const parsed = parseTestOutput(EMPTY_REPORT, '');
+    expect(assessNoopResult(parsed)).toBe('fail');
+  });
+
+  it('returns fail when report is unreadable plaintext (parseError)', () => {
+    const parsed = parseTestOutput(PLAINTEXT_REPORT, '');
+    expect(assessNoopResult(parsed)).toBe('fail');
   });
 });
 

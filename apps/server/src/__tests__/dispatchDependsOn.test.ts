@@ -656,3 +656,130 @@ describe('dispatchUnblockedTasks — persists bullJobId at dispatch time (R8)', 
     expect(row.bullJobId).toBe('bull-job-xyz');
   });
 });
+
+// ── task 166: skip test-task when same-repo dep already has testsWritten ──────
+
+describe('dispatchUnblockedTasks — coveredByTestPlan routing (task 166)', () => {
+  it('routes covered task with no dep to server-test-task (regression)', async () => {
+    const task = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Covered task, no deps',
+        description: 'desc',
+        specRefs: [],
+        dependsOn: [],
+        status: 'pending',
+        coveredByTestPlan: true,
+        testsWritten: false,
+      },
+    });
+    await dispatchUnblockedTasks(featureId, 'server');
+    expect(mockEnqueueJob).toHaveBeenCalledWith(featureId, 'server-test-task', {
+      taskId: task.id,
+    });
+  });
+
+  it('routes covered task with testsWritten=true directly to server-dev (regression)', async () => {
+    const task = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Covered task, tests already written',
+        description: 'desc',
+        specRefs: [],
+        dependsOn: [],
+        status: 'pending',
+        coveredByTestPlan: true,
+        testsWritten: true,
+      },
+    });
+    await dispatchUnblockedTasks(featureId, 'server');
+    expect(mockEnqueueJob).toHaveBeenCalledWith(featureId, 'server-dev', { taskId: task.id });
+    expect(mockEnqueueJob).not.toHaveBeenCalledWith(
+      featureId,
+      'server-test-task',
+      expect.anything(),
+    );
+  });
+
+  it('routes covered task to server-dev when same-repo dep has testsWritten=true (NEW)', async () => {
+    // The dep (completed) wrote tests; the downstream task should inherit and skip test-agent.
+    const dep = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Dep with tests',
+        description: 'desc',
+        specRefs: [],
+        dependsOn: [],
+        status: 'completed',
+        coveredByTestPlan: true,
+        testsWritten: true,
+      },
+    });
+    const downstream = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server',
+        side: 'server',
+        title: 'Downstream covered task',
+        description: 'desc',
+        specRefs: [],
+        dependsOn: [dep.id],
+        status: 'pending',
+        coveredByTestPlan: true,
+        testsWritten: false,
+      },
+    });
+    await dispatchUnblockedTasks(featureId, 'server');
+    // Must go to dev, not test-task — dep already has tests for same repo
+    expect(mockEnqueueJob).toHaveBeenCalledWith(featureId, 'server-dev', {
+      taskId: downstream.id,
+    });
+    expect(mockEnqueueJob).not.toHaveBeenCalledWith(
+      featureId,
+      'server-test-task',
+      expect.anything(),
+    );
+  });
+
+  it('routes to server-test-task when dep has testsWritten=true on a DIFFERENT repo (boundary)', async () => {
+    const dep = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server-2', // different repo
+        side: 'server',
+        title: 'Cross-repo dep with tests',
+        description: 'desc',
+        specRefs: [],
+        dependsOn: [],
+        status: 'completed',
+        coveredByTestPlan: true,
+        testsWritten: true,
+      },
+    });
+    const downstream = await getPrisma().task.create({
+      data: {
+        featureId,
+        repo: 'demo-server', // different repo from dep
+        side: 'server',
+        title: 'Downstream on different repo',
+        description: 'desc',
+        specRefs: [],
+        dependsOn: [dep.id],
+        status: 'pending',
+        coveredByTestPlan: true,
+        testsWritten: false,
+      },
+    });
+    await dispatchUnblockedTasks(featureId, 'server');
+    // Different repo — still needs its own test-agent run
+    expect(mockEnqueueJob).toHaveBeenCalledWith(featureId, 'server-test-task', {
+      taskId: downstream.id,
+    });
+  });
+});

@@ -56,17 +56,40 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 52 — Client component coverage: decide, then act
+- **Current phase:** 53 — A guard and its override must read the same state
 - **State:** `complete`
-- **Last updated:** 2026-09-14
+- **Last updated:** 2026-09-17
 
 ---
 
 ## Current phase progress
 
-*Phase 52 is complete. Phase 53 is not yet defined in plan.md — the next step
-is to implement the Phase 52 recommendation (Option C: per-repo manifest setting)
-or extend plan.md with a new phase.*
+*Phase 53 complete. Next: Phase 54 — A retry starts warmer than the attempt before it.*
+
+Tasks 167–171 (see plan.md lines 2040–2071).
+
+---
+
+## Guard/release audit (Phase 53 deliverable)
+
+All park reasons in the orchestrator, their guards, and whether the release path
+clears the state the guard reads.
+
+| Park reason | Guard reads | Release route | Clears guard state? |
+|---|---|---|---|
+| `spend_limit` | `usage.recorded` event count since last `gate.resolved` anchor | `POST /features/:id/spend-gate` (appends `gate.resolved`) | **YES** — after Phase 53 fix; anchor advances the count window |
+| `bedrock_unreachable` | connectivity at job run time | REDISPATCH (reset status; job re-runs) | YES — guard re-evaluates on next job |
+| `failure` | prior agent outcome (non-environmental) | REDISPATCH (`attemptCount` reset) | YES — fresh attempt |
+| `non_progress` | recent writes to worktree in current run | REDISPATCH | YES — next job starts fresh |
+| `allowlist_violation` | allowlist at job run time | REDISPATCH | YES — guard re-evaluates |
+| `self_authored_subjects` | imported subjects vs staged set | REDISPATCH | YES — next run has a different staged set |
+| `orphan` | heartbeat absence | auto-resumed at startup (`startupResume.ts`) | YES — auto-cleared to `pending` |
+| `orphan_cap` | orphan count ≥ 3 | REDISPATCH only (no auto) | YES — REDISPATCH resets `parkReason` |
+
+Before Phase 53: `spend_limit` was the only park reason whose release path never
+updated the state the guard reads. RESUME appended `gate.resolved` but the SQL
+counted all historical events, making every RESUME inert. Fixed by scoping the
+`$queryRaw` to `seq > MAX(gate.resolved.seq)` for the task.
 
 ---
 
@@ -83,33 +106,20 @@ or extend plan.md with a new phase.*
 | 17 | DONE | 2 / 4 | Country selector ✓ (2 attempts); Result region ✓ (2 attempts) | 2 / 4 | both completed | $5.48 |
 | 18 | IMPLEMENTING (stuck) | 1 / 5 started | App shell ✗ parked (60-turn cap); CountrySelector / ResultRegion pending | 2 / 3 | both completed | $1.89 |
 
-Notes: take-12 client agent alone $9.08 (74% of total) — ZoneResult fake-timer probe loop before two turn-cap failures. take-13 zero cache hits → test agent $22.74 (84%), explains 5× premium vs take-17. take-16 never reached IMPLEMENTING (test-plan gate stuck); plan.md's "~$2 completed" is wrong. take-17 technically DONE but tests were against self-authored stubs (Phase 51 defect). take-18 App shell parked at 60-turn cap — DOM-structure test is in-principle testable; Phase 45 only skips pure CSS deliverables.
-
 ### Four failure causes
 
 | Cause | Status |
 |-------|--------|
-| **`inspect_file` host path** (host-absolute path passed into container) | **FIXED** — Phase 48: container-relative path via `path.relative(realpathSync(...))` |
-| **Fake-timer install order** (vitest probe zero tests when `@vitest/fake-timers` installs before `@testing-library/react`) | **FIXED** — documented in client repo's `CLAUDE.md`; injected into test agent prompt |
-| **Tests written against stubs** (test agent imported same-run stand-ins; tests passed vacuously) | **FIXED** — Phase 51: `detectSelfAuthoredSubjects` rejects such imports |
-| **Untestable task within budget** (task looks testable, test agent exhausts turn cap) | **OPEN** — Phase 45 skips pure CSS deliverables but not "ambiguous DOM-structure" tasks; no fix shipped |
+| **`inspect_file` host path** | **FIXED** — Phase 48 |
+| **Fake-timer install order** | **FIXED** — documented in client repo's `CLAUDE.md` |
+| **Tests written against stubs** | **FIXED** — Phase 51: `detectSelfAuthoredSubjects` |
+| **Untestable task within budget** | **OPEN** — no fix shipped |
 
-### Recommendation: Option C — per-repo manifest setting
+### Recommendation: Option C — per-repo manifest `test_coverage` flag
 
 Add `test_coverage: "light" | "full"` (default `"full"`) to each repo entry in
 `repo-manifest.yaml`. Test planner reads the flag; `light` marks all client tasks
-as `covered: false` with a skip reason.
-
-- **Why not Option A (fix the remaining gap):** Four phases of fixes have each
-  uncovered the next gap. Diminishing returns.
-- **Why not Option B (drop client coverage globally):** The bank (strong-identification)
-  feature has completed client coverage successfully on multiple takes; the machinery
-  works for that repo. Dropping globally throws that away.
-- **Why Option C:** The failures are repo-specific. The world-clock React/Vite demo
-  repo has never completed client coverage. Per-manifest lets each repo run at the
-  level it can support.
-- **Cost:** One small phase (~2–3 tasks): manifest schema, test-planner reads flag,
-  `worldclock-web` entry set to `light`. Per-feature: `light` ≈ $2, `full` ≈ $5–8.
+as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2, `full` ≈ $5–8.
 
 ---
 
@@ -117,41 +127,48 @@ as `covered: false` with a skip reason.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1288 passed across 93 files**, 2026-09-14 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-14 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-14 |
+| `npm test` (repo root) | passed — **1299 passed across 94 files**, 2026-09-17 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-17 |
+| `npm run lint` | exit 0 — 0 problems, 2026-09-17 |
 
 ---
 
 ## Decisions
 
+- **Phase 53: spend guard counts after `gate.resolved` anchor (`164`)** —
+  Scope `$queryRaw` to `seq > COALESCE(MAX(gate.resolved.seq), 0)` for the task.
+  Each RESUME grants one fresh `SPEND_GUARD_MAX_TURNS` window. Zero-migration fix;
+  naturally self-limiting and auditable from the event log. Chosen over adding a
+  `grantedBudget` column (no schema change needed, simpler semantics).
+
+- **Phase 53: noop result asserts zero failures before throwing (`165`)** —
+  `assessNoopResult(ParsedTestOutput): 'pass'|'fail'` extracted from the noop branch.
+  When `parseable && failed === 0`, the noop takes the same success path as the
+  `exitCode === 0` branch. When `parseError` (unknown outcome), conservative `'fail'`.
+  Consistent with `assessProbeResult` pattern in the same file.
+
+- **Phase 53: `depAlreadyHasTests` skips test-agent dispatch (`166`)** —
+  If any same-repo dependency already has `testsWritten=true`, the covered task
+  routes directly to dev — the acceptance tests are already authored. Reads
+  `testsWritten` column from the already-loaded `allFeatureTasks` array; no
+  additional DB query. "Declared, not inferred."
+
 - **Phase 52: recommendation = Option C (per-repo manifest `test_coverage` flag) (`164`)** —
-  World-clock client coverage has failed 4× with different root causes; bank repo succeeds
-  reliably. A per-repo flag isolates the two without losing coverage where it works.
+  World-clock client coverage has failed 4× with different root causes; bank repo
+  succeeds reliably. A per-repo flag isolates the two without losing coverage where
+  it works.
 
 - **Phase 51: `detectSelfAuthoredSubjects` uses `stagedSet.has()` not `fs.existsSync` (`162`)** —
   Checks whether an imported file was staged in the same run. O(1), no disk access,
   zero false positives.
 
-- **Phase 51: `mock_dirs` matched by directory name, not path prefix (`163`)** —
-  `resolved.split('/').includes(dir)` matches any segment named `helpers` without a
-  full path in the manifest.
-
 - **Phase 50: REQUEST_TIMEOUT_MS = 900 000 ms (15 min) on all Anthropic stream calls (`160`)** —
   Classified as environmental in `isEnvironmentalBedrockError()` so a hung call parks
   without consuming a retry slot.
 
-- **Phase 50: Two-prong stale-job recovery (`161`)** —
-  Prong A: `resetStaleRunningTasks()` at startup after `sweepOrphanContainers()`.
-  Prong B: `featureRedispatch.ts` removes active BullMQ jobs before reconciling tasks.
-  UI REDISPATCH enables when any task is `running` in IMPLEMENTING/LIGHT_IMPLEMENTING.
-
 - **Phase 48: `inspect_file` passes container-relative path (`156`)** —
   `path.relative(realpathSync(worktreePath), absPath)` — `realpathSync` needed for
   macOS `/tmp` → `/private/tmp` symlink.
-
-- **Phase 47: failure message cap scaled by failure count (`153`)** —
-  `slice(0, failed <= 3 ? 4000 : 200)` — a single-failure run gets the full diff.
 
 - **Phase 40: warning findings open `code_review` gate (`133`)** —
   Warnings-only review opens the gate; only a fully clean review passes immediately.
@@ -239,6 +256,7 @@ as `covered: false` with a skip reason.
 | 50 | A call that never returns is not a running task | `44cea4f` | 2026-09-14 |
 | 51 | A test may not exercise its own stand-in | `575ef5c` | 2026-09-14 |
 | 52 | Client component coverage: decide, then act | `49130d4` | 2026-09-14 |
+| 53 | A guard and its override must read the same state | TBD | 2026-09-17 |
 
 ---
 

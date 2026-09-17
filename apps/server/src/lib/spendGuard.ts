@@ -16,6 +16,11 @@ export async function checkSpendGuard(
 ): Promise<SpendGuardResult> {
   const threshold = parseInt(process.env['SPEND_GUARD_MAX_TURNS'] ?? '150', 10);
 
+  // Count only turns after the last spend-guard override for this task.
+  // A gate.resolved(spend_guard) event acts as a logical epoch boundary: each
+  // RESUME grants one fresh SPEND_GUARD_MAX_TURNS window without touching the
+  // immutable event log. COALESCE(…, 0) makes the baseline case (no prior
+  // override) count all historical events, preserving existing behaviour.
   const result = await getPrisma().$queryRaw<[{ turns: bigint; job_count: bigint }]>`
     SELECT
       COUNT(*)::bigint                           AS turns,
@@ -24,6 +29,14 @@ export async function checkSpendGuard(
     WHERE feature_id = ${featureId}
       AND type       = 'usage.recorded'
       AND payload->>'task_id' = ${taskId}
+      AND seq > COALESCE(
+        (SELECT MAX(seq) FROM events
+         WHERE feature_id    = ${featureId}
+           AND type          = 'gate.resolved'
+           AND payload->>'gate'   = 'spend_guard'
+           AND payload->>'taskId' = ${taskId}),
+        0
+      )
   `;
 
   const turns = Number(result[0]?.turns ?? 0);

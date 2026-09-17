@@ -153,7 +153,13 @@ export async function dispatchUnblockedTasks(
     // testsWritten is set, the same task routes to the dev job on re-dispatch.
     // Parking replaces the old one-round cap — a failed test task is parked so
     // REDISPATCH retries the test-first path rather than skipping to dev.
-    const needsTestFirst = task.coveredByTestPlan && !task.testsWritten;
+    // A same-repo dependency that already has testsWritten=true means the
+    // acceptance tests for this subject are already authored — skip the test
+    // agent for this task. Declared, not inferred: read the column, not files.
+    const depAlreadyHasTests = (task.dependsOn as string[]).some((depId) =>
+      allFeatureTasks.find((t) => t.id === depId && t.repo === task.repo && t.testsWritten),
+    );
+    const needsTestFirst = task.coveredByTestPlan && !task.testsWritten && !depAlreadyHasTests;
     const resolvedJobType = needsTestFirst
       ? side === 'server'
         ? ('server-test-task' as const)
