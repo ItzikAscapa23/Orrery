@@ -2086,3 +2086,66 @@ npm test          # FROM REPO ROOT — baseline 93 files / 1288 tests, must not 
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 55 — The agent can ask a question
+**Goal:** An agent that needs to see a value does not have to manufacture a failure to read it.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] `172-a-print-channel` — R-66. World-clock take-20 task `758c3426`, both
+      attempts. The twelfth rewrite of `src/__tests__/zoneDebug.test.tsx` ends:
+      `expect(callCount).toBe(999); // fail to see: callCount, url1, selectValue`
+      — `999` and `'SHOW'` are sentinels, asserted because the assertion failure
+      is the only way the agent can read a runtime value. `console.log` does not
+      reach it and bash output is parsed to `TESTS: n passed, m failed (f files)`
+      plus a capped excerpt. One sentinel reads one variable at one container
+      round-trip. Attempt 1 burned turns 12–36 on `probe_dom.test.tsx`; attempt 2
+      turns 8–34 on `zoneDebug.test.tsx` (comment `// Method 1:` marks discarded
+      approaches). 70 turns, $1.45, no acceptance test. Turn 4 of attempt 2 had
+      returned 11,614 chars of real failure output — the agent was not short of
+      feedback about failures, it could not observe values. Give it a channel.
+      State the mechanism chosen and why: runner `console.log` passthrough, a
+      declared scratch-output path returned verbatim, or an explicit tool. One
+      mechanism, not three
+- [ ] `173-both-agents` — the dev agent has the same gap; only the test agent has
+      been observed working around it. The channel must exist on both prompt
+      paths
+- [ ] `174-bounded-output` — the failure-message cap (Phase 47,
+      `slice(0, failed <= 3 ? 4000 : 200)`) exists because unbounded output is
+      expensive. State this channel's cap and its reasoning. Truncation must be
+      visible, not silent
+- [ ] `175-prohibit-the-sentinel` — the agent rules name the new mechanism and
+      prohibit the sentinel pattern explicitly. Quote the take-20 line so the
+      prohibition is concrete: `expect(x).toBe(999)` to read `x` is a workaround
+      for a missing channel, not debugging
+- [ ] Audit and list. Enumerate every path by which agent-side output reaches the
+      orchestrator and state for each what it truncates and why. Four are known —
+      `formatTestSummary`, the bash result formatter, `inspect_file`, the runner
+      JSON reporter. There may be more. The list, not a summary
+- [ ] `176-non-progress-counts-a-changed-file` — R-65. The guard hashes the bash
+      command string only (`nonProgressError.ts:34`). All 24 take-20 probe runs
+      issued an identical command against a file rewritten between every run, so
+      it fired on work that was genuinely changing. A repeated command against a
+      modified file is progress
+- [ ] `177-does-167-reach-the-test-agent` — Phase 54 task 167 carries the prior
+      attempt's diff into a retry. Take-20 attempt 2 rewrote the 28KB acceptance
+      file from scratch (28118 vs 28773 chars) rather than receiving attempt 1's.
+      167 was written against the dev agent's `buildSystemPrompt`. Establish
+      whether the test agent has a separate prompt path and whether carrying the
+      prior attempt's work applies there
+- [ ] Tests, fail-first, red output reported per case: a value emitted through the
+      mechanism appears in the agent's next turn; output over the cap truncates
+      visibly; the dev agent path carries it; a run emitting nothing is
+      unaffected; an identical command against a modified file does not
+      increment the non-progress counter; an identical command against an
+      unmodified file still does
+**Definition of Done:**
+- An agent can emit and read a value in one turn
+- No sentinel-assertion pattern in any agent-authored file on the next feature
+- Output-path audit table in HANDOVER.md, every row accounted for
+- Mechanism and cap recorded with reasoning
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 95 files / 1312 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
