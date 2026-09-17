@@ -152,16 +152,20 @@ const {
   mockPlainTestCommand: vi.fn().mockImplementation((p?: string) => p ?? 'npm test'),
 }));
 
-vi.mock('../jobs/testJob.js', () => ({
-  getAuthoredTestFilesForTask: mockGetAuthoredTestFilesForTask,
-  discoverTestDir: vi.fn().mockReturnValue({ dir: 'src/__tests__', method: 'candidate' }),
-  parseTestOutput: mockParseTestOutput,
-  detectJsonCommand: mockDetectJsonCommand,
-  plainTestCommand: mockPlainTestCommand,
-  findingsFromTests: mockFindingsFromTests,
-  getAuthoredTestFiles: vi.fn().mockReturnValue([]),
-  TEST_REPORT_FILE: '/tmp/test-report.json',
-}));
+vi.mock('../jobs/testJob.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../jobs/testJob.js')>();
+  return {
+    ...actual,
+    getAuthoredTestFilesForTask: mockGetAuthoredTestFilesForTask,
+    discoverTestDir: vi.fn().mockReturnValue({ dir: 'src/__tests__', method: 'candidate' }),
+    parseTestOutput: mockParseTestOutput,
+    detectJsonCommand: mockDetectJsonCommand,
+    plainTestCommand: mockPlainTestCommand,
+    findingsFromTests: mockFindingsFromTests,
+    getAuthoredTestFiles: vi.fn().mockReturnValue([]),
+    TEST_REPORT_FILE: '/tmp/test-report.json',
+  };
+});
 
 // Mock git so we don't need a real worktree
 vi.mock('node:child_process', async (importActual) => {

@@ -83,3 +83,31 @@ describe('createWorktree — (slug, repoId) path isolation', () => {
     expect(first.branch).toBe(second.branch);
   });
 });
+
+describe('createWorktree — stale non-repo path recovery (task 169)', () => {
+  it('recreates a bare-repo path that exists but is not a git repo', () => {
+    // Plant a plain directory where the bare clone would be
+    const info = createWorktree(serverBare, 'stale-feature', 'main', 'demo-server');
+    fs.rmSync(info.bareRepoPath, { recursive: true, force: true });
+    fs.mkdirSync(info.bareRepoPath); // empty dir — not a git repo
+    fs.rmSync(info.worktreePath, { recursive: true, force: true });
+
+    // Should succeed: detect the non-repo, remove it, re-clone
+    const recovered = createWorktree(serverBare, 'stale-feature', 'main', 'demo-server');
+    expect(fs.existsSync(recovered.bareRepoPath)).toBe(true);
+    expect(fs.existsSync(recovered.worktreePath)).toBe(true);
+    // Validate it's a real git repo
+    expect(() => git('rev-parse --git-dir', recovered.bareRepoPath)).not.toThrow();
+  });
+
+  it('recreates a worktree path that exists but is not a git worktree', () => {
+    const info = createWorktree(serverBare, 'stale-wt', 'main', 'demo-server');
+    fs.rmSync(info.worktreePath, { recursive: true, force: true });
+    fs.mkdirSync(info.worktreePath); // empty dir — not a git worktree
+    // Prune so git forgets about the dangling worktree ref
+    git('worktree prune', info.bareRepoPath);
+
+    const recovered = createWorktree(serverBare, 'stale-wt', 'main', 'demo-server');
+    expect(() => git('rev-parse --is-inside-work-tree', recovered.worktreePath)).not.toThrow();
+  });
+});

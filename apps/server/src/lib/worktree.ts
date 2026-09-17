@@ -44,12 +44,29 @@ export function createWorktree(
 
   fs.mkdirSync(worktreesRoot, { recursive: true });
 
-  // Clone bare if not already present
+  // Validate that an existing bare-repo directory is actually a git repo.
+  // A stale non-repo directory (e.g. left by a crashed session before git clone
+  // completed) makes git commands fail with "fatal: not a git repository",
+  // exhausting retry slots before parking. Remove and re-clone if invalid.
+  if (fs.existsSync(bareRepoPath)) {
+    try {
+      git('rev-parse --git-dir', bareRepoPath);
+    } catch {
+      fs.rmSync(bareRepoPath, { recursive: true, force: true });
+    }
+  }
   if (!fs.existsSync(bareRepoPath)) {
     git(`clone --bare ${repoUrl} ${bareRepoPath}`, worktreesRoot);
   }
 
-  // Add worktree if not already present
+  // Same validation for the worktree path.
+  if (fs.existsSync(worktreePath)) {
+    try {
+      git('rev-parse --is-inside-work-tree', worktreePath);
+    } catch {
+      fs.rmSync(worktreePath, { recursive: true, force: true });
+    }
+  }
   if (!fs.existsSync(worktreePath)) {
     git(`worktree add ${worktreePath} ${defaultBranch}`, bareRepoPath);
   }

@@ -11,15 +11,16 @@ process.env['ANTHROPIC_API_KEY'] = 'test-key';
 process.env['ARTIFACTS_REPO_PATH'] = '/tmp/test-artifacts';
 process.env['WORKTREES_ROOT'] = '/tmp/orrery-worktrees';
 
-vi.mock('../lib/container.js', () => ({
-  startContainer: vi.fn(),
-  runInstallContainer: vi.fn(),
-  runHostInstall: vi.fn(),
-  runBootstrapInstall: vi.fn(),
-  AllowlistViolationError: class extends Error {},
-  MetacharViolationError: class extends Error {},
-  EXEC_MAX_BUFFER: 50 * 1024 * 1024,
-}));
+vi.mock('../lib/container.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/container.js')>();
+  return {
+    ...actual,
+    startContainer: vi.fn(),
+    runInstallContainer: vi.fn(),
+    runHostInstall: vi.fn(),
+    runBootstrapInstall: vi.fn(),
+  };
+});
 
 vi.mock('../lib/queue.js', () => ({
   enqueueJob: vi.fn(),
@@ -65,14 +66,14 @@ vi.mock('../lib/promptScope.js', () => ({
   scopeContract: vi.fn(),
 }));
 
-vi.mock('../agents/devAgent.js', () => ({
-  runDevAgent: vi.fn(),
-  AgentNoopError: class extends Error {},
-  AgentOutcome: {},
-  ViolationInfo: class {},
-  ToolCallInfo: class {},
-  measurePromptSections: vi.fn(),
-}));
+vi.mock('../agents/devAgent.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../agents/devAgent.js')>();
+  return {
+    ...actual,
+    runDevAgent: vi.fn(),
+    measurePromptSections: vi.fn(),
+  };
+});
 
 vi.mock('node:child_process', async (importActual) => {
   const actual = await importActual<typeof import('node:child_process')>();
@@ -100,6 +101,7 @@ vi.mock('../lib/repoOrientation.js', () => ({
 
 import { assessProbeResult, assessNoopResult } from '../jobs/devJob.js';
 import { plainTestCommand, parseTestOutput } from '../jobs/testJob.js';
+import { buildSystemPrompt } from '../agents/devAgent.js';
 
 const PASSING_REPORT = JSON.stringify({ numPassedTests: 3, numFailedTests: 0, testResults: [] });
 const FAILING_REPORT = JSON.stringify({ numPassedTests: 1, numFailedTests: 2, testResults: [] });
@@ -186,6 +188,42 @@ describe('assessNoopResult', () => {
   it('returns fail when report is unreadable plaintext (parseError)', () => {
     const parsed = parseTestOutput(PLAINTEXT_REPORT, '');
     expect(assessNoopResult(parsed)).toBe('fail');
+  });
+});
+
+const BASE_TASK = { id: 't1', title: 'Test task', description: 'desc', specRefs: [] };
+const BASE_CTX = {
+  specMarkdown: '## Spec',
+  contractYaml: 'openapi: 3.0.0',
+  repoClaudeMd: '# CLAUDE',
+};
+
+describe('buildSystemPrompt — priorAttemptDiff (task 167)', () => {
+  it('includes ## Prior attempt section when priorAttemptDiff is present', () => {
+    const diff = 'diff --git a/src/setup.ts b/src/setup.ts\n+export {};';
+    const prompt = buildSystemPrompt(BASE_TASK, { ...BASE_CTX, priorAttemptDiff: diff });
+    expect(prompt).toContain('## Prior attempt');
+    expect(prompt).toContain(diff);
+  });
+
+  it('does not include ## Prior attempt section when priorAttemptDiff is absent', () => {
+    const prompt = buildSystemPrompt(BASE_TASK, BASE_CTX);
+    expect(prompt).not.toContain('## Prior attempt');
+  });
+
+  it('caps injected diff at 6000 chars', () => {
+    const longDiff = 'a'.repeat(8000);
+    const prompt = buildSystemPrompt(BASE_TASK, { ...BASE_CTX, priorAttemptDiff: longDiff });
+    expect(prompt).toContain('a'.repeat(6000));
+    expect(prompt).not.toContain('a'.repeat(6001));
+  });
+});
+
+describe('buildSystemPrompt — scratch-files rule (task 168)', () => {
+  it('rules section mentions scratch file host-side stripping', () => {
+    const prompt = buildSystemPrompt(BASE_TASK, BASE_CTX);
+    expect(prompt).toContain('Scratch files');
+    expect(prompt).toContain('stripped automatically by the host');
   });
 });
 

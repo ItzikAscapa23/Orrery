@@ -28,7 +28,7 @@ export interface Feature {
   review_skipped: boolean;
 }
 
-function toSlug(name: string): string {
+export function toSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

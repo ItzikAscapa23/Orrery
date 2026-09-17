@@ -56,6 +56,7 @@ import {
   detectJsonCommand,
   findingsFromTests,
   TEST_REPORT_FILE,
+  SCRATCH_FILE_RE,
   type ParsedTestOutput,
 } from './testJob.js';
 import { formatTestSummary } from '../lib/testOutputSummary.js';
@@ -448,6 +449,13 @@ export async function runDevJob(
     });
   }
 
+  // Capture uncommitted work from the prior attempt before wiping the worktree.
+  // Non-empty only when a previous run hit the turn cap without committing.
+  // Passed to the agent brief so it can reuse prior discoveries rather than
+  // re-deriving them from zero.
+  const priorAttemptDiff =
+    attempt > 1 ? git(worktreeInfo.worktreePath, 'diff', 'HEAD').trim() || undefined : undefined;
+
   git(worktreeInfo.worktreePath, 'checkout', '.');
   git(worktreeInfo.worktreePath, 'clean', '-fd');
   await appendEvent(getPrisma(), featureId, {
@@ -720,6 +728,7 @@ export async function runDevJob(
         maxTurns: effectiveCap,
         ...(repoEntry.probe_command ? { probeCommand: repoEntry.probe_command } : {}),
         ...(task.coveredByTestPlan ? { coveredByTestPlan: true } : {}),
+        ...(priorAttemptDiff ? { priorAttemptDiff } : {}),
       },
       container,
       worktreeInfo.worktreePath,
@@ -989,6 +998,7 @@ export async function runDevJob(
     git(worktreeInfo.worktreePath, 'add', '-A');
 
     const LOCKFILE_NAMES = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'];
+    const BRIEF_NAME = '__orrery_harness_brief.md';
     const rawStaged = git(worktreeInfo.worktreePath, 'diff', '--cached', '--name-only')
       .trim()
       .split('\n')
@@ -1003,6 +1013,18 @@ export async function runDevJob(
         agent: 'orchestrator',
         severity: 'muted',
         text: `◦ unstaged ${lockfilesStaged.length} lockfile(s) from agent commit: ${lockfilesStaged.join(', ')}`,
+      });
+    }
+    const scratchOrBriefStaged = rawStaged.filter(
+      (f) => path.basename(f) === BRIEF_NAME || SCRATCH_FILE_RE.test(path.basename(f)),
+    );
+    if (scratchOrBriefStaged.length > 0) {
+      git(worktreeInfo.worktreePath, 'reset', 'HEAD', '--', ...scratchOrBriefStaged);
+      void appendEvent(getPrisma(), featureId, {
+        type: 'agent.log',
+        agent: 'orchestrator',
+        severity: 'muted',
+        text: `◦ unstaged ${scratchOrBriefStaged.length} scratch/brief file(s) from agent commit: ${scratchOrBriefStaged.join(', ')}`,
       });
     }
 

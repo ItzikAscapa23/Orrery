@@ -154,4 +154,17 @@ describe('MissionControl — RedispatchCard', () => {
     );
     expect(onGateAction).toHaveBeenCalledTimes(1);
   });
+
+  // Task 170: showRedispatch must be false when tasks are running but not parked.
+  // App.tsx drives this by passing `tasks.some(t => t.status === 'parked')` — not
+  // checking running status — so the banner clears once REDISPATCH dispatches work.
+  it('banner is absent (showRedispatch=false) when tasks are running but not parked', () => {
+    render(<MissionControl {...baseProps} showRedispatch={false} />);
+    expect(screen.queryByRole('button', { name: /redispatch/i })).not.toBeInTheDocument();
+  });
+
+  it('banner is present (showRedispatch=true) when at least one task is parked', () => {
+    render(<MissionControl {...baseProps} showRedispatch={true} />);
+    expect(screen.getByRole('button', { name: /redispatch/i })).toBeInTheDocument();
+  });
 });

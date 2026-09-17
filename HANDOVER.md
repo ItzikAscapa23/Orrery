@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 53 — A guard and its override must read the same state
+- **Current phase:** 54 — A retry starts warmer than the attempt before it
 - **State:** `complete`
 - **Last updated:** 2026-09-17
 
@@ -64,9 +64,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 53 complete. Next: Phase 54 — A retry starts warmer than the attempt before it.*
-
-Tasks 167–171 (see plan.md lines 2040–2071).
+*Phase 54 complete. No Phase 55 defined yet — awaiting new spec.*
 
 ---
 
@@ -87,9 +85,8 @@ clears the state the guard reads.
 | `orphan_cap` | orphan count ≥ 3 | REDISPATCH only (no auto) | YES — REDISPATCH resets `parkReason` |
 
 Before Phase 53: `spend_limit` was the only park reason whose release path never
-updated the state the guard reads. RESUME appended `gate.resolved` but the SQL
-counted all historical events, making every RESUME inert. Fixed by scoping the
-`$queryRaw` to `seq > MAX(gate.resolved.seq)` for the task.
+updated the state the guard reads. Fixed by scoping the `$queryRaw` to
+`seq > MAX(gate.resolved.seq)` for the task.
 
 ---
 
@@ -127,7 +124,7 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1299 passed across 94 files**, 2026-09-17 |
+| `npm test` (repo root) | passed — **1312 passed across 95 files**, 2026-09-17 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-17 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-17 |
 
@@ -135,36 +132,63 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 
 ## Decisions
 
+- **Phase 54: prior-attempt diff carried in memory, no schema change (`167`)** —
+  `priorAttemptDiff` captured via `git diff HEAD` immediately before
+  `git checkout . && git clean -fd`. Passed through `DevContext` and injected as
+  a `## Prior attempt` section in `buildSystemPrompt`, capped at 6000 chars.
+  No artifact file, no DB column — pure in-memory carry. Avoids schema migration
+  and keeps the diff ephemeral (not retained across restarts).
+
+- **Phase 54: scratch-file stripping is host-side + agent rule, not allowlist change (`168`)** —
+  `devJob.ts` strips files matching `SCRATCH_FILE_RE` (same regex as `testJob.ts`)
+  after `git add -A` at commit time. `devAgent.ts` rule block tells the agent
+  not to clean up scratch files. Chosen over adding `rm` to the allowlist:
+  the allowlist boundary is a security constraint; agent education + silent host
+  strip is sufficient and adds zero attack surface.
+
+- **Phase 54: `git rev-parse` validity check in `createWorktree` (`169`)** —
+  `git rev-parse --git-dir` for the bare-repo path, `--is-inside-work-tree` for
+  the worktree path. On failure, `rmSync` + let the normal creation path run.
+  Simple, idempotent, tested with real git repos.
+
+- **Phase 54: `showRedispatch` checks `parked` only, not `running` (`170`)** —
+  Removed `t.status === 'running'` from the `App.tsx` condition.
+  Orphaned running tasks are auto-recovered by `reconcileOrphanedTasks` every 60s;
+  `featureRedispatch.ts` also handles them reactively when the button is clicked.
+  The banner clears as soon as REDISPATCH dispatches work.
+
+- **Phase 54: `toSlug` exported, regression tests added (`171`)** —
+  Current implementation is correct (applies `replace` before `slice`). Exported
+  for direct testing. Five regression tests guard against the leading-char loss
+  observed in take-14 paths. Root cause of historical artifact is not recoverable
+  from squashed history.
+
+- **Phase 54: `vi.mock` for `devAgent.js` upgraded to `importOriginal` (`devJobProbe.test.ts`)** —
+  The factory previously replaced the entire module; `buildSystemPrompt` was
+  unreachable. Now uses `importOriginal` to pass through all pure exports;
+  only `runDevAgent` and `measurePromptSections` are mocked. Same fix applied to
+  `container.js` (needed `ALLOWED_COMMANDS_HINT`) and `testJob.js` in
+  `devJobAcceptance.test.ts` (needed `SCRATCH_FILE_RE`).
+
 - **Phase 53: spend guard counts after `gate.resolved` anchor (`164`)** —
   Scope `$queryRaw` to `seq > COALESCE(MAX(gate.resolved.seq), 0)` for the task.
-  Each RESUME grants one fresh `SPEND_GUARD_MAX_TURNS` window. Zero-migration fix;
-  naturally self-limiting and auditable from the event log. Chosen over adding a
-  `grantedBudget` column (no schema change needed, simpler semantics).
+  Each RESUME grants one fresh `SPEND_GUARD_MAX_TURNS` window. Zero-migration fix.
 
 - **Phase 53: noop result asserts zero failures before throwing (`165`)** —
   `assessNoopResult(ParsedTestOutput): 'pass'|'fail'` extracted from the noop branch.
-  When `parseable && failed === 0`, the noop takes the same success path as the
-  `exitCode === 0` branch. When `parseError` (unknown outcome), conservative `'fail'`.
-  Consistent with `assessProbeResult` pattern in the same file.
 
 - **Phase 53: `depAlreadyHasTests` skips test-agent dispatch (`166`)** —
   If any same-repo dependency already has `testsWritten=true`, the covered task
-  routes directly to dev — the acceptance tests are already authored. Reads
-  `testsWritten` column from the already-loaded `allFeatureTasks` array; no
-  additional DB query. "Declared, not inferred."
+  routes directly to dev. Reads `testsWritten` from the already-loaded task array.
 
 - **Phase 52: recommendation = Option C (per-repo manifest `test_coverage` flag) (`164`)** —
-  World-clock client coverage has failed 4× with different root causes; bank repo
-  succeeds reliably. A per-repo flag isolates the two without losing coverage where
-  it works.
+  World-clock client coverage has failed 4× with different root causes.
 
 - **Phase 51: `detectSelfAuthoredSubjects` uses `stagedSet.has()` not `fs.existsSync` (`162`)** —
-  Checks whether an imported file was staged in the same run. O(1), no disk access,
-  zero false positives.
+  O(1), no disk access, zero false positives.
 
 - **Phase 50: REQUEST_TIMEOUT_MS = 900 000 ms (15 min) on all Anthropic stream calls (`160`)** —
-  Classified as environmental in `isEnvironmentalBedrockError()` so a hung call parks
-  without consuming a retry slot.
+  Classified as environmental in `isEnvironmentalBedrockError()`.
 
 - **Phase 48: `inspect_file` passes container-relative path (`156`)** —
   `path.relative(realpathSync(worktreePath), absPath)` — `realpathSync` needed for
@@ -257,6 +281,7 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 | 51 | A test may not exercise its own stand-in | `575ef5c` | 2026-09-14 |
 | 52 | Client component coverage: decide, then act | `49130d4` | 2026-09-14 |
 | 53 | A guard and its override must read the same state | `a70e02f` | 2026-09-17 |
+| 54 | A retry starts warmer than the attempt before it | pending | 2026-09-17 |
 
 ---
 

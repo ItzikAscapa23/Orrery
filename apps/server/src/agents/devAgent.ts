@@ -224,6 +224,11 @@ export interface DevContext {
   // task. The dev agent must not write new test files — its job is to make the
   // existing acceptance tests pass.
   coveredByTestPlan?: boolean;
+  // Uncommitted diff from the prior attempt, captured before the worktree reset.
+  // Only present on retry attempts (attemptCount > 1) where the prior run had
+  // un-committed changes. Injected as a ## Prior attempt section so the agent
+  // does not re-derive solutions the previous attempt already found.
+  priorAttemptDiff?: string;
 }
 
 // Discriminated union returned by runDevAgent (formerly runServerDevAgent).
@@ -334,8 +339,22 @@ export function buildSystemPrompt(task: DevTask, ctx: DevContext): string {
           '',
         ]
       : []),
+    ...(ctx.priorAttemptDiff
+      ? [
+          '## Prior attempt',
+          'A prior attempt at this task made the following uncommitted changes before hitting the turn cap.',
+          'Review them — they may contain discoveries (test setup, config changes) worth reusing.',
+          'The worktree was reset to HEAD before this attempt began.',
+          '',
+          '```diff',
+          ctx.priorAttemptDiff.slice(0, 6000),
+          '```',
+          '',
+        ]
+      : []),
     '## Rules',
     '- Implement only what this task requires. Do not change unrelated code.',
+    '- Scratch files (names containing `scratch`, `debug`, or `probe`) are stripped automatically by the host before the commit. Do not try to delete or blank them — leave them as-is when done.',
     '- Run `npx jest` or `npx vitest run` after implementation — not `npm test`.' +
       ' `npm test` is a script alias that returns raw output with no structured pass/fail counts.' +
       ' Fix all failures.',

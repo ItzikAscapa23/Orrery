@@ -45,8 +45,11 @@ export function App() {
     () => (events.length > 0 ? foldEvents(events, tasks) : EMPTY_STATE),
     [events, tasks],
   );
+  // Show REDISPATCH only when tasks are parked — a running task means work is
+  // actively happening. Orphaned running tasks are auto-recovered by the 60-second
+  // reconciler; featureRedispatch.ts also handles them when the button is clicked.
   const showRedispatch =
-    tasks.some((t) => t.status === 'parked' || t.status === 'running') &&
+    tasks.some((t) => t.status === 'parked') &&
     (runState.currentPhase === 'IMPLEMENTING' || runState.currentPhase === 'LIGHT_IMPLEMENTING');
   const usageEventCount = useMemo(
     () => events.filter((e) => e.payload.type === 'usage.recorded').length,
