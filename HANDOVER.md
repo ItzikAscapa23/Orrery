@@ -256,7 +256,7 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 | 50 | A call that never returns is not a running task | `44cea4f` | 2026-09-14 |
 | 51 | A test may not exercise its own stand-in | `575ef5c` | 2026-09-14 |
 | 52 | Client component coverage: decide, then act | `49130d4` | 2026-09-14 |
-| 53 | A guard and its override must read the same state | TBD | 2026-09-17 |
+| 53 | A guard and its override must read the same state | `a70e02f` | 2026-09-17 |
 
 ---
 
