@@ -2149,3 +2149,51 @@ npm test          # FROM REPO ROOT — baseline 95 files / 1312 tests, must not 
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 56 — Name the channel that works
+**Goal:** The agent knows how to read a value from inside a test run.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] `178-document-the-console-channel` — R-66, reopened. Phase 55's
+      investigation established: `inspect_file` executes `node <file>` in a fresh
+      process and cannot observe state inside a vitest run — the mock object the
+      take-20 agent needed (`mockFetch.mock.calls.length` after `render(<App />)`
+      under jsdom with fake timers) lives and dies in vitest's worker. The
+      channel that does work already exists and is undocumented:
+      `extractConsoleOutput` puts a `CONSOLE:` section into the bash result
+      (`testOutputSummary.ts:191`), assembled synchronously in
+      `summarizeBashTestRun` before the tool_result block. Neither agent's rules,
+      nor any charter, mention it. Say so in both agents' rules: `console.log`
+      inside a test is readable from the bash result
+- [ ] `179-fix-the-prohibition` — Phase 55 task 175 shipped
+      *"Use inspect_file with console.log instead"*, which names a replacement
+      that cannot do the job for the case that motivated the rule. Point the
+      prohibition at the console channel for in-test values, and keep
+      `inspect_file` named for what it can do — standalone file inspection,
+      fixture parsing, utility evaluation. A rule that bans the workaround and
+      misnames the alternative is worse than no rule
+- [ ] `180-console-truncation-is-visible` — the `CONSOLE:` section caps at the
+      last 2048 chars silently, with no prefix, unlike `inspect_file`'s
+      `(truncated — showing last N of M lines)`. An agent reading a silently
+      truncated tail cannot tell it is missing the beginning. Match the visible
+      form. While here, state whether 2048 is the right cap now that the section
+      is documented and will actually be used
+- [ ] Tests, fail-first, red output reported per case: a test emitting
+      `console.log` produces a `CONSOLE:` section in the bash result; output over
+      the cap is truncated with a visible notice; both agents' rules contain the
+      console channel and the corrected prohibition
+- [ ] Audit: Phase 55's output-path table lists three paths with silent
+      truncation — `agent.log` `resultFirstLine` (120 chars), `test.report`
+      findings (300 chars/message), host-side exec diagnostic (300 chars). State
+      for each whether silence is correct there or whether it hides information
+      from a reader who needs it. The list, not a summary
+**Definition of Done:**
+- Both agents' rules name the console channel and the corrected prohibition
+- `CONSOLE:` truncation is visible
+- No sentinel-assertion pattern in agent-authored files on the next feature
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 95 files / 1314 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
