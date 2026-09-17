@@ -260,7 +260,7 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 | 52 | Client component coverage: decide, then act | `49130d4` | 2026-09-14 |
 | 53 | A guard and its override must read the same state | `a70e02f` | 2026-09-17 |
 | 54 | A retry starts warmer than the attempt before it | `d63e5b8` | 2026-09-17 |
-| 55 | The agent can ask a question | TBD | 2026-09-18 |
+| 55 | The agent can ask a question | `d67bd7b` | 2026-09-18 |
 
 ---
 
