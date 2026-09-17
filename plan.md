@@ -1976,3 +1976,113 @@ npm test
 npm run typecheck
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 53 — A guard and its override must read the same state
+**Goal:** Every guard that can park a task can be released by the control the UI offers for it.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] `164-spend-override-is-not-inert` — R-61. `checkSpendGuard` derives its
+      count from the append-only log: `COUNT(*) FROM events WHERE type =
+      'usage.recorded' AND payload->>'task_id' = $taskId`.
+      `featureSpendGate.ts` writes `gate.resolved` with `resolution: 'override'`
+      and updates `attemptCount`, `status`, `parkReason`, `bullJobId` — none of
+      which the guard reads — then calls `dispatchUnblockedTasks`, which re-runs
+      the guard against the same unchanged rows. Observed on take-19 task
+      `f3abb49e`: RESUME produced a `gate.resolved` followed immediately by a
+      fresh `gate.opened`; the card never cleared and the click looked inert.
+      RESUME has never worked for the spend guard. Make the accepted override
+      raise the effective threshold for that task — a granted-budget column
+      added to the threshold, or the count scoped to events after the last
+      `gate.resolved` — and state which and why
+- [ ] `165-no-diff-plus-green-is-not-a-failure` — R-62. `task.failed` for task
+      `3cce0c84`, attempt 1, `final: true`: *"completed but no file changes
+      detected in worktree and tests fail — expected work is genuinely absent /
+      TESTS: 99 passed, 0 failed (6 files)"*. The message asserts a conjunction
+      and prints the evidence that its second conjunct is false. The agent had
+      reached `verifying tests before host-side commit` after 8 turns with
+      `24 passed, 0 failed` on its own subject. Both halves must hold before
+      failing; an empty diff with a green suite completes the task. Audit for
+      this condition existing elsewhere — the empty-staged-set case (Phase 49)
+      is the same shape and may share or duplicate the check
+- [ ] `166-no-test-task-for-an-already-tested-subject` — R-63. Take-19 queued
+      `3cce0c84` (depends on `324d37a0`) and `c2db56e8` (depends on `f3abb49e`)
+      while both dependencies carried `tests_written = true`. `3cce0c84` read the
+      existing `CountrySelector.test.tsx` (15861 chars) at turn 1 and had nothing
+      to do; `c2db56e8` was queued to repeat the identical no-op. Skip a test task
+      whose subject already has `tests_written`. Declared, not inferred — read the
+      column, do not infer from file presence
+- [ ] Audit and list. These three are one failure class: a guard reading state
+      that the releasing path does not update. Enumerate every guard that can set
+      `park_reason` or emit `task.failed`, and for each state what releases it and
+      whether that release touches the state the guard reads. The list, not a
+      summary
+- [ ] Tests, fail-first, red output reported per case: override on a task at
+      exactly threshold dispatches and does not re-park; a second override after
+      further spend behaves the same; empty diff + green suite completes; empty
+      diff + red suite still fails; a test task whose subject has
+      `tests_written = true` is skipped, one whose subject does not is dispatched
+**Definition of Done:**
+- RESUME on a spend-parked task runs it; no `gate.opened` follows the
+  `gate.resolved` in the same dispatch
+- No task fails with a reason whose own evidence contradicts it
+- Guard/release audit table in HANDOVER.md, every row accounted for
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 93 files / 1288 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
+---
+## Phase 54 — A retry starts warmer than the attempt before it
+**Goal:** Nothing in the loop makes the second attempt worse than the first.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] `167-retry-keeps-what-the-last-attempt-established` — R-64. Take-19
+      `f3abb49e` attempt 1 reached green at turn 54 (`ResultRegion.test.tsx`
+      30 passed, 0 failed; full suite 47 passed) by writing
+      `src/__tests__/setup.ts` and adding `setupFiles` to `vitest.config.ts`. It
+      then hit the 60-turn cap and the host-side commit never ran. Attempt 2
+      opened with `worktree reset to clean branch HEAD`, which discarded both
+      files, and spent turns 14–37 re-deriving the same node_modules
+      investigation from zero before running out at 47 turns. 107 turns across
+      two attempts for a fix the first attempt had already found. Carry the prior
+      attempt's diff, or a record of what it established, into the retry
+- [ ] `168-the-agent-has-no-delete` — attempt 1 spent turns 56–60 — its last five
+      — trying to remove its own scratch files: `rm` rejected as
+      `Command not on allowlist`, then blanking two files to 44 bytes each, then
+      re-running the suite. The host already strips these
+      (`unstaged 1 scratch/brief file(s)`). The agent does not know that. Either
+      give it a delete, or tell it in the rules that scratch files are stripped
+      host-side and must not be cleaned up. State which and why
+- [ ] `169-worktree-path-must-be-a-repo` — R-60. `createWorktree` reuses a
+      slug-derived path without checking it is a git repo.
+      `/private/tmp/orrery-worktrees` currently holds four such directories with
+      no `.git` sibling and three entries each — `world-clock-feature-take-8-*`,
+      `-take-9-*`, `-take-10-*`, `-take-12-worldclock-server-work`. A reused slug
+      gives `fatal: not a git repository`, retried 3×, surfacing as "orphaned 3
+      times — structural issue suspected". Validate and recreate
+- [ ] `170-redispatch-banner-clears` — the banner condition is any `running` task
+      in IMPLEMENTING (Phase 50), and redispatch's first act sets a task running,
+      so the button re-satisfies its own condition and never clears. Use the
+      no-live-job test. Audit for the condition existing in both the API layer and
+      the web component — the "parked or stuck" wording appears in both
+- [ ] `171-slug-truncation` — four sibling directories are named
+      `orld-clock-feature-take-14-*`, leading `w` removed, while same-run peers
+      for other takes are correct. Find the off-by-one and report where it was.
+      A truncated slug and a correct one are two different paths for one feature
+- [ ] Tests, fail-first, red output reported per case: a retry after a capped
+      attempt sees the prior attempt's work; a worktree path that exists but is
+      not a repo is recreated rather than failing; the banner is absent while a
+      redispatched task is running; the slug for a name beginning `w` is intact
+**Definition of Done:**
+- A capped attempt's work is available to the next attempt, demonstrated on a
+  reproduction of the take-19 shape
+- No agent turn is spent on scratch-file cleanup
+- Non-repo worktree path recovers without a retry being consumed
+- Banner clears on redispatch
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 93 files / 1288 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
