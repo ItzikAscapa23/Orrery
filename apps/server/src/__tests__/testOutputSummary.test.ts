@@ -482,6 +482,59 @@ describe('summarizeBashTestRun', () => {
     expect(result?.summary).toContain('debug line from vitest');
   });
 
+  it('console output over the cap includes a visible truncation notice (jest)', async () => {
+    const longOutput = 'x'.repeat(3000); // > 2048
+    const reportJson = makePassingJson(1);
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('npx jest')) return { exitCode: 0, stdout: longOutput, stderr: '' };
+      if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    const result = await summarizeBashTestRun('npx jest --ci', container);
+    expect(result).not.toBeNull();
+    expect(result?.summary).toContain('CONSOLE:');
+    const consolePart = result!.summary.split('CONSOLE:\n')[1]!;
+    expect(consolePart).toMatch(/^\(truncated — showing last 2048 of 3000 chars\)/);
+  });
+
+  it('vitest console output over the cap includes a visible truncation notice', async () => {
+    const longMessage = 'y'.repeat(3000); // > 2048
+    const reportWithLongConsole = JSON.stringify({
+      numPassedTests: 1,
+      numFailedTests: 0,
+      testResults: [
+        {
+          assertionResults: [{ fullName: 't1', status: 'passed', duration: 5 }],
+          message: longMessage,
+        },
+      ],
+    });
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('npx vitest run')) return { exitCode: 0, stdout: '', stderr: '' };
+      if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportWithLongConsole, stderr: '' };
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    const result = await summarizeBashTestRun('npm test', container);
+    expect(result).not.toBeNull();
+    expect(result?.summary).toContain('CONSOLE:');
+    const consolePart = result!.summary.split('CONSOLE:\n')[1]!;
+    expect(consolePart).toMatch(/^\(truncated — showing last 2048 of 3000 chars\)/);
+  });
+
+  it('console output at or under the cap has no truncation notice', async () => {
+    const shortOutput = 'z'.repeat(100); // < 2048
+    const reportJson = makePassingJson(1);
+    const container = makeContainer((cmd) => {
+      if (cmd.startsWith('npx jest')) return { exitCode: 0, stdout: shortOutput, stderr: '' };
+      if (cmd.startsWith('cat ')) return { exitCode: 0, stdout: reportJson, stderr: '' };
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    const result = await summarizeBashTestRun('npx jest --ci', container);
+    expect(result).not.toBeNull();
+    expect(result?.summary).toContain('CONSOLE:');
+    expect(result?.summary).not.toContain('(truncated');
+  });
+
   it('does not append CONSOLE section when output is empty', async () => {
     const reportJson = makePassingJson(2);
     const container = makeContainer((cmd) => {

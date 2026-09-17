@@ -92,6 +92,11 @@ export function formatTestSummary(parsed: ParsedTestOutput): string {
 
 const CONSOLE_TAIL_CHARS = 2048;
 
+function tailWithTruncationNotice(text: string, cap: number): string {
+  if (text.length <= cap) return text;
+  return `(truncated — showing last ${cap} of ${text.length} chars)\n` + text.slice(-cap);
+}
+
 /**
  * Extract console output from a test run.
  * Jest prints console to stdout (rawCombined); vitest writes to the JSON report
@@ -104,7 +109,7 @@ function extractConsoleOutput(
 ): string {
   if (resolvedCommand.startsWith('npx jest')) {
     const trimmed = rawCombined.trim();
-    return trimmed ? trimmed.slice(-CONSOLE_TAIL_CHARS) : '';
+    return trimmed ? tailWithTruncationNotice(trimmed, CONSOLE_TAIL_CHARS) : '';
   }
   // vitest: extract message fields from JSON report testResults entries.
   try {
@@ -117,7 +122,7 @@ function extractConsoleOutput(
       .map((r) => (r.message ?? '').trim())
       .filter(Boolean)
       .join('\n');
-    return messages ? messages.slice(-CONSOLE_TAIL_CHARS) : '';
+    return messages ? tailWithTruncationNotice(messages, CONSOLE_TAIL_CHARS) : '';
   } catch {
     return '';
   }

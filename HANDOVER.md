@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 55 — The agent can ask a question
+- **Current phase:** 56 — Name the channel that works
 - **State:** `complete`
 - **Last updated:** 2026-09-18
 
@@ -56,23 +56,21 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 55 complete. Awaiting Phase 56 spec.*
+*Phase 56 complete. Awaiting Phase 57 spec.*
 
 ---
 
-## Output-path audit (Phase 55 deliverable)
+## Output-path audit (Phase 55–56 deliverable)
 
 | Path | Mechanism | Cap | Truncation visible? |
 |---|---|---|---|
-| Test run summary | `formatTestSummary` via `summarizeBashTestRun` | 4000 chars / 200 chars (4+ failures); `parseTestOutput` pre-caps stored msgs at 300 chars | Yes — `FAILURES:` section |
-| Console in test run | `extractConsoleOutput` → `CONSOLE:` section | 2048 chars | Silent tail, no notice |
+| Test run summary | `formatTestSummary` via `summarizeBashTestRun` | 4000 chars / 200 chars (4+ failures) | Yes — `FAILURES:` section |
+| Console in test run | `extractConsoleOutput` → `CONSOLE:` section | 2048 chars | **Yes** — `(truncated — showing last N of M chars)` prefix (Phase 56 fix) |
 | `inspect_file` result | `truncateOutput` | 8 KB / 200 lines | Yes — `(truncated…)` prefix |
 | Bash non-test result | `truncateOutput` | 8 KB / 200 lines | Yes — `(truncated…)` prefix |
-| `agent.log` event | `resultFirstLine` | 120 chars | No — first line only |
-| `test.report` findings | `parseTestOutput` → DB | 300 chars per message | No — stored truncated |
-| Host-side exec diagnostic | partial stderr | 300 chars | No |
-
-Notable gap: full tool-result bodies never reach the DB — only `resultFirstLine` (120 chars) is persisted in `agent.log` events.
+| `agent.log` event | `resultFirstLine` | 120 chars | No — **correct**: DB display column, not agent context |
+| `test.report` findings | `parseTestOutput` → DB | 300 chars per message | No — **correct**: DB bounds; agent sees full content at reasoning time |
+| Host-side exec diagnostic | partial stderr | 300 chars | No — borderline: human-debug path only; flag for future improvement |
 
 ---
 
@@ -80,7 +78,7 @@ Notable gap: full tool-result bodies never reach the DB — only `resultFirstLin
 
 | Park reason | Guard reads | Release route | Clears guard state? |
 |---|---|---|---|
-| `spend_limit` | `usage.recorded` events since last `gate.resolved` anchor | `POST /features/:id/spend-gate` | **YES** — Phase 53 fix |
+| `spend_limit` | `usage.recorded` events since last `gate.resolved` anchor | `POST /features/:id/spend-gate` | YES — Phase 53 fix |
 | `bedrock_unreachable` | connectivity at job run time | REDISPATCH | YES — re-evaluates on next job |
 | `failure` | prior agent outcome | REDISPATCH (`attemptCount` reset) | YES — fresh attempt |
 | `non_progress` | recent writes in current run | REDISPATCH | YES — next job starts fresh |
@@ -93,31 +91,12 @@ Notable gap: full tool-result bodies never reach the DB — only `resultFirstLin
 
 ## Phase 52 analysis (deliverable — do not delete)
 
-### Per-take table (world-clock-feature)
+Four root causes of client-coverage failures on world-clock-feature:
+`inspect_file` host path (FIXED Phase 48), fake-timer install order (FIXED, documented in client repo CLAUDE.md),
+tests written against stubs (FIXED Phase 51), untestable task within budget (OPEN).
 
-| Take | Final status | Client covered / total | Server covered / total | Total cost |
-|------|-------------|----------------------|----------------------|-----------|
-| 10 | DONE | 0 / 4 | 2 / 4 | $2.01 |
-| 12 | IMPLEMENTING (stuck) | 2 / 6 | 2 / 4 | $12.23 |
-| 13 | IMPLEMENTING (stuck) | 3 / 7 | 2 / 4 | $27.03 |
-| 16 | AWAITING_TEST_PLAN_APPROVAL (stuck) | 0 / 5 | 0 / 4 | $0.20 |
-| 17 | DONE | 2 / 4 | 2 / 4 | $5.48 |
-| 18 | IMPLEMENTING (stuck) | 1 / 5 started | 2 / 3 | $1.89 |
-
-### Four failure causes
-
-| Cause | Status |
-|-------|--------|
-| `inspect_file` host path | FIXED — Phase 48 |
-| Fake-timer install order | FIXED — documented in client repo's `CLAUDE.md` |
-| Tests written against stubs | FIXED — Phase 51 |
-| Untestable task within budget | OPEN — no fix shipped |
-
-### Recommendation: Option C — per-repo manifest `test_coverage` flag
-
-Add `test_coverage: "light" | "full"` (default `"full"`) to each repo entry in
-`repo-manifest.yaml`. Test planner reads the flag; `light` marks all client tasks
-as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2, `full` ≈ $5–8.
+**Recommendation:** Option C — per-repo manifest `test_coverage: "light" | "full"` (default `"full"`).
+`light` marks all client tasks `covered: false`. One small phase (~2–3 tasks). Per-feature: light ≈ $2, full ≈ $5–8.
 
 ---
 
@@ -125,7 +104,7 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1314 passed across 95 files**, 2026-09-18 |
+| `npm test` (repo root) | passed — **1321 passed across 95 files**, 2026-09-18 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-18 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-18 |
 
@@ -133,50 +112,38 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 
 ## Decisions
 
+- **Phase 56: CONSOLE: is the channel for in-test values (`178–180`)** —
+  `inspect_file` runs `node <file>` in a fresh process and cannot observe vitest runtime
+  state (mocks, jsdom, post-render). The bash result already carries a `CONSOLE:` section
+  assembled from `extractConsoleOutput` (`testOutputSummary.ts:191`). Both agents' rules
+  now document this and the prohibition routes correctly: `console.log` + read `CONSOLE:`
+  for in-test values; `inspect_file` for standalone file inspection. Cap kept at 2048 chars;
+  truncation is now visible: `(truncated — showing last N of M chars)`.
+
 - **Phase 55: `inspect_file` is the agent print channel (`172–174`)** —
-  Already existed in `testAgent.ts` since Phase 48; added identical implementation
-  to `devAgent.ts`. Chose over console passthrough (test-run-only, 2048-char cap,
-  unreachable from dev agent). Sentinel assertions (`expect(x).toBe(999)`) are now
-  prohibited in rules blocks of both agents; `inspect_file` with `console.log` is
-  the sanctioned channel.
+  Already existed in `testAgent.ts` since Phase 48; added to `devAgent.ts`. Phase 56
+  corrected the sentinel prohibition: prior wording named `inspect_file` as the in-test
+  replacement, which was wrong. Sentinel assertions (`expect(x).toBe(999)`) are banned.
 
 - **Phase 55: `checkNonProgress` includes `lastWrittenHash` in hash (`176`)** —
-  Hash now covers `fullCommand + (lastWrittenHash ?? '')`. Same command after
-  file rewrite → different hash → counter doesn't fire. Same command, unchanged
-  file → same hash → fires after N (Phase 41 invariant preserved). Phase 37 invariant
-  (distinct commands same output) unaffected. `lastWrittenHash` is tracked in both
-  dev and test agent loops after each `write_file`/`edit_file` success.
+  Hash covers `fullCommand + (lastWrittenHash ?? '')`. Same command after file rewrite →
+  different hash → counter doesn't fire. Phase 37 and 41 invariants preserved.
 
 - **Phase 55: `priorAttemptDiff` extended to test agent (`177`)** —
-  `testJob.ts` captures `git diff HEAD` before worktree reset on every attempt
-  (empty string → `undefined` on a fresh worktree). Passed through `TestAgentContext`.
-  Injected identically to `devAgent.ts` as a `## Prior attempt` section capped at
-  6000 chars. No `attempt` counter needed — the diff is naturally empty on attempt 1.
+  `testJob.ts` captures `git diff HEAD` before worktree reset. Injected as `## Prior attempt`
+  section (6000 char cap). Empty on attempt 1; naturally non-empty on retry.
 
 - **Phase 54: prior-attempt diff in memory only (`167`)** —
   `priorAttemptDiff` in `DevContext` — no DB column, no artifact file, ephemeral.
 
 - **Phase 54: scratch-file stripping is host-side + agent rule (`168`)** —
-  `devJob.ts` strips `SCRATCH_FILE_RE` files after `git add -A`. Chosen over
-  allowlist change to avoid widening the security boundary.
-
-- **Phase 54: `git rev-parse` validity check in `createWorktree` (`169`)** —
-  `--git-dir` for bare repo, `--is-inside-work-tree` for worktree; on failure `rmSync` + recreate.
-
-- **Phase 54: `showRedispatch` checks `parked` only, not `running` (`170`)** —
-  Orphaned running tasks are auto-recovered; banner clears on REDISPATCH.
+  `devJob.ts` strips `SCRATCH_FILE_RE` after `git add -A`. Avoids widening the allowlist.
 
 - **Phase 53: spend guard counts after `gate.resolved` anchor (`164`)** —
   `$queryRaw` scoped to `seq > COALESCE(MAX(gate.resolved.seq), 0)`. Zero-migration.
 
 - **Phase 53: `depAlreadyHasTests` skips test-agent dispatch (`166`)** —
-  If any same-repo dependency has `testsWritten=true`, covered task routes directly to dev.
-
-- **Phase 52: recommendation = Option C (per-repo manifest `test_coverage` flag)** —
-  World-clock client coverage failed 4× with different root causes.
-
-- **Phase 51: `detectSelfAuthoredSubjects` uses `stagedSet.has()` (`162`)** —
-  O(1), no disk access, zero false positives on imported subject detection.
+  Same-repo dependency with `testsWritten=true` → covered task routes directly to dev.
 
 - **Test-file boundary + finding identity (Phases 28, core)** —
   `write_file`/`edit_file` in dev agents reject test-trailer files. Finding ids recur
@@ -212,46 +179,12 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 | Phase | Title | Commit | Date |
 |---|---|---|---|
 | 0–6 | Spec agent through cost instrumentation | squashed into `54bdf20` | pre-2026-08 |
-| 7 | Agent spend and test redundancy | `4a16025` | 2026-08-21 |
-| 8 | Planner efficiency | `55a0c5b` | 2026-08-21 |
-| 9 | Backlog sweep | `2723ba0` | 2026-08-21 |
-| 10 | Spec reconciliation | `1097c3f` | 2026-08-21 |
-| 11 | Lint debt | `f0769a5` | 2026-08-21 |
-| 12 | Dispatch identity and gate baseline | `6d8ef86` | 2026-08-29 |
-| 13 | Recovery paths account for live work | `ccbab22` | 2026-08-29 |
-| 14 | Agents see what actually happened | `da52c8d` | 2026-08-29 |
-| 15 | The gate counts what actually ran | `4c8f1c6` | 2026-08-29 |
-| 16 | Environmental failures leave a recoverable task | `58bb2f7` | 2026-08-29 |
-| 17 | The UI states what the data says | `d00751f` | 2026-08-29 |
-| 18 | Close the backlog honestly | `78ff9ee` | 2026-08-29 |
-| 19 | Declared config replaces the last inference | `716a783` | 2026-08-29 |
-| 20 | Violations cost what they should, and the UI says what is running | `8120094` | 2026-08-29 |
-| 21 | Orrery is neutral; organisational policy is operator config | pending | 2026-08-31 |
-| 22 | Recovery is one click, and failures say why | `593dc75` | 2026-09-01 |
-| 23 | Config validation that fits reality | `48f540f` | 2026-09-01 |
-| 24 | The test agent stops paying twice (tasks 91–93) | `657c09e` | 2026-09-01 |
-| 25 | Tests exist before code, and the flag says so | `f2a30d4` | 2026-09-02 |
-| 26 | The test agent stops paying twice (measurement + prompt fix) | `d55a601` | 2026-09-03 |
-| 27 | The scratch filter excludes only scratch | `bbfef4b` | 2026-09-03 |
-| 28 | Acceptance tests are read-only to the dev agent | `c2e9fae` | 2026-09-03 |
-| 29 | Open questions are structured blockers answered at the gate | `aa04bb3` | 2026-09-05 |
-| 30 | Cover what Phase 29 shipped | `848f40b` | 2026-09-05 |
-| 31 | Test report cubes and brand mark | `41a8e1d` | 2026-09-06 |
-| 32 | Artifact tabs are copyable | `85592bf` | 2026-09-06 |
-| 33 | An agent that is not progressing stops | `4273e44` | 2026-09-06 |
-| 34 | Verification means what it says | `72bc51e` | 2026-09-06 |
-| 35 | The orchestrator is not bound by the agent's allowlist | `c208689` | 2026-09-06 |
-| 36 | Test output can be trusted | `260a95a` | 2026-09-06 |
-| 37 | Agents keep their flags, and blockers do not vanish quietly | `ccbecaa` | 2026-09-06 |
-| 38 | Orientation stops being the largest cost | `1948302` | 2026-09-06 |
-| 39 | A write does not excuse a loop | `178d109` | 2026-09-06 |
-| 40 | A correct finding has an effect | `937dba6` | 2026-09-07 |
-| 41 | The loop guard counts commands | `7b8baa5` | 2026-09-07 |
-| 42 | The harness brief works at all | `3b50e71` | 2026-09-07 |
-| 43 | The vacuous detector earns its gate | `b9efa8f` | 2026-09-07 |
-| 44 | The loop guard counts what it means to count | `f439b52` | 2026-09-07 |
-| 45 | Coverage is only claimed where it can be proved | `7f2c688` | 2026-09-07 |
-| 46 | An agent can see why nothing ran | `891cb40` | 2026-09-07 |
+| 7–11 | Spend, efficiency, backlog, spec, lint | `4a16025`–`f0769a5` | 2026-08-21 |
+| 12–18 | Dispatch identity, recovery, gate, UI, backlog | `6d8ef86`–`78ff9ee` | 2026-08-29 |
+| 19–21 | Config, violations, operator neutrality | `716a783`–pending | 2026-08-31 |
+| 22–28 | Recovery, config, test-agent cost, acceptance read-only | `593dc75`–`c2e9fae` | 2026-09-01–03 |
+| 29–35 | Structured blockers, UI, non-progress stop, allowlist | `aa04bb3`–`c208689` | 2026-09-05–06 |
+| 36–46 | Test trust, loop guards, orientation, harness brief | `260a95a`–`891cb40` | 2026-09-06–07 |
 | 47 | The agent can read a value | `f0e408b` | 2026-09-08 |
 | 48 | inspect_file actually runs the file | `4ba82b5` | 2026-09-09 |
 | 49 | Writing nothing is a valid outcome | `8aa8dbb` | 2026-09-10 |
@@ -261,6 +194,7 @@ as `covered: false`. One small phase (~2–3 tasks). Per-feature: `light` ≈ $2
 | 53 | A guard and its override must read the same state | `a70e02f` | 2026-09-17 |
 | 54 | A retry starts warmer than the attempt before it | `d63e5b8` | 2026-09-17 |
 | 55 | The agent can ask a question | `d67bd7b` | 2026-09-18 |
+| 56 | Name the channel that works | pending | 2026-09-18 |
 
 ---
 

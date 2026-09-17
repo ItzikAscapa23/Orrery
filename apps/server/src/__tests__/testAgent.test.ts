@@ -1437,6 +1437,18 @@ describe('buildSystemPrompt — existingTestFiles injection', () => {
   });
 });
 
+describe('buildSystemPrompt — console channel rules', () => {
+  it('rules mention the CONSOLE: section as the channel for in-test values', () => {
+    const prompt = buildSystemPrompt(BASE_CTX);
+    expect(prompt).toContain('CONSOLE:');
+  });
+
+  it('rules do not route the sentinel prohibition to inspect_file for in-test values', () => {
+    const prompt = buildSystemPrompt(BASE_CTX);
+    expect(prompt).not.toContain('Use inspect_file with console.log instead');
+  });
+});
+
 // ── inspect_file tool ─────────────────────────────────────────────────────────
 
 describe('testAgent — inspect_file tool', () => {

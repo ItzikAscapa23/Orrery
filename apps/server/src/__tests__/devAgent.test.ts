@@ -1540,3 +1540,23 @@ describe('devAgent — test-file read-only boundary', () => {
     expect(fs.readFileSync(path.join(tmpDir, normalFile), 'utf-8')).toBe('export const x = 1;');
   });
 });
+
+describe('buildSystemPrompt — console channel rules', () => {
+  const TASK_CTX = {
+    id: 't1',
+    title: 'Add endpoint',
+    description: 'Implement GET /health',
+    specRefs: [],
+  };
+  const SPEC_CTX = { specMarkdown: '', contractYaml: 'openapi: "3.0.0"', repoClaudeMd: '' };
+
+  it('rules mention the CONSOLE: section as the channel for in-test values', () => {
+    const prompt = buildSystemPrompt(TASK_CTX, SPEC_CTX);
+    expect(prompt).toContain('CONSOLE:');
+  });
+
+  it('rules do not route the sentinel prohibition to inspect_file for in-test values', () => {
+    const prompt = buildSystemPrompt(TASK_CTX, SPEC_CTX);
+    expect(prompt).not.toContain('Use inspect_file with console.log instead');
+  });
+});
