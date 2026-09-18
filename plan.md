@@ -2366,3 +2366,59 @@ npm test          # FROM REPO ROOT — baseline 96 files / 1330 tests, must not 
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 60 — A channel nothing uses is not a channel
+**Goal:** Every tool the rules recommend is one an agent actually reaches for.
+**PRD refs:** §3 R6, R7
+**Tasks:**
+- [ ] `193-decide-inspect-file` — R-70, reopened. Phase 59 task 191 changed the
+      handler to `cd <dir> && node <file>` so module resolution starts from the
+      file's own directory. Two features have run since and neither called
+      `inspect_file` once. Take-22 task `bd8c89a1` (Time resolution function)
+      wrote `src/scratch_verify_resolveTime.mjs` at turn 5 and ran it with
+      `bash node --input-type=module --loader tsx/esm` at turn 6 (failed) and
+      `bash node --import tsx/esm` at turn 7 (worked). Take-22 task `e9e3e737`
+      (Server test suite) wrote `probe-offsets.mjs` at turn 9 and ran it with
+      `bash node` at turn 10. Take-21 task `1a3473aa` called `inspect_file` once,
+      got `node:internal/modules/cjs/loader:1210`, and used `bash node` for the
+      remaining five scratch files. Agents route around the tool. Phase 59's own
+      DoD allowed either outcome: make it the obvious choice, or remove it and
+      strip it from both agents' rules. Do not leave a tool the rules recommend
+      and the agents avoid
+- [ ] `194-if-it-stays-it-must-be-reachable` — if 193 keeps the tool, establish
+      why agents prefer `bash node` and fix that, not the error. Two candidates
+      visible in the logs: the rules name `inspect_file` in the tools section
+      while `bash` is used everywhere else in the same turn, and `bash node`
+      accepts flags (`--import tsx/esm`) that `inspect_file` does not. A tool that
+      cannot run a TypeScript-adjacent probe in a TypeScript repo will keep losing
+      to one that can
+- [ ] `195-429-and-5xx-are-environmental` — recorded as residual gaps in Phase
+      59's error-classification audit and not addressed there. A 429 rate-limit
+      and a non-proxy 5xx are failures the task did not cause and cannot fix, the
+      same class as the 403 that stalled take-20 and burned four attempts across
+      two tasks. Route both through `parkFeatureAgentOnBedrockFailure`: park, no
+      retry slot consumed, not final. Use the canonical predicate — do not add a
+      second text check beside it
+- [ ] `196-verify-192-on-a-real-park` — Phase 54 task 170 and Phase 59 task 192
+      both changed REDISPATCH banner behaviour, and neither has been observed
+      working: take-21 and take-22 completed with zero parks, so the banner never
+      rendered. The 429/5xx work in 195 gives a reproducible park. Verify the
+      banner clears without a browser refresh on that park, and record the
+      observation rather than the code change
+- [ ] Tests, fail-first, red output reported per case: a 429 response parks
+      without incrementing `attemptCount` and without `final: true`; a non-proxy
+      5xx does the same; a proxy 5xx is unaffected; and, per 193's decision,
+      either `inspect_file` runs a `.mjs` probe in the server repo, or it is
+      absent from the tool list and from both agents' rules
+**Definition of Done:**
+- `inspect_file` is either used by an agent in the next feature, or gone from the
+  codebase and the rules — state which and why
+- 429 and non-proxy 5xx park recoverably; error-classification table in
+  HANDOVER.md updated, no residual gaps left unrecorded
+- Banner clearing observed on a real park, not inferred from the diff
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 96 files / 1330 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
