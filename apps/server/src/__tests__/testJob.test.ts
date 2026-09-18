@@ -1395,6 +1395,41 @@ describe('getExistingTestFilesWithDescribes', () => {
   });
 });
 
+describe('runTestJob — existing test files forwarded to agent (197)', () => {
+  beforeEach(() => {
+    mockReadFileSync.mockReset();
+    mockReadFileSync.mockReturnValue('');
+  });
+
+  it('passes existing authored test file paths and describe titles to runTestAgent', async () => {
+    // git log (outer beforeEach default) returns 'src/__tests__/feature.test.ts'
+    // Give that file a describe block so getExistingTestFilesWithDescribes includes it
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      if (typeof p === 'string' && p.endsWith('feature.test.ts')) {
+        return "describe('Existing suite', () => {});";
+      }
+      return '';
+    });
+
+    await runTestJob(featureId);
+
+    expect(mockRunTestAgent).toHaveBeenCalled();
+    const ctx = mockRunTestAgent.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(ctx?.['existingTestFiles']).toEqual([
+      { path: 'src/__tests__/feature.test.ts', describes: ['Existing suite'] },
+    ]);
+  });
+
+  it('omits existingTestFiles when no prior test files have describe blocks', async () => {
+    // mockReadFileSync returns '' for all paths → no describe blocks → empty list omitted
+    await runTestJob(featureId);
+
+    expect(mockRunTestAgent).toHaveBeenCalled();
+    const ctx = mockRunTestAgent.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(ctx).not.toHaveProperty('existingTestFiles');
+  });
+});
+
 describe('detectSelfAuthoredSubjects', () => {
   beforeEach(() => {
     mockReadFileSync.mockReturnValue('');

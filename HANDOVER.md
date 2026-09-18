@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 60 — A channel nothing uses is not a channel
+- **Current phase:** 61 — A test agent that knows what it already wrote
 - **State:** `complete`
 - **Last updated:** 2026-09-18
 
@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-Phase 60 complete. No Phase 61 exists in `plan.md`.
+Phase 61 complete. Phase 62 does not exist in `plan.md`.
 
 ---
 
@@ -81,7 +81,7 @@ Phase 60 complete. No Phase 61 exists in `plan.md`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1333 passed across 96 files**, 2026-09-18 |
+| `npm test` (repo root) | passed — **1337 passed across 96 files**, 2026-09-18 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-18 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-18 |
 
@@ -89,24 +89,39 @@ Phase 60 complete. No Phase 61 exists in `plan.md`.
 
 ## Decisions
 
+- **Phase 61: test-agent suite accumulation — already wired, STOP** —
+  `getExistingTestFilesWithDescribes` (which filters via `X-Orrery-Agent: test` commit trailer)
+  is called in both `taskTestJob.ts:299` and `testJob.ts:715` and forwarded as `existingTestFiles`
+  to `runTestAgent`. Dev-authored files are excluded because dev commits use `feat(taskId): title`
+  with no `X-Orrery-Agent: test` trailer. Redundancy analysis on takes 21 and 22 found zero
+  cross-file assertion overlap — each task covers a distinct API endpoint. The TESTING phase grows
+  files with genuinely new cross-endpoint integration tests, not duplicates. No prompt change
+  needed; task 200 deferred. Four tests added: `taskTestJob.test.ts` and `testJob.test.ts` each
+  verify that (a) `existingTestFiles` is forwarded when prior tests have describe blocks, and
+  (b) it is omitted when no prior tests exist. Existing `getAuthoredTestFiles.test.ts:19` covers
+  the trailer-filter exclusion.
+
+- **Phase 61 redundancy table (takes 21 and 22):**
+
+  | Feature | Repo | File | Size (task-test) | it() | TESTING growth | Cross-file overlap |
+  |---|---|---|---|---|---|---|
+  | take-22 | server | `countries.acceptance.test.ts` | 3 821 chars | 9 | +2 589 chars / +3 | 0 |
+  | take-22 | server | `time.acceptance.test.ts` | 10 692 chars | 26 | +4 681 chars / +8 | 0 |
+  | take-22 | web | `CountrySelector.test.tsx` | 8 441 chars | — | none | — |
+  | take-22 | web | `ResultRegion.test.tsx` | 14 321 chars | — | none | — |
+  | take-21 | server | `countries.test.ts` | 4 722 chars | 11 | +2 090 chars / +3 | 0 |
+  | take-21 | server | `time.test.ts` | 14 407 chars | 33 | +3 724 chars / +7 | 0 |
+
 - **Phase 60: `inspect_file` removed, not fixed** —
-  Take-21 and take-22 (two features, three tasks) never reached for `inspect_file`;
-  every probe used `bash node <file>` instead. Root cause: `bash` accepts flags
-  (`--import tsx/esm`, `--input-type=module`) that `inspect_file` does not. Removal
-  beats fighting the current. The Phase 55 sentinel-prohibition rule that named
-  `inspect_file` as the replacement channel was rewritten to name CONSOLE: instead.
-  Neither devAgent nor testAgent offers `inspect_file`; if an agent calls it, the
-  response is `Unknown tool: inspect_file`.
+  Take-21 and take-22 never reached for `inspect_file`; every probe used `bash node <file>`.
+  Root cause: `bash` accepts flags (`--import tsx/esm`, `--input-type=module`) that `inspect_file`
+  does not. Removal beats fighting the current. Phase 55 sentinel rule rewritten to name CONSOLE:
+  instead. If an agent calls `inspect_file`, the response is `Unknown tool: inspect_file`.
 
 - **Phase 60: 429 and 5xx classified environmental via status field** —
   Added `status === 429` and `status !== undefined && status >= 500` to
-  `isEnvironmentalBedrockError` (`lib/bedrockPark.ts`). The `status >= 500` branch
-  subsumes the existing proxy-503 text check, which is kept for explicitness. Both
-  park without consuming a retry slot; `final: false`.
-
-- **Phase 60: banner-clearing observation (task 196) deferred** —
-  No 429 or 5xx park occurred during the phase. User will observe banner clearing on
-  the next real park and record it in HANDOVER.md.
+  `isEnvironmentalBedrockError` (`lib/bedrockPark.ts`). Both park without consuming a retry slot;
+  `final: false`.
 
 - **Phase 59: 403 detection uses `.status` property, not text** —
   Mid-stream 403s bypass `rethrowIfExpiredToken` and arrive as raw `APIError` objects
@@ -185,6 +200,7 @@ Phase 60 complete. No Phase 61 exists in `plan.md`.
 | 58 | The planner declares the subject | `aa90c50` | 2026-09-18 |
 | 59 | An expired credential is weather, not a verdict | `7d36ffb` | 2026-09-18 |
 | 60 | A channel nothing uses is not a channel | `3857634` | 2026-09-18 |
+| 61 | A test agent that knows what it already wrote | pending | 2026-09-18 |
 
 ---
 

@@ -375,6 +375,37 @@ describe('runTaskTestJob', () => {
     expect(task.testTaskAttempts).toBe(0);
   });
 
+  it('forwards existing authored test file paths and describe titles to runTestAgent (197)', async () => {
+    const { getExistingTestFilesWithDescribes } = await import('../jobs/testJob.js');
+    vi.mocked(getExistingTestFilesWithDescribes).mockReturnValueOnce([
+      { path: 'src/__tests__/countries.acceptance.test.ts', describes: ['GET /api/countries'] },
+    ]);
+
+    await runTaskTestJob(featureId, taskId, 'job-existing-files', 'server');
+
+    expect(mockRunTestAgent).toHaveBeenCalledWith(
+      featureId,
+      expect.objectContaining({
+        existingTestFiles: [
+          { path: 'src/__tests__/countries.acceptance.test.ts', describes: ['GET /api/countries'] },
+        ],
+      }),
+      expect.anything(),
+      expect.any(String),
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
+    );
+  });
+
+  it('omits existingTestFiles from the agent call when no prior tests exist (197)', async () => {
+    // Default mock returns [] — verify the key is absent from the agent context.
+    await runTaskTestJob(featureId, taskId, 'job-no-existing', 'server');
+
+    const agentCtx = mockRunTestAgent.mock.calls[0]?.[1];
+    expect(agentCtx).not.toHaveProperty('existingTestFiles');
+  });
+
   it('includes only task title and specRefs in agent context, not description', async () => {
     await runTaskTestJob(featureId, taskId, 'job-1', 'server');
     expect(mockRunTestAgent).toHaveBeenCalledWith(
