@@ -63,4 +63,19 @@ describe('isEnvironmentalBedrockError', () => {
       false,
     );
   });
+
+  it('returns true for 429 rate limit', () => {
+    const err = Object.assign(new Error('Too Many Requests'), { status: 429 });
+    expect(isEnvironmentalBedrockError(err)).toBe(true);
+  });
+
+  it('returns true for non-proxy 5xx Bedrock outage', () => {
+    const err = Object.assign(new Error('Internal Server Error'), { status: 500 });
+    expect(isEnvironmentalBedrockError(err)).toBe(true);
+  });
+
+  it('proxy 503 file-blocked is still caught after 5xx broadening', () => {
+    const err = Object.assign(new Error('503 file blocked'), { status: 503 });
+    expect(isEnvironmentalBedrockError(err)).toBe(true);
+  });
 });

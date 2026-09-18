@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 59 — An expired credential is weather, not a verdict
+- **Current phase:** 60 — A channel nothing uses is not a channel
 - **State:** `complete`
 - **Last updated:** 2026-09-18
 
@@ -56,57 +56,24 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 59 complete. Phase 59 is the final phase in plan.md — no Phase 60 exists.*
+Phase 60 complete. No Phase 61 exists in `plan.md`.
 
 ---
 
-## Output-path audit (Phase 55–56 deliverable)
+## Error-classification audit (complete after Phase 60)
 
-| Path | Mechanism | Cap | Truncation visible? |
+| Code / condition | Environmental? | Consumes retry? | Can terminate final? |
 |---|---|---|---|
-| Test run summary | `formatTestSummary` via `summarizeBashTestRun` | 4000 chars / 200 chars (4+ failures) | Yes — `FAILURES:` section |
-| Console in test run | `extractConsoleOutput` → `CONSOLE:` section | 2048 chars | **Yes** — `(truncated — showing last N of M chars)` prefix (Phase 56 fix) |
-| `inspect_file` result | `truncateOutput` | 8 KB / 200 lines | Yes — `(truncated…)` prefix |
-| Bash non-test result | `truncateOutput` | 8 KB / 200 lines | Yes — `(truncated…)` prefix |
-| `agent.log` event | `resultFirstLine` | 120 chars | No — **correct**: DB display column, not agent context |
-| `test.report` findings | `parseTestOutput` → DB | 300 chars per message | No — **correct**: DB bounds; agent sees full content at reasoning time |
-| Host-side exec diagnostic | partial stderr | 300 chars | No — borderline: human-debug path only; flag for future improvement |
-
----
-
-## Guard/release audit (Phase 53 deliverable)
-
-| Park reason | Guard reads | Release route | Clears guard state? |
-|---|---|---|---|
-| `spend_limit` | `usage.recorded` events since last `gate.resolved` anchor | `POST /features/:id/spend-gate` | YES — Phase 53 fix |
-| `bedrock_unreachable` | connectivity at job run time | REDISPATCH | YES — re-evaluates on next job |
-| `failure` | prior agent outcome | REDISPATCH (`attemptCount` reset) | YES — fresh attempt |
-| `non_progress` | recent writes in current run | REDISPATCH | YES — next job starts fresh |
-| `allowlist_violation` | allowlist at run time | REDISPATCH | YES — re-evaluates |
-| `self_authored_subjects` | imported subjects vs staged set | REDISPATCH | YES — different staged set |
-| `orphan` | heartbeat absence | auto-resumed at startup (`startupResume.ts`) | YES — auto-cleared |
-| `orphan_cap` | orphan count ≥ 3 | REDISPATCH only | YES — resets `parkReason` |
-
----
-
-## Error-classification audit (Phase 59 deliverable)
-
-| Code / condition | SDK type | Environmental after Phase 59? | Consumes retry? | Can terminate final? |
-|---|---|---|---|---|
-| 403 expired STS | `PermissionDeniedError` | **YES** — `status === 403` branch | No | No |
-| network / unreachable | `APIConnectionError` | YES — `'bedrock unreachable'` prefix | No | No |
-| timeout | `APIConnectionTimeoutError` | YES — `'request timed out'` prefix | No | No |
-| 503 proxy block | `InternalServerError` | YES — `status === 503 && 'file blocked'` | No | No |
-| 401 invalid key | `AuthenticationError` | No | Yes | Yes (if max attempts) |
-| **429 rate limit** | `RateLimitError` | **No — gap**: should park, not consume retry | Yes | Yes |
-| **5xx Bedrock outage** | `InternalServerError` | **No — gap**: non-proxy 5xx not classified | Yes | Yes |
-| 400 bad request | `BadRequestError` | No — agent-caused | Yes | Yes |
-| 404 wrong model | `NotFoundError` | No — operator config error | Yes | Yes |
-| 422 bad body | `UnprocessableEntityError` | No — agent-caused | Yes | Yes |
-
-Two residual gaps (not covered by Phase 59): 429 rate-limit and non-proxy 5xx Bedrock
-outage should park without consuming a retry slot. Both are environmental — the task
-did not cause them and cannot fix them.
+| 403 expired STS | YES — `status === 403` | No | No |
+| network / unreachable | YES — `'bedrock unreachable'` prefix | No | No |
+| timeout | YES — `'request timed out'` prefix | No | No |
+| 503 proxy block | YES — `status === 503 && 'file blocked'` | No | No |
+| 429 rate limit | YES — `status === 429` (Phase 60) | No | No |
+| 5xx Bedrock outage | YES — `status >= 500` (Phase 60) | No | No |
+| 401 invalid key | No | Yes | Yes (if max attempts) |
+| 400 bad request | No — agent-caused | Yes | Yes |
+| 404 wrong model | No — operator config error | Yes | Yes |
+| 422 bad body | No — agent-caused | Yes | Yes |
 
 ---
 
@@ -114,7 +81,7 @@ did not cause them and cannot fix them.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1334 passed across 96 files**, 2026-09-18 (+4 from Phase 58 baseline) |
+| `npm test` (repo root) | passed — **1333 passed across 96 files**, 2026-09-18 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-18 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-18 |
 
@@ -122,72 +89,42 @@ did not cause them and cannot fix them.
 
 ## Decisions
 
+- **Phase 60: `inspect_file` removed, not fixed** —
+  Take-21 and take-22 (two features, three tasks) never reached for `inspect_file`;
+  every probe used `bash node <file>` instead. Root cause: `bash` accepts flags
+  (`--import tsx/esm`, `--input-type=module`) that `inspect_file` does not. Removal
+  beats fighting the current. The Phase 55 sentinel-prohibition rule that named
+  `inspect_file` as the replacement channel was rewritten to name CONSOLE: instead.
+  Neither devAgent nor testAgent offers `inspect_file`; if an agent calls it, the
+  response is `Unknown tool: inspect_file`.
+
+- **Phase 60: 429 and 5xx classified environmental via status field** —
+  Added `status === 429` and `status !== undefined && status >= 500` to
+  `isEnvironmentalBedrockError` (`lib/bedrockPark.ts`). The `status >= 500` branch
+  subsumes the existing proxy-503 text check, which is kept for explicitness. Both
+  park without consuming a retry slot; `final: false`.
+
+- **Phase 60: banner-clearing observation (task 196) deferred** —
+  No 429 or 5xx park occurred during the phase. User will observe banner clearing on
+  the next real park and record it in HANDOVER.md.
+
 - **Phase 59: 403 detection uses `.status` property, not text** —
-  `isEnvironmentalBedrockError` (`lib/bedrockPark.ts`) previously checked four message
-  prefixes. Mid-stream 403 errors from the Bedrock SDK bypass `rethrowIfExpiredToken`
-  (which only fires at stream creation time) and arrive as raw `APIError` objects with
-  `.status === 403`. Added a direct `status === 403` branch. Text-based checks
-  (`msg.includes('403')`) were too broad — they match prose error messages. The Anthropic
-  SDK's `.status` property is the canonical signal. `reviewJob.ts` and `testJob.ts` were
-  also using ad-hoc text checks; both migrated to `isEnvironmentalBedrockError` +
-  `parkFeatureAgentOnBedrockFailure`.
-
-- **Phase 59: `inspect_file` runs from file's directory** —
-  Changed `testAgent.ts` from `node ${containerRelPath}` to `cd <dir> && node <file>`.
-  `.mjs` files may `import` `.js` siblings whose ESM/CJS context depends on the nearest
-  `package.json`. Running from `/workspace` causes node to traverse from there; running
-  from the file's own directory finds the correct package.json first. `.mjs` forces the
-  top-level file into ESM; the directory matters for dependencies.
-
-- **Phase 59: `onRedispatchAction` is separate from `onGateAction` in App.tsx** —
-  `showRedispatch` reads from `tasks` (a REST-fetched local array), not from SSE events.
-  After REDISPATCH, tasks are reset to `pending` server-side before `task.started` SSE
-  fires, so the banner persists until the BullMQ job starts. Fix: pass a separate
-  `onRedispatchAction` to `MissionControl` / `RedispatchCard` that calls both
-  `refreshFeatures()` and `refreshTasks()`. Other gate actions (spend-gate, test-report)
-  are SSE-driven via `foldEvents` and self-clear on `gate.resolved` — no change needed there.
+  Mid-stream 403s bypass `rethrowIfExpiredToken` and arrive as raw `APIError` objects
+  with `.status === 403`. Text checks match prose; `.status` is the canonical signal.
 
 - **Phase 58: Subject is declared, not derived** —
-  Phase 57 shipped `extractSubjectComponent(taskTitle)`, which PascalCased the words
-  before "component" in a task title to derive the render-validation subject. This failed
-  when the dev agent used a different name (e.g. "Zone result region component" →
-  `ZoneResultRegion`, but agent named the file `ResultRegion.tsx`). Phase 58 adds
-  `subject?: string` to `PlanTaskSchema` and the Prisma `Task` model; the planner now
-  declares the component name explicitly. `extractSubjectComponent` was hard-deleted
-  (no fallback, no flag). `validateTestFileContent` signature updated to accept
-  `{ name: string } | undefined` — returns `null` immediately when `undefined`
-  (opt-in: tasks without a subject skip render validation). Migration:
-  `20260918165148_add_task_subject` — nullable column, zero data loss.
+  `subject?: string` on `PlanTaskSchema` and the `Task` model. Planner declares the
+  component name explicitly. `extractSubjectComponent` was hard-deleted. Tasks without
+  a subject skip render validation.
 
-- **Phase 57: Stop condition for converging probe sequences — 184 report (unimplemented)** —
-  Take-20 attempt 3 ran a probe loop that never tripped the Phase 33/41 non-progress
-  guard. Recommended stop condition: if the same file is `write_file`'d and run 5+
-  times without an authored test passing, fire `NonProgressError`. Was annotated
-  "deferred to Phase 58" but Phase 58 covered the subject-field change. No later phase
-  in `plan.md` covers this — it remains unimplemented.
+- **Phase 57: Probe-loop stop condition — unimplemented** —
+  Recommended: fire `NonProgressError` if the same file is `write_file`'d and run 5+
+  times without an authored test passing. No phase in `plan.md` covers this.
 
-- **Phase 57: Why probe instructions don't stick — 183 report** —
-  Three root causes: (1) rule placement — probe rules appear after `## Relevant spec
-  sections` in `testAgent.ts:buildSystemPrompt`, so the agent commits to an approach
-  before reading them; (2) `CONSOLE:` absent when empty (`testOutputSummary.ts:196`);
-  (3) React `__reactProps` probe returns undefined when the component is unimplemented.
-  Root cause: the component did not exist. Writing tests for an absent subject requires
-  spec-driven props, not probing. Rule relocation is a separate open decision.
-
-- **Phase 56: CONSOLE: is the channel for in-test values (`178–180`)** —
-  `inspect_file` runs `node <file>` in a fresh process and cannot observe vitest runtime
-  state. `CONSOLE:` section (from `extractConsoleOutput`, 2048-char cap) is the correct
-  channel. Both agents' rules document this; truncation now visible.
-
-- **Phase 55: `checkNonProgress` includes `lastWrittenHash` in hash (`176`)** —
-  Same command after file rewrite → different hash → counter doesn't fire.
-  Phase 37 and 41 invariants preserved.
-
-- **Phase 53: spend guard counts after `gate.resolved` anchor (`164`)** —
-  `$queryRaw` scoped to `seq > COALESCE(MAX(gate.resolved.seq), 0)`. Zero-migration.
-
-- **Phase 53: `depAlreadyHasTests` skips test-agent dispatch (`166`)** —
-  Same-repo dependency with `testsWritten=true` → covered task routes directly to dev.
+- **Phase 56: CONSOLE: is the sole channel for in-test values** —
+  `extractConsoleOutput` delivers up to 2048 chars of console output in the CONSOLE:
+  section of every bash result. A fresh process (node) cannot observe vitest runtime
+  state. Truncation is visible in the output prefix.
 
 - **Test-file boundary + finding identity (Phases 28, core)** —
   `write_file`/`edit_file` in dev agents reject test-trailer files. Finding ids recur
@@ -210,13 +147,10 @@ did not cause them and cannot fix them.
   append. Fix: re-query existing `pr.created` events inside the per-repo loop
   immediately before the ADO API call.
 
-- **O-13 Fail-first evidence not captured for Phases 57 and 58.** Both phases required
-  "Tests, fail-first, red output reported per case." Tests and implementation were
-  written in the same pass; no red state was observed or recorded. Not reconstructed
-  retroactively — the gap stands as-is. Phase 59 captured fail-first output per case.
-
-- **429 rate-limit and non-proxy 5xx not classified environmental.** See error-classification
-  audit above. Both should park without consuming a retry slot. Not addressed in Phase 59.
+- **Task 196 — REDISPATCH banner clearing not observed.** Phase 54 task 170 and
+  Phase 59 task 192 changed banner behaviour; neither was seen clearing on a real
+  park (take-21 and take-22 completed with zero parks). The 429/5xx fix in Phase 60
+  makes parks reproducible — verify on the next park and record here.
 
 ---
 
@@ -250,6 +184,7 @@ did not cause them and cannot fix them.
 | 57 | Test the component, not the app | `562da3b` | 2026-09-18 |
 | 58 | The planner declares the subject | `aa90c50` | 2026-09-18 |
 | 59 | An expired credential is weather, not a verdict | `7d36ffb` | 2026-09-18 |
+| 60 | A channel nothing uses is not a channel | `pending` | 2026-09-18 |
 
 ---
 

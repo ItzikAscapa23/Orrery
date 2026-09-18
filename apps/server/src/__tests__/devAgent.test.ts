@@ -1555,8 +1555,8 @@ describe('buildSystemPrompt — console channel rules', () => {
     expect(prompt).toContain('CONSOLE:');
   });
 
-  it('rules do not route the sentinel prohibition to inspect_file for in-test values', () => {
+  it('inspect_file is not mentioned anywhere in the rules (tool removed)', () => {
     const prompt = buildSystemPrompt(TASK_CTX, SPEC_CTX);
-    expect(prompt).not.toContain('Use inspect_file with console.log instead');
+    expect(prompt).not.toContain('inspect_file');
   });
 });

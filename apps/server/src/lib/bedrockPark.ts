@@ -18,7 +18,11 @@ export function isEnvironmentalBedrockError(err: unknown): boolean {
     (status === 503 && (msg.includes('file blocked') || msg.includes('503 file blocked'))) ||
     // Raw SDK APIError with .status 403 — expired STS token arriving mid-stream
     // bypasses rethrowIfExpiredToken in anthropic.ts and lands here unmodified.
-    status === 403
+    status === 403 ||
+    // 429 rate-limit and any 5xx Bedrock outage are environmental — the task
+    // did not cause them and cannot fix them.
+    status === 429 ||
+    (status !== undefined && status >= 500)
   );
 }
 

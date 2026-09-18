@@ -756,9 +756,6 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
         } else if (info.toolName === 'write_file') {
           text = `◦ turn ${info.turn} · write_file ${info.path} (${info.contentLength} chars content)`;
           if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
-        } else if (info.toolName === 'inspect_file') {
-          text = `◦ turn ${info.turn} · inspect_file ${info.path ?? ''} (${info.resultSize} chars)`;
-          if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;
         } else {
           text = `◦ turn ${info.turn} · ${info.toolName} (${info.resultSize} chars)`;
           if (info.resultFirstLine) text += ` → ${info.resultFirstLine}`;

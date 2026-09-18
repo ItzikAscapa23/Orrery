@@ -188,26 +188,6 @@ const LIST_FILES_TOOL: Anthropic.Tool = {
   },
 };
 
-const INSPECT_FILE_TOOL: Anthropic.Tool = {
-  name: 'inspect_file',
-  description:
-    'Run a .js or .mjs file with node and return its stdout. ' +
-    'Use this to print runtime values without writing assertions. ' +
-    'Path must be inside the test directory. ' +
-    'Write console.log statements in the file, then call inspect_file to read them. ' +
-    'Output is capped at 8 KB / 200 lines — truncation is shown as a prefix message.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      path: {
-        type: 'string',
-        description: 'File path relative to repo root — must be inside the test directory.',
-      },
-    },
-    required: ['path'],
-  },
-};
-
 // ── Path jail ─────────────────────────────────────────────────────────────────
 
 // Implementation directories that the Test Agent must never read.
@@ -528,19 +508,13 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     '',
     '**list_files(dir)** — List file names in the test directory (use instead of ls/find).',
     '',
-    `**inspect_file(path)** — Run a .js or .mjs file with node and return its stdout.`,
-    `Use this for standalone values: fixture files, utility scripts, pure functions.`,
-    `Path must be inside ${ctx.testDir}/. Output is capped at 8 KB / 200 lines — truncation is shown as a prefix message.`,
-    `inspect_file executes node in a fresh process and cannot observe state that only exists inside a vitest run.`,
-    '',
     `**Reading a value from inside a test run** (mock call counts, post-render state, anything that lives in vitest's worker):`,
     `add console.log(value) to the test, run the test command, and read the value from the CONSOLE: section of the bash result.`,
     `The CONSOLE: section appears after the test summary whenever console output is non-empty.`,
     '',
     `Never write a sentinel assertion like expect(callCount).toBe(999) to read callCount —`,
     `that pattern hijacks the test harness to serve as a print channel.`,
-    `For in-test values (mock state, render output): use console.log → read CONSOLE: in the bash result.`,
-    `For standalone values (fixture files, utility output): use inspect_file.`,
+    `To read a value: add console.log(value) to the test and read the CONSOLE: section of the bash result.`,
     '',
     '**bash(command)** — Run a test-runner command only.',
     `Allowed: ${TEST_BASH_ALLOWED_PREFIXES.join(', ')}.`,
@@ -653,14 +627,7 @@ export async function runTestAgent(
             cache_control: { type: 'ephemeral' },
           } as Anthropic.TextBlockParam,
         ],
-        tools: [
-          BASH_TOOL,
-          WRITE_FILE_TOOL,
-          EDIT_FILE_TOOL,
-          READ_FILE_TOOL,
-          LIST_FILES_TOOL,
-          INSPECT_FILE_TOOL,
-        ],
+        tools: [BASH_TOOL, WRITE_FILE_TOOL, EDIT_FILE_TOOL, READ_FILE_TOOL, LIST_FILES_TOOL],
         messages: withLastMessageCached(messages),
       },
       featureId,
@@ -931,39 +898,6 @@ export async function runTestAgent(
                 toolName: 'list_files',
                 resultSize: result.length,
                 resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
-              });
-            continue;
-          } else if (block.name === 'inspect_file') {
-            const { path: filePath = '' } = block.input as { path?: string };
-            callPath = filePath;
-            const absPath = checkReadAllowed(worktreePath, filePath, ctx.testDir);
-            let realWorktreeRoot = worktreePath;
-            try {
-              realWorktreeRoot = fs.realpathSync.native(worktreePath);
-            } catch {
-              /* ok */
-            }
-            const containerRelPath = path.relative(realWorktreeRoot, absPath);
-            // Run from the file's own directory so package.json lookup resolves the
-            // correct ESM/CJS context (important for .mjs files importing .js siblings).
-            const fileDir = path.dirname(containerRelPath);
-            const fileName = path.basename(containerRelPath);
-            const nodeCmd =
-              fileDir && fileDir !== '.'
-                ? `cd ${JSON.stringify(fileDir)} && node ${fileName}`
-                : `node ${fileName}`;
-            const execResult = await container.exec(nodeCmd);
-            const raw =
-              [execResult.stdout, execResult.stderr].filter(Boolean).join('\n') || '(no output)';
-            result = truncateOutput(raw);
-            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
-            if (onToolCall)
-              await onToolCall({
-                turn,
-                toolName: 'inspect_file',
-                resultSize: result.length,
-                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
-                path: filePath,
               });
             continue;
           } else {

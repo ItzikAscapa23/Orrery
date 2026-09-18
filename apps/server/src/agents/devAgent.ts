@@ -133,27 +133,6 @@ const READ_FILE_TOOL: Anthropic.Tool = {
   },
 };
 
-const INSPECT_FILE_TOOL: Anthropic.Tool = {
-  name: 'inspect_file',
-  description:
-    'Run a .js or .mjs file with node and return its stdout. ' +
-    'Use this to print runtime values without writing assertions. ' +
-    'Path must be inside the repository worktree. ' +
-    'Write console.log statements in the file, then call inspect_file to read them. ' +
-    'Output is capped at 8 KB / 200 lines — truncation is shown as a prefix message.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      path: {
-        type: 'string',
-        description:
-          'File path relative to repo root — must be a .js or .mjs file inside the worktree.',
-      },
-    },
-    required: ['path'],
-  },
-};
-
 export const REPORT_BLOCKED_TOOL: Anthropic.Tool = {
   name: 'report_blocked_by_protected_test',
   description:
@@ -430,19 +409,13 @@ export function buildSystemPrompt(task: DevTask, ctx: DevContext): string {
     'editing it. Supply start_line and end_line (1-based, inclusive) to read a slice — slices are returned in full.',
     'Whole-file output is capped at 200 lines / 8 KB.',
     '',
-    '**inspect_file(path)** — Run a .js or .mjs file with node and return its stdout.',
-    'Use this for standalone values: fixture files, utility scripts, pure functions.',
-    'Output is capped at 8 KB / 200 lines — truncation is shown as a prefix message.',
-    'inspect_file executes node in a fresh process and cannot observe state that only exists inside a vitest run.',
-    '',
     "**Reading a value from inside a test run** (mock call counts, post-render state, anything that lives in vitest's worker):",
     'add console.log(value) to the test, run the test command, and read the value from the CONSOLE: section of the bash result.',
     'The CONSOLE: section appears after the test summary whenever console output is non-empty.',
     '',
     'Never write a sentinel assertion like expect(x).toBe(999) to read x —',
     'that pattern hijacks the test harness to serve as a print channel.',
-    'For in-test values (mock state, render output): use console.log → read CONSOLE: in the bash result.',
-    'For standalone values (fixture files, utility output): use inspect_file.',
+    'To read a value: add console.log(value) to the test and read the CONSOLE: section of the bash result.',
     '',
     '**bash(command)** — Run a single shell command. Use only for: npx jest / npx vitest run (not npm test — see Rules),',
     'npm run lint, npm run typecheck, read-only exploration',
@@ -601,7 +574,6 @@ export async function runDevAgent(
           WRITE_FILE_TOOL,
           EDIT_FILE_TOOL,
           READ_FILE_TOOL,
-          INSPECT_FILE_TOOL,
           PROPOSE_AMENDMENT_TOOL,
           REPORT_BLOCKED_TOOL,
         ],
@@ -901,31 +873,6 @@ export async function runDevAgent(
               conflictingAssertion: conflicting_assertion,
               taskId: task.id,
             };
-          } else if (block.name === 'inspect_file') {
-            const { path: filePath = '' } = block.input as { path?: string };
-            callPath = filePath;
-            const absPath = resolveWorktreePath(worktreePath, filePath);
-            let realWorktreeRoot = worktreePath;
-            try {
-              realWorktreeRoot = fs.realpathSync.native(worktreePath);
-            } catch {
-              /* ok */
-            }
-            const containerRelPath = path.relative(realWorktreeRoot, absPath);
-            const execResult = await container.exec(`node ${containerRelPath}`);
-            const raw =
-              [execResult.stdout, execResult.stderr].filter(Boolean).join('\n') || '(no output)';
-            result = truncateOutput(raw);
-            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
-            if (onToolCall)
-              await onToolCall({
-                turn,
-                toolName: 'inspect_file',
-                resultSize: result.length,
-                resultFirstLine: (result.split('\n')[0] ?? '').slice(0, 120),
-                path: filePath,
-              });
-            continue;
           } else {
             result = `Unknown tool: ${block.name}`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
