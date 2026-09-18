@@ -2422,3 +2422,61 @@ npm test          # FROM REPO ROOT — from 1334 (phase 59 actual); expect 1333 
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 61 — A test agent that knows what it already wrote
+**Goal:** Acceptance coverage accumulates across tasks instead of restarting at each one.
+**PRD refs:** §2 C6; §3 R7
+**Tasks:**
+- [ ] `197-the-test-agent-sees-the-existing-suite` — R-71. Each covered task gets
+      a test agent run that authors a complete new file with no knowledge of what
+      earlier runs in the same feature produced. Take-22, four covered tasks:
+      `countries.acceptance.test.ts` (3821 chars), `CountrySelector.test.tsx`
+      (9075), `time.acceptance.test.ts` (11662), `ResultRegion.test.tsx` (16262)
+      — then the final gate opened the first two again and grew them to 3110 and
+      5623. Take-19 produced five files, one of which caught nothing the others
+      did not. The test agent is 35% of take-22's cost ($1.03 of $2.97) and the
+      largest remaining line. Pass the existing authored test files and their
+      describe titles into the prompt so the agent extends rather than restarts.
+      Reuse `getAuthoredTestFiles` / `getAuthoredTestFilesForTask` — this was
+      specified as brief `58-test-file-reuse` in Phase 7 and the mechanism
+      already exists; establish first whether it is wired and simply not reaching
+      the task-test path, or was never wired. Report which before changing
+      anything
+- [ ] `198-dev-authored-files-stay-out` — the list passed in must contain only
+      test-agent-authored files. Take-22 task `e9e3e737` (Server test suite) is a
+      dev task that wrote `resolveTime.test.ts` (13431 chars); take-21 task
+      `fd89fbd5` wrote `resolveZones.test.ts`. Those are the dev agent's own
+      tests, not acceptance tests, and feeding them back as "already covered"
+      would suppress acceptance coverage of the same behaviour. The trailer
+      parsing that distinguishes them already exists — use it, do not
+      reimplement it
+- [ ] `199-measure-the-redundancy-first` — before any prompt change, quantify it
+      on take-21 and take-22: per feature, the authored test files, their sizes,
+      and the count of assertions that duplicate a behaviour already asserted in
+      an earlier file. A table. If the redundancy is smaller than it looks, the
+      prompt change is not worth its risk and this phase should stop at the
+      report — say so
+- [ ] `200-the-final-gate-is-a-gap-check` — the TESTING-phase run currently
+      re-opens files it wrote during IMPLEMENTING and grows them (take-22 turns
+      3–4: `countries.acceptance.test.ts` 523 → 3110, `time.acceptance.test.ts`
+      950 → 5623). If 197 lands, state what the final gate is then for: verifying
+      the assembled suite covers the spec, not authoring more of it. Define its
+      mandate explicitly rather than leaving it to inherit the task-test prompt
+- [ ] Tests, fail-first, red output reported per case: a feature with existing
+      authored test files passes their names and describe titles into the
+      task-test prompt; a feature with none behaves exactly as before; a
+      dev-authored test file never appears in that list; the final gate receives
+      the assembled list
+**Definition of Done:**
+- Redundancy table for takes 21 and 22 in HANDOVER.md, with the stop-or-proceed
+  decision stated
+- If proceeding: the next feature's test agent extends existing files where the
+  behaviour overlaps, and the test-agent cost share is reported against take-22's
+  35% baseline
+- No dev-authored test file in the passed list, demonstrated by test
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — from 1333 (phase 60 actual), must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
