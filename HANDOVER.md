@@ -200,7 +200,7 @@ Phase 61 complete. Phase 62 does not exist in `plan.md`.
 | 58 | The planner declares the subject | `aa90c50` | 2026-09-18 |
 | 59 | An expired credential is weather, not a verdict | `7d36ffb` | 2026-09-18 |
 | 60 | A channel nothing uses is not a channel | `3857634` | 2026-09-18 |
-| 61 | A test agent that knows what it already wrote | pending | 2026-09-18 |
+| 61 | A test agent that knows what it already wrote | `19b9e2e` | 2026-09-18 |
 
 ---
 
