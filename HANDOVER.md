@@ -184,7 +184,7 @@ Phase 60 complete. No Phase 61 exists in `plan.md`.
 | 57 | Test the component, not the app | `562da3b` | 2026-09-18 |
 | 58 | The planner declares the subject | `aa90c50` | 2026-09-18 |
 | 59 | An expired credential is weather, not a verdict | `7d36ffb` | 2026-09-18 |
-| 60 | A channel nothing uses is not a channel | `pending` | 2026-09-18 |
+| 60 | A channel nothing uses is not a channel | `3857634` | 2026-09-18 |
 
 ---
 
