@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles/globals.css';
 import { useFeature } from './hooks/useFeature.js';
 import { useEventStream } from './hooks/useEventStream.js';
@@ -64,14 +64,17 @@ export function App() {
       ).length,
     [events],
   );
-  useEffect(() => {
+  const refreshTasks = useCallback(() => {
     if (!selectedId) return;
     fetch(`/api/features/${selectedId}/tasks`)
       .then(async (r) => {
         if (r.ok) setTasks((await r.json()) as TaskRow[]);
       })
       .catch(() => undefined);
-  }, [selectedId, taskEventCount]);
+  }, [selectedId]);
+  useEffect(() => {
+    refreshTasks();
+  }, [selectedId, taskEventCount, refreshTasks]);
   const agentLogEventCount = useMemo(
     () => events.filter((e) => e.payload.type === 'agent.log').length,
     [events],
@@ -185,6 +188,10 @@ export function App() {
             testReport={runState.testReport}
             sseError={sseError}
             onGateAction={() => void refreshFeatures()}
+            onRedispatchAction={() => {
+              void refreshFeatures();
+              refreshTasks();
+            }}
             onViewArtifact={(kind) => {
               userDismissedRef.current = false;
               setActiveTab(kind);

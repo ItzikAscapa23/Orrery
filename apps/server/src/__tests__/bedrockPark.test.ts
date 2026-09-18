@@ -40,4 +40,27 @@ describe('isEnvironmentalBedrockError', () => {
     expect(isEnvironmentalBedrockError(null)).toBe(false);
     expect(isEnvironmentalBedrockError(42)).toBe(false);
   });
+
+  it('returns true for a raw SDK 403 (expired STS token mid-stream)', () => {
+    // Mid-stream 403s bypass rethrowIfExpiredToken and arrive as raw APIError
+    // objects with .status === 403. These must be environmental, not agent failures.
+    const err = Object.assign(new Error('403 Forbidden'), { status: 403 });
+    expect(isEnvironmentalBedrockError(err)).toBe(true);
+  });
+
+  it('returns true for a 403 with ExpiredTokenException message', () => {
+    const err = Object.assign(
+      new Error('ExpiredTokenException: The security token included in the request is expired'),
+      { status: 403 },
+    );
+    expect(isEnvironmentalBedrockError(err)).toBe(true);
+  });
+
+  it('returns false for a genuine 403 agent-caused error (no status field)', () => {
+    // A plain Error with "403" in the message but no .status property is agent text,
+    // not an SDK status code — should not be classified environmental.
+    expect(isEnvironmentalBedrockError(new Error('SyntaxError: unexpected token near 403'))).toBe(
+      false,
+    );
+  });
 });

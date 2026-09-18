@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 58 — The planner declares the subject
+- **Current phase:** 59 — An expired credential is weather, not a verdict
 - **State:** `complete`
 - **Last updated:** 2026-09-18
 
@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 58 complete. Phase 58 is the final phase in plan.md — no Phase 59 exists.*
+*Phase 59 complete. Phase 59 is the final phase in plan.md — no Phase 60 exists.*
 
 ---
 
@@ -89,17 +89,63 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ---
 
+## Error-classification audit (Phase 59 deliverable)
+
+| Code / condition | SDK type | Environmental after Phase 59? | Consumes retry? | Can terminate final? |
+|---|---|---|---|---|
+| 403 expired STS | `PermissionDeniedError` | **YES** — `status === 403` branch | No | No |
+| network / unreachable | `APIConnectionError` | YES — `'bedrock unreachable'` prefix | No | No |
+| timeout | `APIConnectionTimeoutError` | YES — `'request timed out'` prefix | No | No |
+| 503 proxy block | `InternalServerError` | YES — `status === 503 && 'file blocked'` | No | No |
+| 401 invalid key | `AuthenticationError` | No | Yes | Yes (if max attempts) |
+| **429 rate limit** | `RateLimitError` | **No — gap**: should park, not consume retry | Yes | Yes |
+| **5xx Bedrock outage** | `InternalServerError` | **No — gap**: non-proxy 5xx not classified | Yes | Yes |
+| 400 bad request | `BadRequestError` | No — agent-caused | Yes | Yes |
+| 404 wrong model | `NotFoundError` | No — operator config error | Yes | Yes |
+| 422 bad body | `UnprocessableEntityError` | No — agent-caused | Yes | Yes |
+
+Two residual gaps (not covered by Phase 59): 429 rate-limit and non-proxy 5xx Bedrock
+outage should park without consuming a retry slot. Both are environmental — the task
+did not cause them and cannot fix them.
+
+---
+
 ## Verification
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1330 passed across 96 files**, 2026-09-18 (−2 from Phase 57 baseline: removed tests for deleted `extractSubjectComponent` heuristic) |
+| `npm test` (repo root) | passed — **1334 passed across 96 files**, 2026-09-18 (+4 from Phase 58 baseline) |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-18 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-18 |
 
 ---
 
 ## Decisions
+
+- **Phase 59: 403 detection uses `.status` property, not text** —
+  `isEnvironmentalBedrockError` (`lib/bedrockPark.ts`) previously checked four message
+  prefixes. Mid-stream 403 errors from the Bedrock SDK bypass `rethrowIfExpiredToken`
+  (which only fires at stream creation time) and arrive as raw `APIError` objects with
+  `.status === 403`. Added a direct `status === 403` branch. Text-based checks
+  (`msg.includes('403')`) were too broad — they match prose error messages. The Anthropic
+  SDK's `.status` property is the canonical signal. `reviewJob.ts` and `testJob.ts` were
+  also using ad-hoc text checks; both migrated to `isEnvironmentalBedrockError` +
+  `parkFeatureAgentOnBedrockFailure`.
+
+- **Phase 59: `inspect_file` runs from file's directory** —
+  Changed `testAgent.ts` from `node ${containerRelPath}` to `cd <dir> && node <file>`.
+  `.mjs` files may `import` `.js` siblings whose ESM/CJS context depends on the nearest
+  `package.json`. Running from `/workspace` causes node to traverse from there; running
+  from the file's own directory finds the correct package.json first. `.mjs` forces the
+  top-level file into ESM; the directory matters for dependencies.
+
+- **Phase 59: `onRedispatchAction` is separate from `onGateAction` in App.tsx** —
+  `showRedispatch` reads from `tasks` (a REST-fetched local array), not from SSE events.
+  After REDISPATCH, tasks are reset to `pending` server-side before `task.started` SSE
+  fires, so the banner persists until the BullMQ job starts. Fix: pass a separate
+  `onRedispatchAction` to `MissionControl` / `RedispatchCard` that calls both
+  `refreshFeatures()` and `refreshTasks()`. Other gate actions (spend-gate, test-report)
+  are SSE-driven via `foldEvents` and self-clear on `gate.resolved` — no change needed there.
 
 - **Phase 58: Subject is declared, not derived** —
   Phase 57 shipped `extractSubjectComponent(taskTitle)`, which PascalCased the words
@@ -167,8 +213,10 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 - **O-13 Fail-first evidence not captured for Phases 57 and 58.** Both phases required
   "Tests, fail-first, red output reported per case." Tests and implementation were
   written in the same pass; no red state was observed or recorded. Not reconstructed
-  retroactively — the gap stands as-is. Future phases must run and record failing test
-  output before implementing each case.
+  retroactively — the gap stands as-is. Phase 59 captured fail-first output per case.
+
+- **429 rate-limit and non-proxy 5xx not classified environmental.** See error-classification
+  audit above. Both should park without consuming a retry slot. Not addressed in Phase 59.
 
 ---
 
@@ -201,6 +249,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 56 | Name the channel that works | `04f2d1b` | 2026-09-18 |
 | 57 | Test the component, not the app | `562da3b` | 2026-09-18 |
 | 58 | The planner declares the subject | `aa90c50` | 2026-09-18 |
+| 59 | An expired credential is weather, not a verdict | pending | 2026-09-18 |
 
 ---
 

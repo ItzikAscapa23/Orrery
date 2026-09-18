@@ -438,9 +438,14 @@ describe('runReviewJob — pre-flight Bedrock unreachable → parks in CODE_REVI
 
 describe('runReviewJob — Bedrock 403 in catch → parks in CODE_REVIEW', () => {
   it('stays in CODE_REVIEW and emits no phase.changed or review.skipped', async () => {
+    // Real Anthropic SDK errors carry a .status property — the new isEnvironmentalBedrockError
+    // check uses the structured code, not text parsing, to avoid false positives.
     mockRunReviewAgent.mockRejectedValue(
-      new Error(
-        'Request failed with status code 403: security token included in the request is expired',
+      Object.assign(
+        new Error(
+          'Request failed with status code 403: security token included in the request is expired',
+        ),
+        { status: 403 },
       ),
     );
 

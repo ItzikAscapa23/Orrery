@@ -118,6 +118,9 @@ interface MissionControlProps {
   sseError: string | null;
   showRedispatch: boolean;
   onGateAction: () => void;
+  /** Called after a successful REDISPATCH — refreshes both the feature list and
+   *  the tasks array so the banner clears without waiting for a task.started SSE. */
+  onRedispatchAction?: () => void;
   onViewArtifact?: (kind: ArtifactKind) => void;
   onViewTestReport?: () => void;
 }
@@ -138,6 +141,7 @@ export function MissionControl({
   sseError,
   showRedispatch,
   onGateAction,
+  onRedispatchAction,
   onViewArtifact,
   onViewTestReport,
 }: MissionControlProps) {
@@ -388,7 +392,9 @@ export function MissionControl({
         {spendGates.map((sg) => (
           <SpendGateCard key={sg.taskId} featureId={featureId} gate={sg} onAction={onGateAction} />
         ))}
-        {showRedispatch && <RedispatchCard featureId={featureId} onAction={onGateAction} />}
+        {showRedispatch && (
+          <RedispatchCard featureId={featureId} onAction={onRedispatchAction ?? onGateAction} />
+        )}
 
         {/* Test report summary chip — links to the TEST REPORT tab in the centre pane */}
         {testReport && <TestReportSummaryChip testReport={testReport} onView={onViewTestReport} />}

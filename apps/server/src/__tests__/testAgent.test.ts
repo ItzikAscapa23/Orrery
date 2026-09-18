@@ -1550,12 +1550,11 @@ describe('testAgent — inspect_file tool', () => {
       'the sort order is: a, b, c\n',
     );
     expect(resultContent).toContain('the sort order is');
+    // Command must be "cd <testDir> && node <basename>" — not "node <testDir>/<file>"
     expect(
       execCommands.some(
         (c) =>
-          c.startsWith('node ') &&
-          c.includes(TEST_SUBDIR) &&
-          !nodePath.isAbsolute(c.split(' ')[1]!),
+          c.startsWith(`cd ${JSON.stringify(TEST_SUBDIR)} && node `) && c.endsWith('debug.mjs'),
       ),
     ).toBe(true);
   });
@@ -1573,8 +1572,11 @@ describe('testAgent — inspect_file tool', () => {
       name: 'test-container',
       exec: (cmd: string) => {
         execCommands.push(cmd);
-        const filePart = cmd.replace(/^node\s+/, '');
-        if (nodePath.isAbsolute(filePart)) {
+        // New form: "cd <dir> && node <file>" — the cd-form is always relative
+        // Old (broken) form would be "node /absolute/host/path" — detect and reject it
+        const absoluteNodeMatch = cmd.match(/^node\s+(\/[^\s]+)/);
+        if (absoluteNodeMatch) {
+          const filePart = absoluteNodeMatch[1]!;
           // Simulate Docker: absolute host paths do not exist inside the container
           return Promise.resolve({
             stdout: '',
@@ -1647,8 +1649,14 @@ describe('testAgent — inspect_file tool', () => {
     expect(resultContent).toContain('orrery-inspect-abc');
     expect(resultContent).not.toContain('MODULE_NOT_FOUND');
     expect(resultContent).not.toMatch(/Cannot find module/);
+    // Command is now "cd <testDir> && node <basename>" — path is container-relative and
+    // no absolute host path appears in the node argument
     expect(
-      execCommands.some((c) => c.startsWith('node ') && !nodePath.isAbsolute(c.split(' ')[1]!)),
+      execCommands.some(
+        (c) =>
+          c.startsWith(`cd ${JSON.stringify(TEST_SUBDIR)} && node `) &&
+          c.endsWith('inspect_known.mjs'),
+      ),
     ).toBe(true);
   });
 
@@ -1722,5 +1730,101 @@ describe('testAgent — inspect_file tool', () => {
     );
     const content = JSON.stringify(block?.content ?? '');
     expect(content).toContain('implementation directory');
+  });
+
+  it('runs .mjs files from their own directory so package.json lookup resolves ESM context', async () => {
+    // A .mjs file in a subdirectory may import .js siblings whose ESM/CJS status
+    // depends on the nearest package.json. Running from /workspace means node looks
+    // up from there; running from the file's directory finds the right package.json.
+    // The exec command must be "cd <dir> && node <basename>", not "node <dir>/<file>".
+    const execCommands: string[] = [];
+    const container: ContainerHandle = {
+      name: 'test-container',
+      exec: (cmd: string) => {
+        execCommands.push(cmd);
+        // Simulate: old form returns CJS loader error; new cd-form returns output
+        if (cmd.startsWith('node ') && cmd.includes('/')) {
+          return Promise.resolve({
+            stdout: '',
+            stderr: 'node:internal/modules/cjs/loader:1210\nrequire() of ES Module',
+            exitCode: 1,
+          });
+        }
+        return Promise.resolve({ stdout: 'probe value: 42\n', stderr: '', exitCode: 0 });
+      },
+      stop: () => Promise.resolve(),
+    };
+
+    const ctx = {
+      featureId: 'feat-inspect',
+      specMarkdown: '# spec',
+      contractYaml: 'openapi: "3.0.0"',
+      repoClaudeMd: '',
+      testDir: TEST_SUBDIR,
+    };
+
+    const calls: Array<{ messages: Anthropic.MessageParam[] }> = [];
+    mockCreateMessageStream.mockImplementation((params: { messages: Anthropic.MessageParam[] }) => {
+      calls.push({ messages: params.messages.slice() });
+      if (calls.length === 1) {
+        return Promise.resolve({
+          finalMessage: () =>
+            Promise.resolve({
+              id: 'mjs-test',
+              type: 'message',
+              role: 'assistant',
+              model: 'claude-sonnet-5',
+              stop_reason: 'tool_use',
+              stop_sequence: null,
+              usage: { input_tokens: 10, output_tokens: 10 },
+              content: [
+                {
+                  type: 'tool_use',
+                  id: 'tu_mjs',
+                  name: 'inspect_file',
+                  input: { path: `${TEST_SUBDIR}/probe.mjs` },
+                },
+              ],
+            } as unknown as Anthropic.Message),
+        });
+      }
+      return Promise.resolve({
+        finalMessage: () =>
+          Promise.resolve({
+            id: 'end-mjs',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-sonnet-5',
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 5, output_tokens: 5 },
+            content: [{ type: 'text', text: 'done' }],
+          } as unknown as Anthropic.Message),
+      });
+    });
+
+    nodeFs.writeFileSync(
+      nodePath.join(tmpRoot, TEST_SUBDIR, 'probe.mjs'),
+      'console.log("probe value: 42");\n',
+      'utf-8',
+    );
+
+    await runTestAgent('feat-inspect', ctx, container, tmpRoot);
+
+    // The exec command must use cd-form so node runs from the file's directory
+    const nodeCmd = execCommands.find((c) => c.includes('probe.mjs'));
+    expect(nodeCmd).toBeDefined();
+    expect(nodeCmd).not.toMatch(/^node\s+.*\//); // must NOT be "node subdir/file.mjs"
+    expect(nodeCmd).toMatch(/^cd\s+"?__tests__"?\s+&&\s+node\s+probe\.mjs/); // must cd first
+
+    // Result must contain the output, not the CJS loader error
+    const second = calls[1]!.messages;
+    const last = second[second.length - 1];
+    const block = (last?.content as Anthropic.ToolResultBlockParam[]).find(
+      (b) => b.type === 'tool_result',
+    );
+    const content = JSON.stringify(block?.content ?? '');
+    expect(content).toContain('probe value: 42');
+    expect(content).not.toContain('cjs/loader');
   });
 });

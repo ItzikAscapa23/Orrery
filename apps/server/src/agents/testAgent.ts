@@ -944,7 +944,15 @@ export async function runTestAgent(
               /* ok */
             }
             const containerRelPath = path.relative(realWorktreeRoot, absPath);
-            const execResult = await container.exec(`node ${containerRelPath}`);
+            // Run from the file's own directory so package.json lookup resolves the
+            // correct ESM/CJS context (important for .mjs files importing .js siblings).
+            const fileDir = path.dirname(containerRelPath);
+            const fileName = path.basename(containerRelPath);
+            const nodeCmd =
+              fileDir && fileDir !== '.'
+                ? `cd ${JSON.stringify(fileDir)} && node ${fileName}`
+                : `node ${fileName}`;
+            const execResult = await container.exec(nodeCmd);
             const raw =
               [execResult.stdout, execResult.stderr].filter(Boolean).join('\n') || '(no output)';
             result = truncateOutput(raw);

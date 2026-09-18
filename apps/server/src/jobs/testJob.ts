@@ -21,7 +21,10 @@ import { getRepoEntry } from './devJob.js';
 import { createSyntheticFixTasks } from '../lib/syntheticTasks.js';
 import { startContainer, MetacharViolationError, EXEC_MAX_BUFFER } from '../lib/container.js';
 import { checkBedrockWithRetry } from '../lib/connectivity.js';
-import { parkFeatureAgentOnBedrockFailure } from '../lib/bedrockPark.js';
+import {
+  isEnvironmentalBedrockError,
+  parkFeatureAgentOnBedrockFailure,
+} from '../lib/bedrockPark.js';
 import { readClaudeMdFromDefaultBranch, routeInstall } from './devJob.js';
 import { createWorktree } from '../lib/worktree.js';
 import { formatTestSummary } from '../lib/testOutputSummary.js';
@@ -1131,19 +1134,11 @@ export async function runTestJob(featureId: string, jobId?: string): Promise<voi
     const isPolicyViolation =
       err instanceof TestAllowlistViolationError || err instanceof MetacharViolationError;
     const msg = err instanceof Error ? err.message : String(err);
-    const isBedrock403 = msg.includes('403') || msg.includes('security token');
-
-    if (isBedrock403) {
-      await appendEvent(getPrisma(), featureId, {
-        type: 'agent.status',
-        agent: 'test',
-        status: 'failed',
-      });
-      await appendEvent(getPrisma(), featureId, {
-        type: 'agent.log',
-        agent: 'test',
-        severity: 'muted',
-        text: `· Bedrock 403 — STS token expired. Run: aws sso login --profile ai-devtools-dev. Then POST /features/${featureId}/retry-test`,
+    if (isEnvironmentalBedrockError(err)) {
+      await parkFeatureAgentOnBedrockFailure({
+        featureId,
+        agentName: 'test',
+        retryPath: `POST /features/${featureId}/retry-test`,
       });
       return;
     }

@@ -1,7 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { EXEC_MAX_BUFFER } from '../lib/container.js';
 import { checkBedrockWithRetry } from '../lib/connectivity.js';
-import { parkFeatureAgentOnBedrockFailure } from '../lib/bedrockPark.js';
+import {
+  isEnvironmentalBedrockError,
+  parkFeatureAgentOnBedrockFailure,
+} from '../lib/bedrockPark.js';
 import path from 'node:path';
 import { getPrisma } from '../lib/prisma.js';
 import { appendEvent } from '../lib/events.js';
@@ -332,20 +335,11 @@ export async function runReviewJob(featureId: string, jobId?: string): Promise<v
     const msg = err instanceof Error ? err.message : String(err);
     console.error(JSON.stringify({ event: 'review_job_error', featureId, error: msg }));
 
-    const isBedrock403 = msg.includes('403') || msg.includes('security token');
-
-    if (isBedrock403) {
-      // Credential failure: park in CODE_REVIEW so retry-review remains valid
-      await appendEvent(getPrisma(), featureId, {
-        type: 'agent.status',
-        agent: 'review',
-        status: 'failed',
-      });
-      await appendEvent(getPrisma(), featureId, {
-        type: 'agent.log',
-        agent: 'review',
-        severity: 'muted',
-        text: `· Bedrock 403 — STS token expired. Run: aws sso login --profile ai-devtools-dev. Then POST /features/${featureId}/retry-review`,
+    if (isEnvironmentalBedrockError(err)) {
+      await parkFeatureAgentOnBedrockFailure({
+        featureId,
+        agentName: 'review',
+        retryPath: `POST /features/${featureId}/retry-review`,
       });
       return;
     }

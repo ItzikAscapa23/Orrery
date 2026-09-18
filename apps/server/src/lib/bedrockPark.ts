@@ -15,7 +15,10 @@ export function isEnvironmentalBedrockError(err: unknown): boolean {
     msg.startsWith('bedrock credentials expired') ||
     msg.startsWith('bedrock unreachable') ||
     msg.startsWith('request timed out') ||
-    (status === 503 && (msg.includes('file blocked') || msg.includes('503 file blocked')))
+    (status === 503 && (msg.includes('file blocked') || msg.includes('503 file blocked'))) ||
+    // Raw SDK APIError with .status 403 — expired STS token arriving mid-stream
+    // bypasses rethrowIfExpiredToken in anthropic.ts and lands here unmodified.
+    status === 403
   );
 }
 
