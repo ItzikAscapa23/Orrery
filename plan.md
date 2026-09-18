@@ -2418,7 +2418,7 @@ npm run lint      # must stay clean (exit 0)
 - Banner clearing observed on a real park, not inferred from the diff
 **Verification:**
 ```bash
-npm test          # FROM REPO ROOT — baseline 96 files / 1330 tests, must not decrease
+npm test          # FROM REPO ROOT — from 1334 (phase 59 actual); expect 1333 (delta -1: 4 removed with inspect_file, 3 added for 429/5xx)
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
