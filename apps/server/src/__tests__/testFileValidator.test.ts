@@ -1,40 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { extractSubjectComponent, validateTestFileContent } from '../lib/testFileValidator.js';
-
-// ── extractSubjectComponent ───────────────────────────────────────────────────
-
-describe('extractSubjectComponent', () => {
-  it('returns undefined when title does not end with "component"', () => {
-    expect(extractSubjectComponent('Implement login endpoint')).toBeUndefined();
-    expect(extractSubjectComponent('Add unit tests')).toBeUndefined();
-    expect(extractSubjectComponent('')).toBeUndefined();
-  });
-
-  it('extracts a single-word component name', () => {
-    expect(extractSubjectComponent('Button component')).toEqual({ name: 'Button' });
-  });
-
-  it('extracts a multi-word component name as PascalCase', () => {
-    expect(extractSubjectComponent('Zone result region component')).toEqual({
-      name: 'ZoneResultRegion',
-    });
-  });
-
-  it('is case-insensitive for the "component" suffix', () => {
-    expect(extractSubjectComponent('Login form Component')).toEqual({ name: 'LoginForm' });
-  });
-
-  it('handles hyphenated words', () => {
-    expect(extractSubjectComponent('date-picker component')).toEqual({ name: 'DatePicker' });
-  });
-});
+import { validateTestFileContent } from '../lib/testFileValidator.js';
 
 // ── validateTestFileContent ───────────────────────────────────────────────────
 
 const ZONE_RESULT = { name: 'ZoneResult' };
+const COUNTER = { name: 'Counter' };
 
-describe('validateTestFileContent — task 181 fail-first', () => {
-  // CASE 1: default-import App render → rejected
+describe('validateTestFileContent — subject-declared validation', () => {
+  // CASE 1: subject present — rejects test rendering a different component
   it('rejects a test that renders <App /> when subject is ZoneResult (default import style)', () => {
     const content = `
 import App from '../../App';
@@ -50,7 +23,6 @@ test('renders', () => {
     expect(err).toContain('ZoneResult');
   });
 
-  // CASE 2: named-import App render → rejected (take-20 actual shape)
   it('rejects a test that renders <App /> when subject is ZoneResult (named import style)', () => {
     const content = `
 import { App } from '../App';
@@ -67,8 +39,8 @@ test('renders zone result', async () => {
     expect(err).toContain('ZoneResult');
   });
 
-  // CASE 3: renders the correct subject → accepted
-  it('accepts a test that renders <ZoneResult ...>', () => {
+  // CASE 2: subject present — accepts test rendering subject wrapped in a provider
+  it('accepts a test that renders the correct subject directly', () => {
     const content = `
 import { ZoneResult } from './ZoneResult';
 import { render } from '@testing-library/react';
@@ -80,7 +52,6 @@ test('displays timezone', () => {
     expect(validateTestFileContent(content, ZONE_RESULT)).toBeNull();
   });
 
-  // CASE 4: subject is wrapped in a provider — still accepted
   it('accepts a test that wraps the subject in a provider', () => {
     const content = `
 import { ZoneResult } from './ZoneResult';
@@ -94,15 +65,47 @@ test('renders inside router', () => {
     expect(validateTestFileContent(content, ZONE_RESULT)).toBeNull();
   });
 
-  // CASE 5: no subjectComponent context — no check performed
-  // (tested via extractSubjectComponent returning undefined)
-  it('extractSubjectComponent returns undefined for a non-component task title', () => {
-    const subject = extractSubjectComponent('Implement REST endpoint for time lookup');
-    expect(subject).toBeUndefined();
-    // When subject is undefined the caller should skip validateTestFileContent entirely.
+  // CASE 3: task without subject — no check performed (opt-in behaviour)
+  it('accepts anything when subject is undefined', () => {
+    const content = `
+import { OtherWidget } from './OtherWidget';
+import { render } from '@testing-library/react';
+test('renders', () => { render(<OtherWidget />); });
+`;
+    expect(validateTestFileContent(content, undefined)).toBeNull();
   });
 
-  // CASE 6: no render calls in file (pure function test) — not rejected
+  it('accepts a render-heavy file with no subject', () => {
+    const content = `
+render(<Foo />); render(<Bar />); render(<Baz />);
+`;
+    expect(validateTestFileContent(content, undefined)).toBeNull();
+  });
+
+  // CASE 4: subject names a component not yet in the repo — must not reject
+  // The test agent runs before the dev agent; the component file is absent on first attempt.
+  it('accepts when the subject component does not yet exist in the repo', () => {
+    const content = `
+import { Counter } from './Counter';
+import { render } from '@testing-library/react';
+test('renders counter', () => { render(<Counter count={0} />); });
+`;
+    expect(validateTestFileContent(content, COUNTER)).toBeNull();
+  });
+
+  it('rejects when a different component is rendered and subject not yet in repo', () => {
+    const content = `
+import { OtherWidget } from './OtherWidget';
+import { render } from '@testing-library/react';
+test('renders', () => { render(<OtherWidget />); });
+`;
+    const err = validateTestFileContent(content, COUNTER);
+    expect(err).not.toBeNull();
+    expect(err).toContain('OtherWidget');
+    expect(err).toContain('Counter');
+  });
+
+  // Extra: no render calls in file — not rejected even with a subject
   it('does not reject a test file with no render calls', () => {
     const content = `
 import { formatTimezone } from '../utils/time';

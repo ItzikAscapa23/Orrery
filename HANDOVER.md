@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 57 — Test the component, not the app
+- **Current phase:** 58 — The planner declares the subject
 - **State:** `complete`
 - **Last updated:** 2026-09-18
 
@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 57 complete.*
+*Phase 58 complete. Phase 58 is the final phase in plan.md — no Phase 59 exists.*
 
 ---
 
@@ -89,22 +89,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ---
 
-## Phase 52 analysis (deliverable — do not delete)
-
-Four root causes of client-coverage failures on world-clock-feature:
-`inspect_file` host path (FIXED Phase 48), fake-timer install order (FIXED, documented in client repo CLAUDE.md),
-tests written against stubs (FIXED Phase 51), untestable task within budget (OPEN).
-
-**Recommendation:** Option C — per-repo manifest `test_coverage: "light" | "full"` (default `"full"`).
-`light` marks all client tasks `covered: false`. One small phase (~2–3 tasks). Per-feature: light ≈ $2, full ≈ $5–8.
-
----
-
 ## Verification
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1332 passed across 96 files**, 2026-09-18 |
+| `npm test` (repo root) | passed — **1330 passed across 96 files**, 2026-09-18 (−2 from Phase 57 baseline: removed tests for deleted `extractSubjectComponent` heuristic) |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-18 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-18 |
 
@@ -112,87 +101,41 @@ tests written against stubs (FIXED Phase 51), untestable task within budget (OPE
 
 ## Decisions
 
-- **Phase 57: Subject-derived render validation (`181`)** —
-  `extractSubjectComponent(taskTitle)` derives the expected component name when the task title
-  ends with "component" (e.g. "Zone result region component" → `ZoneResultRegion`). The derived
-  name is passed as `subjectComponent` in `TestAgentContext`. `write_file` and `edit_file` handlers
-  in `testAgent.ts` call `validateTestFileContent` and return `is_error: true` if the file renders
-  a different PascalCase component without also rendering the subject. The check passes when the
-  subject appears as any JSX element in the file (it may be wrapped in a provider/router).
-  Implementation: `lib/testFileValidator.ts`; tests: `__tests__/testFileValidator.test.ts`.
+- **Phase 58: Subject is declared, not derived** —
+  Phase 57 shipped `extractSubjectComponent(taskTitle)`, which PascalCased the words
+  before "component" in a task title to derive the render-validation subject. This failed
+  when the dev agent used a different name (e.g. "Zone result region component" →
+  `ZoneResultRegion`, but agent named the file `ResultRegion.tsx`). Phase 58 adds
+  `subject?: string` to `PlanTaskSchema` and the Prisma `Task` model; the planner now
+  declares the component name explicitly. `extractSubjectComponent` was hard-deleted
+  (no fallback, no flag). `validateTestFileContent` signature updated to accept
+  `{ name: string } | undefined` — returns `null` immediately when `undefined`
+  (opt-in: tasks without a subject skip render validation). Migration:
+  `20260918165148_add_task_subject` — nullable column, zero data loss.
 
-- **Phase 57: Component-name-pattern audit (`181`)** —
-  Searched `apps/server/src` and `apps/web/src` for heuristics that infer component or module
-  names from string patterns. The only instance is `extractSubjectComponent` introduced in this
-  phase. Existing code passes task titles as-is to agents and log messages; it does not infer
-  component names. One related case: `testJob.ts:425` infers the test runner from CLAUDE.md
-  keywords (`detectJsonCommand`), which is a runner inference, not a component inference.
+- **Phase 57: Stop condition for converging probe sequences — 184 report (unimplemented)** —
+  Take-20 attempt 3 ran a probe loop that never tripped the Phase 33/41 non-progress
+  guard. Recommended stop condition: if the same file is `write_file`'d and run 5+
+  times without an authored test passing, fire `NonProgressError`. Was annotated
+  "deferred to Phase 58" but Phase 58 covered the subject-field change. No later phase
+  in `plan.md` covers this — it remains unimplemented.
 
 - **Phase 57: Why probe instructions don't stick — 183 report** —
-  Three independent causes documented before any prompt change:
-  1. **Rule placement**: Console/sentinel/inspect_file rules appear in the `## Tools` tail section
-     of `testAgent.ts:buildSystemPrompt` (after `## Relevant spec sections`). The agent reads the
-     spec and commits to an approach before reaching these rules.
-  2. **CONSOLE: absent when empty** (`testOutputSummary.ts:196`): `\nCONSOLE:\n` is only appended
-     when `consoleOutput` is truthy. When `console.log` produces no output (component not
-     implemented, no React fiber, vitest suppresses) the agent sees only `TESTS: N passed, N failed`
-     and cannot distinguish "channel empty" from "channel unavailable."
-  3. **React internals probe (`__reactProps`)**: Take-20 attempt 3 accessed `Object.keys(select)
-     .find(k => k.startsWith('__reactProps'))` — React's internal fiber key. No fiber exists on
-     an unimplemented component's DOM node. Every variation of this probe converges on `undefined`.
-     `console.log` cannot help here either because the component produces no output.
-  **Root cause**: The component did not exist. Writing tests for a subject that has no runtime
-  presence cannot be done through probing — the correct approach is to write against the props
-  interface declared in the spec (task 182). Rule relocation is a separate decision — recorded as
-  an open question for the 183-followup task.
-
-- **Phase 57: Stop condition for converging probe sequences — 184 report (implementation deferred)** —
-  Take-20 attempt 3 bash result sizes: 327 / 363 / 365 / 363 / 363 / 328 chars — different every
-  turn. Identical-output detection (Phase 33 guard) would not have fired. The Phase 55
-  `lastWrittenHash` fix means any write-run cycle produces a distinct ring entry, so a probe loop
-  that writes a file each cycle never trips the guard regardless of output.
-  Three candidate stop conditions evaluated:
-  (a) **Turn-without-authored-pass budget**: if N consecutive bash turns all show `authored: 0`
-      (no authored test passing), stop. Catches take-20's shape; risks false positives on
-      first-attempt authoring before any test passes. Threshold ~10–15 turns with a grace window.
-  (b) **Same-file written-and-run N times without passing**: if path X is written and run N times
-      with 0 passing, stop. Requires correlating write_file and bash events by path. Most precise
-      for the probe-loop shape; avoids Phase 37 false positive (different commands don't collide).
-      Recommended candidate.
-  (c) **Probe-file detection at commit time**: if staged set contains only scratch-pattern files,
-      the agent produced nothing real; fail and redispatch. Belt-and-suspenders, not a real-time
-      stop.
-  **Recommended**: (b). Threshold: if the same file has been write_file'd and run 5+ times in
-  a session without at least one authored test passing, fire a NonProgressError. Does not interact
-  with the command-hash ring buffer; passes Phase 37 invariant because it tracks
-  per-file write+run cycles, not command repetition. Implementation deferred to Phase 58.
+  Three root causes: (1) rule placement — probe rules appear after `## Relevant spec
+  sections` in `testAgent.ts:buildSystemPrompt`, so the agent commits to an approach
+  before reading them; (2) `CONSOLE:` absent when empty (`testOutputSummary.ts:196`);
+  (3) React `__reactProps` probe returns undefined when the component is unimplemented.
+  Root cause: the component did not exist. Writing tests for an absent subject requires
+  spec-driven props, not probing. Rule relocation is a separate open decision.
 
 - **Phase 56: CONSOLE: is the channel for in-test values (`178–180`)** —
   `inspect_file` runs `node <file>` in a fresh process and cannot observe vitest runtime
-  state (mocks, jsdom, post-render). The bash result already carries a `CONSOLE:` section
-  assembled from `extractConsoleOutput` (`testOutputSummary.ts:191`). Both agents' rules
-  now document this and the prohibition routes correctly: `console.log` + read `CONSOLE:`
-  for in-test values; `inspect_file` for standalone file inspection. Cap kept at 2048 chars;
-  truncation is now visible: `(truncated — showing last N of M chars)`.
-
-- **Phase 55: `inspect_file` is the agent print channel (`172–174`)** —
-  Already existed in `testAgent.ts` since Phase 48; added to `devAgent.ts`. Phase 56
-  corrected the sentinel prohibition: prior wording named `inspect_file` as the in-test
-  replacement, which was wrong. Sentinel assertions (`expect(x).toBe(999)`) are banned.
+  state. `CONSOLE:` section (from `extractConsoleOutput`, 2048-char cap) is the correct
+  channel. Both agents' rules document this; truncation now visible.
 
 - **Phase 55: `checkNonProgress` includes `lastWrittenHash` in hash (`176`)** —
-  Hash covers `fullCommand + (lastWrittenHash ?? '')`. Same command after file rewrite →
-  different hash → counter doesn't fire. Phase 37 and 41 invariants preserved.
-
-- **Phase 55: `priorAttemptDiff` extended to test agent (`177`)** —
-  `testJob.ts` captures `git diff HEAD` before worktree reset. Injected as `## Prior attempt`
-  section (6000 char cap). Empty on attempt 1; naturally non-empty on retry.
-
-- **Phase 54: prior-attempt diff in memory only (`167`)** —
-  `priorAttemptDiff` in `DevContext` — no DB column, no artifact file, ephemeral.
-
-- **Phase 54: scratch-file stripping is host-side + agent rule (`168`)** —
-  `devJob.ts` strips `SCRATCH_FILE_RE` after `git add -A`. Avoids widening the allowlist.
+  Same command after file rewrite → different hash → counter doesn't fire.
+  Phase 37 and 41 invariants preserved.
 
 - **Phase 53: spend guard counts after `gate.resolved` anchor (`164`)** —
   `$queryRaw` scoped to `seq > COALESCE(MAX(gate.resolved.seq), 0)`. Zero-migration.
@@ -251,6 +194,7 @@ tests written against stubs (FIXED Phase 51), untestable task within budget (OPE
 | 55 | The agent can ask a question | `d67bd7b` | 2026-09-18 |
 | 56 | Name the channel that works | `04f2d1b` | 2026-09-18 |
 | 57 | Test the component, not the app | `562da3b` | 2026-09-18 |
+| 58 | The planner declares the subject | (pending) | 2026-09-18 |
 
 ---
 

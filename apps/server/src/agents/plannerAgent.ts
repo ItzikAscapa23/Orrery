@@ -40,6 +40,7 @@ const PlanTaskSchema = z.object({
   description: z.string(),
   spec_refs: z.array(z.string()),
   depends_on: z.array(z.string()),
+  subject: z.string().optional(),
 });
 
 const PlanOutputSchema = z.object({
@@ -80,12 +81,17 @@ export function buildSystemPrompt(
     'Return ONLY valid JSON — no prose, no markdown fences — matching:\n' +
     '{ "contract_yaml": "<OpenAPI YAML string>", "tasks": [ { "repo": "<id from manifest>", ' +
     '"side": "server"|"client", "title": "<short title>", "description": "<implementation ' +
-    'instructions>", "spec_refs": ["<heading>"], "depends_on": ["<task title>"] } ] }\n\n' +
+    'instructions>", "spec_refs": ["<heading>"], "depends_on": ["<task title>"], ' +
+    '"subject": "<component name>" } ] }\n\n' +
     'Rules:\n' +
     '- contract_yaml must be a valid OpenAPI 3.0 YAML document as a JSON string.\n' +
     '- Every task must reference a repo id from the selected repos.\n' +
     '- depends_on lists task titles this task must wait for (empty array if none).\n' +
     '- Emit each distinct task once. Do not invent tasks not implied by the spec.\n' +
+    '- subject is the PascalCase name of the exported React component the implementer will ' +
+    'create (e.g. "ResultRegion" for title "Zone result region component"). Emit only for ' +
+    'component tasks; omit for server, config, or data tasks. If you cannot determine the ' +
+    'component name reliably, omit the field and note the uncertainty in the task description.\n' +
     '- Granularity: the test planner will later decide which tasks need acceptance tests; ' +
     'each covered task triggers one full test-agent run. Split tasks only when they have ' +
     'distinct acceptance criteria testable in isolation. Merge tasks that share the same ' +

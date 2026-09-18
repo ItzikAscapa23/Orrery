@@ -1,30 +1,10 @@
 /**
- * Phase 57 (task 181): subject-derived render validation for acceptance tests.
+ * Phase 57/58: subject-declared render validation for acceptance tests.
  *
- * Derives the expected component subject from a task title and rejects test files
- * that render a different component instead of their declared subject.
+ * Rejects test files that render a different component than their declared subject.
+ * Validation only runs when subject is explicitly provided by the planner — tasks
+ * with no subject are accepted unconditionally.
  */
-
-/**
- * Derive the component subject from a task title.
- * Returns undefined when the title does not end with "component".
- *
- * Example: "Zone result region component" → { name: "ZoneResultRegion" }
- * Example: "Add login button component"   → { name: "AddLoginButton" }
- */
-export function extractSubjectComponent(taskTitle: string): { name: string } | undefined {
-  const COMPONENT_SUFFIX_RE = /\bcomponent\s*$/i;
-  if (!COMPONENT_SUFFIX_RE.test(taskTitle)) return undefined;
-
-  const withoutSuffix = taskTitle.replace(COMPONENT_SUFFIX_RE, '').trim();
-  if (!withoutSuffix) return undefined;
-
-  const words = withoutSuffix.split(/[\s\-_]+/).filter(Boolean);
-  if (words.length === 0) return undefined;
-
-  const name = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
-  return { name };
-}
 
 /**
  * Validate that a test file renders its declared subject component.
@@ -34,9 +14,16 @@ export function extractSubjectComponent(taskTitle: string): { name: string } | u
  * without also rendering the subject directly. Returns null when the content is
  * acceptable.
  *
- * Only triggers when `subject` is provided (component tasks only).
+ * Returns null immediately when subject is undefined (opt-in: no subject = no check).
+ * A subject naming a component not yet in the repo is accepted — the test agent runs
+ * before the dev agent, so the component file is absent on every first attempt.
  */
-export function validateTestFileContent(content: string, subject: { name: string }): string | null {
+export function validateTestFileContent(
+  content: string,
+  subject: { name: string } | undefined,
+): string | null {
+  if (!subject) return null;
+
   // Match render/mount/shallow calls where the first argument is a JSX element
   // with a PascalCase component name (HTML elements are lowercase, fragments are <>).
   const RENDER_RE = /\b(?:render|mount|shallow)\s*\(\s*<([A-Z][a-zA-Z0-9]*)/g;

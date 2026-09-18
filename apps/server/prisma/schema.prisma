@@ -156,6 +156,7 @@ model Task {
   testTaskAttempts  Int      @default(0)     @map("test_task_attempts")
   orphanCount       Int      @default(0)     @map("orphan_count")
   parkReason        String?                  @map("park_reason")
+  subject           String?
   createdAt         DateTime @default(now()) @map("created_at")
 
   feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
