@@ -17,6 +17,12 @@ A phase groups several briefs into one session-sized unit of review.
 The phase `Verification:` block is the standing four, run once at the end of the
 phase. Per-brief fail-first evidence stays in the brief and does not appear here.
 
+The suite-count line reads "must not decrease" only for a phase that adds
+behaviour. A phase whose work is removal states its expected delta instead, with
+the arithmetic - tests removed with the deleted code, tests added for its
+replacement - and confirms no living behaviour was left uncovered. A count that
+drops is a finding when it is unexplained, not when it is accounted for.
+
 Phases 0–6 predate this plan. Their record is `docs/specs/` and `docs/phase-6.md`.
 
 ---
@@ -2294,9 +2300,13 @@ npm run lint      # must stay clean (exit 0)
   state how this was verified
 - Planner emits `subject` for component tasks on the next feature, or the
   failure to do so is recorded as a finding
+- Expected delta: -2. Six tests removed with `extractSubjectComponent` (five in
+  its own describe block, one covering the heuristic's undefined return); four
+  added for subject-based validation. The opt-in behaviour the removed CASE 5
+  covered indirectly is now covered directly. No living behaviour uncovered.
 **Verification:**
 ```bash
-npm test          # FROM REPO ROOT — baseline 96 files / 1332 tests, must not decrease
+npm test          # FROM REPO ROOT — expect 96 files / 1330 tests (delta -2, see DoD)
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
