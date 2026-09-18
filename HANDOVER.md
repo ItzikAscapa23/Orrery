@@ -194,7 +194,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 | 55 | The agent can ask a question | `d67bd7b` | 2026-09-18 |
 | 56 | Name the channel that works | `04f2d1b` | 2026-09-18 |
 | 57 | Test the component, not the app | `562da3b` | 2026-09-18 |
-| 58 | The planner declares the subject | (pending) | 2026-09-18 |
+| 58 | The planner declares the subject | `aa90c50` | 2026-09-18 |
 
 ---
 
