@@ -2310,3 +2310,59 @@ npm test          # FROM REPO ROOT — expect 96 files / 1330 tests (delta -2, s
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 59 — An expired credential is weather, not a verdict
+**Goal:** Environmental failures park without spending the task's attempts.
+**PRD refs:** §3 R6
+**Tasks:**
+- [ ] `189-403-is-environmental` — R-69. Take-20 tasks `0b883dc6` and `51ed4bb8`
+      (Fix review blockers, both repos): four `task.failed` events across two
+      attempts each, every one
+      `"reason": "403 The security token included in the request is expired"`,
+      ending `"final": true` with zero jobs recorded. The SSO session lapsed
+      mid-run; both tasks burned their retry budget on it and terminated as
+      final. Phase 50 established `bedrockPark` for exactly this class — a
+      failure the task did not cause and cannot fix — and the 403 does not route
+      there. Classify expired-credential responses environmental: park, do not
+      consume a retry slot, do not mark final
+- [ ] `190-which-codes-are-environmental` — audit and list. Enumerate every
+      Bedrock and Anthropic error code the orchestrator can receive, and for each
+      state whether it is currently classified environmental, whether it consumes
+      a retry slot, and whether it can terminate a task as final. The list, not a
+      summary. Phase 50 covered timeouts; take-20 shows the classification is
+      per-code rather than per-class, which is how a gap this size survived
+- [ ] `191-inspect-file-on-mjs` — R-70. Take-21 task `1a3473aa` turn 3:
+      `inspect_file src/data/scratch_generate.mjs` returned
+      `node:internal/modules/cjs/loader:1210`; turn 5's plain
+      `bash node src/data/scratch_generate.mjs` on the same file succeeded. The
+      agent worked around it and the task completed in 22 turns with six scratch
+      files. `inspect_file` is the tool Phase 55 named as the print channel, and
+      this is the second consecutive feature in which it has silently failed —
+      Phase 48 fixed its container-relative path, not its module resolution.
+      Establish why `.mjs` fails under `inspect_file` and not under `bash node`,
+      and fix it or retire the tool. Do not leave a named channel that does not
+      work
+- [ ] `192-redispatch-banner-clears-without-a-refresh` — Phase 54 task 170
+      changed the banner condition to the no-live-job test, and the banner still
+      persists after REDISPATCH until the browser is manually refreshed. The
+      condition is correct; the UI does not re-evaluate it when the redispatch
+      response returns. Fix the invalidation. Audit for the same staleness on the
+      spend-gate and test-report cards
+- [ ] Tests, fail-first, red output reported per case: a 403 expired-credential
+      response parks without incrementing `attemptCount` and without
+      `final: true`; a genuine agent failure still consumes an attempt;
+      `inspect_file` on a `.mjs` file returns its stdout; the banner is absent in
+      the response payload immediately after a redispatch
+**Definition of Done:**
+- An expired SSO session parks every affected task recoverably — no manual DB
+  edit, no exhausted retry budget
+- Error-classification table in HANDOVER.md, every code accounted for
+- `inspect_file` executes `.mjs`, or it is removed and the rules stop naming it
+- Fail-first evidence captured per case. Phases 57 and 58 shipped without it;
+  this phase does not
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 96 files / 1330 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
