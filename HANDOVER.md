@@ -250,7 +250,7 @@ tests written against stubs (FIXED Phase 51), untestable task within budget (OPE
 | 54 | A retry starts warmer than the attempt before it | `d63e5b8` | 2026-09-17 |
 | 55 | The agent can ask a question | `d67bd7b` | 2026-09-18 |
 | 56 | Name the channel that works | `04f2d1b` | 2026-09-18 |
-| 57 | Test the component, not the app | pending | 2026-09-18 |
+| 57 | Test the component, not the app | `562da3b` | 2026-09-18 |
 
 ---
 
