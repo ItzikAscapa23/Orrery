@@ -2250,3 +2250,53 @@ npm test          # FROM REPO ROOT — baseline 95 files / 1321 tests, must not 
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 58 — The planner declares the subject
+**Goal:** No rule in Orrery derives a component name from prose.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `185-subject-is-declared` — R-68. Phase 57 task 181 shipped
+      `extractSubjectComponent(task.title)`, which strips "component" and
+      PascalCases the remaining words. Take-20's title "Zone result region
+      component" yields `ZoneResultRegion`; take-19's dev agent named the file
+      `ResultRegion.tsx` and exported `<ResultRegion>`. The validator would find
+      no `<ZoneResultRegion` and reject a correct test. Investigation confirmed
+      the subject is declared nowhere: the `Task` model carries only `title` and
+      `description`, both prose, and `PlanTaskSchema`
+      (`plannerAgent.ts:36–50`) is `{ repo, side, title, description, spec_refs,
+      depends_on }`. Add `subject?: string` to `PlanTaskSchema` and to the `Task`
+      model, and pass `task.subject` where the heuristic was called
+- [ ] `186-delete-the-heuristic` — remove `extractSubjectComponent` entirely. Not
+      commented out, not behind a flag, not retained as a fallback. A heuristic
+      left in the tree gets called again — the shell metachar rule existed in
+      four places, the install routing in three, `maxBuffer` in three
+- [ ] `187-validation-is-opt-in-from-the-declaration` — the check runs only when
+      `subject` is present. A task with no subject — an existing row, a planner
+      that omitted it, a config or data-table task with no component — writes
+      tests unvalidated. A subject naming a component that does not exist in the
+      repo must NOT reject: the test agent runs before the dev agent by design,
+      so the subject is absent on every first attempt. State both behaviours
+      explicitly
+- [ ] `188-the-planner-prompt-says-what-subject-means` — the exported component
+      name the implementer will create, not a restatement of the title. Use the
+      take-20 case as the example in the prompt: title "Zone result region
+      component", subject `ResultRegion`. If the planner cannot produce this
+      reliably for a component task, report that as a finding — do not fall back
+      to deriving it
+- [ ] Tests, fail-first, red output reported per case: a task with `subject`
+      rejects a test rendering a different component; a task with `subject`
+      accepts a test rendering that component wrapped in a provider; a task
+      without `subject` accepts anything; a `subject` naming a component that
+      does not yet exist accepts
+**Definition of Done:**
+- `extractSubjectComponent` does not appear anywhere in the tree
+- Migration applies to the existing `pepper` database without data loss —
+  state how this was verified
+- Planner emits `subject` for component tasks on the next feature, or the
+  failure to do so is recorded as a finding
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 96 files / 1332 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
