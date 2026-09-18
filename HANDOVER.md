@@ -164,6 +164,12 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   append. Fix: re-query existing `pr.created` events inside the per-repo loop
   immediately before the ADO API call.
 
+- **O-13 Fail-first evidence not captured for Phases 57 and 58.** Both phases required
+  "Tests, fail-first, red output reported per case." Tests and implementation were
+  written in the same pass; no red state was observed or recorded. Not reconstructed
+  retroactively — the gap stands as-is. Future phases must run and record failing test
+  output before implementing each case.
+
 ---
 
 ## PRD conflicts
