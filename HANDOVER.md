@@ -249,7 +249,7 @@ did not cause them and cannot fix them.
 | 56 | Name the channel that works | `04f2d1b` | 2026-09-18 |
 | 57 | Test the component, not the app | `562da3b` | 2026-09-18 |
 | 58 | The planner declares the subject | `aa90c50` | 2026-09-18 |
-| 59 | An expired credential is weather, not a verdict | pending | 2026-09-18 |
+| 59 | An expired credential is weather, not a verdict | `7d36ffb` | 2026-09-18 |
 
 ---
 
