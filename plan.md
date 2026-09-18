@@ -2197,3 +2197,56 @@ npm test          # FROM REPO ROOT — baseline 95 files / 1314 tests, must not 
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 57 — Test the component, not the app
+**Goal:** An acceptance test renders the thing the task builds.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `181-render-the-subject` — R-67. World-clock take-20 task `758c3426` (Zone
+      result region component): three attempts, 130 turns, $2.86, no acceptance
+      test produced. All three wrote a ~29KB file (28773, 29635, 28118 chars)
+      mounting the application root — `render(<App />)`, then
+      `findByRole('combobox')`, then `fireEvent.change`, expecting a second fetch
+      to `/api/time/US`. The second fetch never fires: the component under test
+      had not been implemented, its dev job had not run, and the assertion
+      travels through two intermediaries (`App`, `CountrySelector`) that are not
+      the task's subject. An acceptance test for a component task renders that
+      component with props, not the app root
+- [ ] `182-the-subject-must-exist-or-the-test-is-a-contract` — the test agent runs
+      before the dev agent by design (test-first). So a test that depends on
+      unimplemented intermediaries can never go red for the right reason — it
+      fails on a missing data path rather than a missing behaviour. State how the
+      test agent is to express an acceptance test for a component that does not
+      yet exist: against the declared props contract, not against an integration
+      path
+- [ ] `183-probing-is-not-progress` — attempts 1 and 2 read values through
+      sentinel assertions (24 turns each). Attempt 3, with Phase 55's prohibition
+      and Phase 56's documented `CONSOLE:` channel both in place, used neither —
+      it wrote hypothesis probes read through pass/fail, one bit per turn, and
+      reached `Object.keys(select).find(k => k.startsWith('__reactProps'))`,
+      React's private internals, looking for an `onChange` that was never wired.
+      Two phases of channel work did not change what the agent reaches for.
+      Establish why: is the rule reaching the prompt, is it positioned where the
+      decision is made, and does `CONSOLE:` actually surface in a bash result the
+      agent receives. Report before changing anything
+- [ ] `184-a-turn-cap-is-not-a-stop-condition` — Phase 55's `lastWrittenHash`
+      correctly stopped the non-progress guard firing on a modified file, and
+      attempt 3 consequently ran 60 turns instead of 36 — $1.41 against $0.73 —
+      ending at the turn cap with the same nothing. The guard had been masking
+      the loop, not causing it. State what should stop a probe sequence that is
+      changing its input every turn and converging on nothing
+- [ ] Tests, fail-first, red output reported per case: a component task's
+      acceptance test renders the component, not the app root; a test that
+      imports the app root for a component task is rejected with the file and the
+      import named; a probe sequence that changes its input every turn is stopped
+      before the turn cap
+**Definition of Done:**
+- The take-20 `758c3426` shape is rejected before the agent spends turns on it
+- Report on 183 recorded in HANDOVER.md before any prompt change
+- Stop condition for converging-on-nothing sequences stated with its reasoning
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 95 files / 1321 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
