@@ -9,6 +9,7 @@ import type { ContainerHandle } from '../lib/container.js';
 import type { ToolCallInfo } from './devAgent.js';
 import { summarizeBashTestRun } from '../lib/testOutputSummary.js';
 import { checkNonProgress } from '../lib/nonProgressError.js';
+import { validateTestFileContent } from '../lib/testFileValidator.js';
 import { env } from '../lib/env.js';
 
 // ── Own resolveWorktreePath (decoupled from serverDevAgent) ───────────────────
@@ -428,6 +429,10 @@ export interface TestAgentContext {
   // When set, the system prompt shows what the prior attempt established so the
   // agent can build on it rather than starting from zero (Phase 55 task 177).
   priorAttemptDiff?: string;
+  // Optional: derived from task title when the task is a component task.
+  // When set, the write_file/edit_file handlers reject test files that render a
+  // different component instead of the declared subject (Phase 57 task 181).
+  subjectComponent?: { name: string };
 }
 
 export type TestAgentOutcome = { kind: 'completed' };
@@ -448,6 +453,19 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     '- Cover every acceptance criterion in the spec.',
     '- NOT test implementation internals (no imports from src/, lib/, app/).',
     '- NOT duplicate unit tests the dev agent wrote.',
+    ...(ctx.subjectComponent
+      ? [
+          `- This task's subject is <${ctx.subjectComponent.name}>. The acceptance test renders` +
+            ` <${ctx.subjectComponent.name}> with its declared props — never the application root.` +
+            ` When the component does not yet exist (test-first), write the test against the props` +
+            ` interface declared in the spec, not against an integration path through the app.`,
+        ]
+      : [
+          '- For a component task, the acceptance test renders that component with its declared' +
+            ' props — never the application root (<App />). When the component does not yet exist' +
+            ' (test-first), write the test against the props interface declared in the spec,',
+          '  not against an integration path.',
+        ]),
     '',
     '## Repository conventions (CLAUDE.md)',
     ctx.repoClaudeMd,
@@ -729,6 +747,28 @@ export async function runTestAgent(
             callPath = filePath;
             callContentLength = content.length;
             const absPath = checkWriteAllowed(worktreePath, filePath, ctx.testDir);
+            if (ctx.subjectComponent) {
+              const subjectErr = validateTestFileContent(content, ctx.subjectComponent);
+              if (subjectErr) {
+                const errContent = subjectErr;
+                toolResults.push({
+                  type: 'tool_result',
+                  tool_use_id: block.id,
+                  is_error: true,
+                  content: errContent,
+                });
+                if (onToolCall)
+                  await onToolCall({
+                    turn,
+                    toolName: 'write_file',
+                    resultSize: errContent.length,
+                    resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
+                    path: filePath,
+                    contentLength: content.length,
+                  });
+                continue;
+              }
+            }
             fs.mkdirSync(path.dirname(absPath), { recursive: true });
             fs.writeFileSync(absPath, content, 'utf-8');
             lastWrittenHash = createHash('sha256').update(content).digest('hex');
@@ -796,7 +836,31 @@ export async function runTestAgent(
                 });
               continue;
             }
-            fs.writeFileSync(absPath, current.replace(old_str, new_str), 'utf-8');
+            const editedContent = current.replace(old_str, new_str);
+            if (ctx.subjectComponent) {
+              const subjectErr = validateTestFileContent(editedContent, ctx.subjectComponent);
+              if (subjectErr) {
+                const errContent = subjectErr;
+                toolResults.push({
+                  type: 'tool_result',
+                  tool_use_id: block.id,
+                  is_error: true,
+                  content: errContent,
+                });
+                if (onToolCall)
+                  await onToolCall({
+                    turn,
+                    toolName: 'edit_file',
+                    resultSize: errContent.length,
+                    resultFirstLine: (errContent.split('\n')[0] ?? '').slice(0, 120),
+                    path: filePath,
+                    oldStrLength: old_str.length,
+                    newStrLength: new_str.length,
+                  });
+                continue;
+              }
+            }
+            fs.writeFileSync(absPath, editedContent, 'utf-8');
             lastWrittenHash = createHash('sha256').update(new_str).digest('hex');
             result = `Edited ${filePath} (${old_str.length} → ${new_str.length} chars)`;
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });

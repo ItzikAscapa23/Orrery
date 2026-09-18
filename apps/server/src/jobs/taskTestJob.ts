@@ -26,6 +26,7 @@ import {
   TestAllowlistViolationError,
   measurePromptSections as measureTestPromptSections,
 } from '../agents/testAgent.js';
+import { extractSubjectComponent } from '../lib/testFileValidator.js';
 import type { ToolCallInfo } from '../agents/devAgent.js';
 import { usageEventPayload } from '../lib/usageEvent.js';
 import { scopeSpecByRefs, scopeContract } from '../lib/promptScope.js';
@@ -298,6 +299,7 @@ export async function runTaskTestJob(
 
     const existingTestFiles = getExistingTestFilesWithDescribes(worktreePath, testDir);
     const taskSharedInfraChanges: string[] = [];
+    const subjectComponent = extractSubjectComponent(task.title);
     await runTestAgent(
       featureId,
       {
@@ -308,6 +310,7 @@ export async function runTaskTestJob(
         ...(repoEntry.description ? { repoDescription: repoEntry.description } : {}),
         maxTurns: effectiveCap,
         ...(existingTestFiles.length > 0 ? { existingTestFiles } : {}),
+        ...(subjectComponent ? { subjectComponent } : {}),
       },
       container,
       worktreePath,

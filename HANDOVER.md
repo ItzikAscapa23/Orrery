@@ -48,7 +48,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 56 — Name the channel that works
+- **Current phase:** 57 — Test the component, not the app
 - **State:** `complete`
 - **Last updated:** 2026-09-18
 
@@ -56,7 +56,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-*Phase 56 complete. Awaiting Phase 57 spec.*
+*Phase 57 complete.*
 
 ---
 
@@ -104,13 +104,68 @@ tests written against stubs (FIXED Phase 51), untestable task within budget (OPE
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1321 passed across 95 files**, 2026-09-18 |
+| `npm test` (repo root) | passed — **1332 passed across 96 files**, 2026-09-18 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-09-18 |
 | `npm run lint` | exit 0 — 0 problems, 2026-09-18 |
 
 ---
 
 ## Decisions
+
+- **Phase 57: Subject-derived render validation (`181`)** —
+  `extractSubjectComponent(taskTitle)` derives the expected component name when the task title
+  ends with "component" (e.g. "Zone result region component" → `ZoneResultRegion`). The derived
+  name is passed as `subjectComponent` in `TestAgentContext`. `write_file` and `edit_file` handlers
+  in `testAgent.ts` call `validateTestFileContent` and return `is_error: true` if the file renders
+  a different PascalCase component without also rendering the subject. The check passes when the
+  subject appears as any JSX element in the file (it may be wrapped in a provider/router).
+  Implementation: `lib/testFileValidator.ts`; tests: `__tests__/testFileValidator.test.ts`.
+
+- **Phase 57: Component-name-pattern audit (`181`)** —
+  Searched `apps/server/src` and `apps/web/src` for heuristics that infer component or module
+  names from string patterns. The only instance is `extractSubjectComponent` introduced in this
+  phase. Existing code passes task titles as-is to agents and log messages; it does not infer
+  component names. One related case: `testJob.ts:425` infers the test runner from CLAUDE.md
+  keywords (`detectJsonCommand`), which is a runner inference, not a component inference.
+
+- **Phase 57: Why probe instructions don't stick — 183 report** —
+  Three independent causes documented before any prompt change:
+  1. **Rule placement**: Console/sentinel/inspect_file rules appear in the `## Tools` tail section
+     of `testAgent.ts:buildSystemPrompt` (after `## Relevant spec sections`). The agent reads the
+     spec and commits to an approach before reaching these rules.
+  2. **CONSOLE: absent when empty** (`testOutputSummary.ts:196`): `\nCONSOLE:\n` is only appended
+     when `consoleOutput` is truthy. When `console.log` produces no output (component not
+     implemented, no React fiber, vitest suppresses) the agent sees only `TESTS: N passed, N failed`
+     and cannot distinguish "channel empty" from "channel unavailable."
+  3. **React internals probe (`__reactProps`)**: Take-20 attempt 3 accessed `Object.keys(select)
+     .find(k => k.startsWith('__reactProps'))` — React's internal fiber key. No fiber exists on
+     an unimplemented component's DOM node. Every variation of this probe converges on `undefined`.
+     `console.log` cannot help here either because the component produces no output.
+  **Root cause**: The component did not exist. Writing tests for a subject that has no runtime
+  presence cannot be done through probing — the correct approach is to write against the props
+  interface declared in the spec (task 182). Rule relocation is a separate decision — recorded as
+  an open question for the 183-followup task.
+
+- **Phase 57: Stop condition for converging probe sequences — 184 report (implementation deferred)** —
+  Take-20 attempt 3 bash result sizes: 327 / 363 / 365 / 363 / 363 / 328 chars — different every
+  turn. Identical-output detection (Phase 33 guard) would not have fired. The Phase 55
+  `lastWrittenHash` fix means any write-run cycle produces a distinct ring entry, so a probe loop
+  that writes a file each cycle never trips the guard regardless of output.
+  Three candidate stop conditions evaluated:
+  (a) **Turn-without-authored-pass budget**: if N consecutive bash turns all show `authored: 0`
+      (no authored test passing), stop. Catches take-20's shape; risks false positives on
+      first-attempt authoring before any test passes. Threshold ~10–15 turns with a grace window.
+  (b) **Same-file written-and-run N times without passing**: if path X is written and run N times
+      with 0 passing, stop. Requires correlating write_file and bash events by path. Most precise
+      for the probe-loop shape; avoids Phase 37 false positive (different commands don't collide).
+      Recommended candidate.
+  (c) **Probe-file detection at commit time**: if staged set contains only scratch-pattern files,
+      the agent produced nothing real; fail and redispatch. Belt-and-suspenders, not a real-time
+      stop.
+  **Recommended**: (b). Threshold: if the same file has been write_file'd and run 5+ times in
+  a session without at least one authored test passing, fire a NonProgressError. Does not interact
+  with the command-hash ring buffer; passes Phase 37 invariant because it tracks
+  per-file write+run cycles, not command repetition. Implementation deferred to Phase 58.
 
 - **Phase 56: CONSOLE: is the channel for in-test values (`178–180`)** —
   `inspect_file` runs `node <file>` in a fresh process and cannot observe vitest runtime
@@ -195,6 +250,7 @@ tests written against stubs (FIXED Phase 51), untestable task within budget (OPE
 | 54 | A retry starts warmer than the attempt before it | `d63e5b8` | 2026-09-17 |
 | 55 | The agent can ask a question | `d67bd7b` | 2026-09-18 |
 | 56 | Name the channel that works | `04f2d1b` | 2026-09-18 |
+| 57 | Test the component, not the app | pending | 2026-09-18 |
 
 ---
 
