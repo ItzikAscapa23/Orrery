@@ -294,6 +294,17 @@ describe('path-jail integration — real filesystem scratch worktree', () => {
     const names = checkListFilesTarget(root, TEST_SUBDIR, TEST_SUBDIR);
     expect(names.split('\n')).toContain('acceptance.test.ts');
   });
+
+  it('read_file: reading a file inside a nested test subdirectory succeeds (C-6)', () => {
+    // Verifies resolveReal + checkReadAllowed handle arbitrary nesting depth. On macOS,
+    // realpathSync.native canonicalises /var/... → /private/var/...; both root and the
+    // candidate go through the same resolution, so the startsWith comparison stays valid.
+    const nestedDir = nodePath.join(root, TEST_SUBDIR, 'unit');
+    nodeFs.mkdirSync(nestedDir, { recursive: true });
+    nodeFs.writeFileSync(nodePath.join(nestedDir, 'helper.test.ts'), '// nested\n', 'utf-8');
+    const result = checkReadAllowed(root, `${TEST_SUBDIR}/unit/helper.test.ts`, TEST_SUBDIR);
+    expect(nodeFs.readFileSync(result, 'utf-8')).toContain('// nested');
+  });
 });
 
 // ── testAgent read_file range ─────────────────────────────────────────────────

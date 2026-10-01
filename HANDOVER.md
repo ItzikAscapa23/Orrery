@@ -48,15 +48,15 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 61 — A test agent that knows what it already wrote
+- **Current phase:** 62 — Plan Phases 8 + 9 sweep
 - **State:** `complete`
-- **Last updated:** 2026-09-18
+- **Last updated:** 2026-10-01
 
 ---
 
 ## Current phase progress
 
-Phase 61 complete. Phase 62 does not exist in `plan.md`.
+Phase 62 complete. Phase 63 entry: Plan Phase 10 (Spec reconciliation) or R-7 fix.
 
 ---
 
@@ -81,13 +81,39 @@ Phase 61 complete. Phase 62 does not exist in `plan.md`.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1337 passed across 96 files**, 2026-09-18 |
-| `npm run typecheck` | passed — clean across all three workspaces, 2026-09-18 |
-| `npm run lint` | exit 0 — 0 problems, 2026-09-18 |
+| `npm test` (repo root) | passed — **1338 passed across 96 files**, 2026-10-01 |
+| `npm run typecheck` | passed — clean across all three workspaces, 2026-10-01 |
+| `npm run lint` | exit 0 — 0 problems, 2026-10-01 |
 
 ---
 
 ## Decisions
+
+- **Phase 62: Plan Phases 8 and 9 — noop-success for already-implemented items** —
+  Audit found both Plan Phase 8 tasks already in the codebase and tested:
+  `plannerAgent.ts` line 95 states "each covered task triggers one full test-agent run";
+  `testPlannerAgent.ts` line 42 states test-deliverable tasks must always be SKIPPED.
+  Both rules have unit-test coverage (`plannerAgent.test.ts:188`, `testPlannerAgent.test.ts:253`).
+  Plan Phase 9 items 1–6 also already done: `docs/phase-6.md` cleaned; R-8 gate card
+  has gate-type-specific text with regression test; R-9 `discoverTestDir` fallback emits
+  `agent.log` in both `testJob.ts` and `taskTestJob.ts`; R-10 docblock at
+  `maybeAdvance.ts:13` is accurate; O-13 `/simulate` has 409 status guard; O-12
+  re-query inside the per-repo loop already in `createAdoPrJob.ts:149`.
+
+- **Phase 62: C-6 — nested test subdirectory test added** —
+  Added real-filesystem test in `testAgent.test.ts` (describe "path-jail integration")
+  verifying `checkReadAllowed` permits `src/__tests__/unit/helper.test.ts` on a real
+  tmpdir. Uses `mkdtempSync` so `realpathSync.native` runs on both root and candidate,
+  confirming the `startsWith` comparison stays valid under macOS symlink canonicalisation.
+
+- **Phase 62: R-7 — test.report vocabulary deferred** —
+  `TestFindingSchema` extends `FindingSchema` and uses `severity: 'blocker'`. Test
+  findings stored in the shared `finding` table are therefore dismissible via the review
+  `/findings/:id/dismiss` route. In practice the test gate (`/approve-test`) and review
+  gate (`/approve`) operate on different `specRev` values (TESTING vs CODE_REVIEW cycles
+  never overlap), so cross-gate dismissal cannot occur. The semantic confusion remains.
+  Fix requires a new `source: 'review' | 'test'` column on the `finding` table (Prisma
+  migration), which is larger than a backlog item — deferred to a focused phase.
 
 - **Phase 61: test-agent suite accumulation — already wired, STOP** —
   `getExistingTestFilesWithDescribes` (which filters via `X-Orrery-Agent: test` commit trailer)
@@ -100,17 +126,6 @@ Phase 61 complete. Phase 62 does not exist in `plan.md`.
   verify that (a) `existingTestFiles` is forwarded when prior tests have describe blocks, and
   (b) it is omitted when no prior tests exist. Existing `getAuthoredTestFiles.test.ts:19` covers
   the trailer-filter exclusion.
-
-- **Phase 61 redundancy table (takes 21 and 22):**
-
-  | Feature | Repo | File | Size (task-test) | it() | TESTING growth | Cross-file overlap |
-  |---|---|---|---|---|---|---|
-  | take-22 | server | `countries.acceptance.test.ts` | 3 821 chars | 9 | +2 589 chars / +3 | 0 |
-  | take-22 | server | `time.acceptance.test.ts` | 10 692 chars | 26 | +4 681 chars / +8 | 0 |
-  | take-22 | web | `CountrySelector.test.tsx` | 8 441 chars | — | none | — |
-  | take-22 | web | `ResultRegion.test.tsx` | 14 321 chars | — | none | — |
-  | take-21 | server | `countries.test.ts` | 4 722 chars | 11 | +2 090 chars / +3 | 0 |
-  | take-21 | server | `time.test.ts` | 14 407 chars | 33 | +3 724 chars / +7 | 0 |
 
 - **Phase 60: `inspect_file` removed, not fixed** —
   Take-21 and take-22 never reached for `inspect_file`; every probe used `bash node <file>`.
@@ -158,9 +173,11 @@ Phase 61 complete. Phase 62 does not exist in `plan.md`.
 
 ## Open questions / blockers
 
-- **O-12 Duplicate `pr.created` events.** Root cause: non-atomic ADO call + event
-  append. Fix: re-query existing `pr.created` events inside the per-repo loop
-  immediately before the ADO API call.
+- **R-7 test.report vocabulary (deferred).** `TestFinding` shares `severity: 'blocker'`
+  with review findings and is stored in the same `finding` table. The dismiss route can
+  act on either type. The specRev separation (CODE_REVIEW vs TESTING) prevents practical
+  cross-gate dismissal, but the semantic confusion is real. Fix: add `source: 'review' | 'test'`
+  column to `findings` table and guard the dismiss route. Requires a Prisma migration.
 
 - **Task 196 — REDISPATCH banner clearing not observed.** Phase 54 task 170 and
   Phase 59 task 192 changed banner behaviour; neither was seen clearing on a real
@@ -201,6 +218,7 @@ Phase 61 complete. Phase 62 does not exist in `plan.md`.
 | 59 | An expired credential is weather, not a verdict | `7d36ffb` | 2026-09-18 |
 | 60 | A channel nothing uses is not a channel | `3857634` | 2026-09-18 |
 | 61 | A test agent that knows what it already wrote | `19b9e2e` | 2026-09-18 |
+| 62 | Plan Phases 8 + 9 sweep | pending | 2026-10-01 |
 
 ---
 
