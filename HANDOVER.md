@@ -231,7 +231,7 @@ Phase 63 complete. The next phase is **plan.md Phase 63** (not yet written).
 | 60 | A channel nothing uses is not a channel | `3857634` | 2026-09-18 |
 | 61 | A test agent that knows what it already wrote | `19b9e2e` | 2026-09-18 |
 | 62 | Plan Phases 8 + 9 sweep | `95fc54b` | 2026-10-01 |
-| 63 | A warning you approve in 35 seconds is not a gate | pending | 2026-10-01 |
+| 63 | A warning you approve in 35 seconds is not a gate | `93b9646` | 2026-10-01 |
 
 ---
 
