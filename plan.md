@@ -2480,3 +2480,63 @@ npm test          # FROM REPO ROOT — from 1333 (phase 60 actual), must not dec
 npm run typecheck # all three workspaces
 npm run lint      # must stay clean (exit 0)
 ```
+---
+## Phase 62 — A warning you approve in 35 seconds is not a gate
+**Goal:** Every vacuous finding is one worth reading.
+**PRD refs:** §3 R7
+**Tasks:**
+- [ ] `201-exempt-the-load-bearing-shapes` — R-72. BFF take-25 (`1b6e3d8c`) gated
+      on 23 vacuous findings against 32 authored tests — a 72% headline — and the
+      per-line audit in `claude/run-analysis-1b6e3d8c-take-25.md` found **2 real**.
+      Ten were `expect(x).toBeDefined()` where `x` is the result of `.find()` on
+      the preceding line (lines 280, 281, 632, 664, 669, 722, 728, 734, 773, 812):
+      there the assertion is the only thing between a missing element and a
+      `TypeError`, and removing it weakens the test. Nine were `toHaveProperty(k)`
+      immediately followed by a hard value or type assertion on the same subject
+      (lines 148, 166, 572, 595, 843, 919, 941, 972, plus the `not.toHaveProperty`
+      negatives at 177, 192). Exempt both: `toBeDefined()` whose subject is the
+      result of `.find()`, `.get()`, or an index access on the immediately
+      preceding line; and `toHaveProperty(k)` where the next statement asserts on
+      `subject[k]`
+- [ ] `202-flag-the-two-that-matter` — the shapes that are genuinely unfailable get
+      their own severity, named separately rather than pooled with the rest:
+      (a) **a test whose only assertion is vacuous** — take-25 line 891,
+      `expect(result).toBeDefined()` as the sole assertion of the AC-10
+      client-version test, which is why a spec violation shipped untested;
+      (b) **`forEach` or `for…of` over a collection with no non-empty guard** —
+      take-25 line 213, and the standing open item. Both are blockers, not
+      warnings. Everything the detector still flags after 201 stays a warning
+- [ ] `203-measure-the-precision-before-and-after` — rerun the detector over the
+      take-25 test file (`test/scenarios/cardAction/orderCardClubsListStrongIdentification.test.js`
+      at commit `d2fcf581d`) and report findings before and after 201/202. Target:
+      2 findings, both blockers, zero warnings. If the count is not 2, the
+      exemptions are wrong in one direction or the other — report which lines
+      moved and why, do not tune until the number matches
+- [ ] `204-the-rule-follows-the-detector` — only once 203 lands, add the
+      prohibition to both agents' rules and to each demo repo's `CLAUDE.md`,
+      naming the two blocker shapes and nothing else. The client repo's
+      `CLAUDE.md` already carries the `forEach` rule; the server repo's does not.
+      Do not write a rule against `toBeDefined()` or `toHaveProperty` in general —
+      take-25 shows both are usually load-bearing, and a rule that discourages
+      them makes tests worse. Report which files changed
+- [ ] Audit and list: every place a vacuous finding is produced, graded or
+      surfaced — the detector, the `test.report` payload, the gate's severity
+      counts, the UI. The list, not a summary. Severity is the only thing that
+      routes, and Phase 40 established that for the review agent; confirm the two
+      paths now agree
+- [ ] Tests, fail-first, red output reported per case: `toBeDefined()` on a
+      `.find()` result is not flagged; `toBeDefined()` on a plain variable still
+      is; `toHaveProperty(k)` followed by `expect(subject[k]).toBe(…)` is not
+      flagged; `toHaveProperty(k)` with nothing following still is; a test whose
+      only assertion is vacuous is a blocker; an unguarded `forEach` assertion is
+      a blocker; a guarded one is not
+**Definition of Done:**
+- Detector run over take-25's file reports exactly 2 findings, both blockers
+- Agent rules and both demo `CLAUDE.md` files name the two blocker shapes only
+- Finding-path audit in HANDOVER.md, every producer accounted for
+**Verification:**
+```bash
+npm test          # FROM REPO ROOT — baseline 96 files / 1337 tests, must not decrease
+npm run typecheck # all three workspaces
+npm run lint      # must stay clean (exit 0)
+```
