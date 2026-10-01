@@ -220,6 +220,46 @@ describe('toHaveProperty exemption — follow-up value assertion', () => {
   });
 });
 
+// ── Phase 62: exemption gap fixes ────────────────────────────────────────────
+
+describe('Phase 62 exemptions', () => {
+  it('does NOT flag .not.toHaveProperty() — negative assertion is meaningful (case A)', () => {
+    writeTestFile(
+      'not-have-prop.test.ts',
+      `
+      it('property absent', () => {
+        expect(result).not.toHaveProperty('errorCode');
+      });
+    `,
+    );
+    expect(detectVacuousAssertions(tmpDir, ['not-have-prop.test.ts'])).toEqual([]);
+  });
+
+  it('does NOT flag toBeDefined() for .find()-assigned subject 4 lines above (case B)', () => {
+    // falseUrl and trueUrl are assigned by .find() — exempt.
+    // result is NOT assigned by any accessor nearby — still flagged.
+    // Verifies subject-matching precision: the exemption is identifier-specific,
+    // not triggered by any accessor within the lookback window.
+    writeTestFile(
+      'find-gap.test.ts',
+      `
+      it('multi-find', () => {
+        const falseUrl = urls.find((u) => !u.enabled);
+        const trueUrl = urls.find((u) => u.enabled);
+
+        expect(falseUrl).toBeDefined();
+        expect(trueUrl).toBeDefined();
+        expect(result).toBeDefined();
+      });
+    `,
+    );
+    const findings = detectVacuousAssertions(tmpDir, ['find-gap.test.ts']);
+    // Only result is flagged; falseUrl and trueUrl are exempt
+    expect(findings.filter((f) => f.section === 'vacuous assertions')).toHaveLength(1);
+    expect(findings.find((f) => f.section === 'vacuous assertions')?.issue).toContain('result');
+  });
+});
+
 // ── Task 140: sole-assertion-vacuous detection ────────────────────────────────
 
 describe('sole-assertion-vacuous detection', () => {
@@ -236,6 +276,21 @@ describe('sole-assertion-vacuous detection', () => {
     const soleFindings = findings.filter((f) => f.section === 'sole-assertion-vacuous');
     expect(soleFindings).toHaveLength(1);
     expect(soleFindings[0]?.issue).toContain('every assertion is vacuous');
+  });
+
+  it('sole-assertion-vacuous finding has severity blocker (case C)', () => {
+    writeTestFile(
+      'sole-blocker.test.ts',
+      `
+      it('sole vacuous', () => {
+        expect(result).toBeDefined();
+      });
+    `,
+    );
+    const findings = detectVacuousAssertions(tmpDir, ['sole-blocker.test.ts']);
+    const soleFindings = findings.filter((f) => f.section === 'sole-assertion-vacuous');
+    expect(soleFindings).toHaveLength(1);
+    expect(soleFindings[0]?.severity).toBe('blocker');
   });
 
   it('does NOT flag a test that mixes vacuous and real assertions', () => {
@@ -286,6 +341,23 @@ describe('unguarded-forEach detection', () => {
     expect(forEachFindings).toHaveLength(1);
   });
 
+  it('unguarded-forEach finding has severity blocker (case D)', () => {
+    writeTestFile(
+      'foreach-blocker.test.ts',
+      `
+      it('iterates without guard', () => {
+        results.forEach((r) => {
+          expect(r.value).toBe(1);
+        });
+      });
+    `,
+    );
+    const findings = detectVacuousAssertions(tmpDir, ['foreach-blocker.test.ts']);
+    const forEachFindings = findings.filter((f) => f.section === 'unguarded-forEach');
+    expect(forEachFindings).toHaveLength(1);
+    expect(forEachFindings[0]?.severity).toBe('blocker');
+  });
+
   it('does NOT flag forEach preceded by if (arr.length > 0)', () => {
     writeTestFile(
       'guarded-if.test.ts',
@@ -317,5 +389,42 @@ describe('unguarded-forEach detection', () => {
     );
     const findings = detectVacuousAssertions(tmpDir, ['guarded-expect.test.ts']);
     expect(findings.filter((f) => f.section === 'unguarded-forEach')).toHaveLength(0);
+  });
+});
+
+// ── Phase 62: unguarded-for-of detection ──────────────────────────────────────
+
+describe('unguarded-for-of detection', () => {
+  it('flags for...of with no preceding length guard as blocker (case E)', () => {
+    writeTestFile(
+      'unguarded-for-of.test.ts',
+      `
+      it('iterates with for-of', () => {
+        for (const r of results) {
+          expect(r.id).toBe(1);
+        }
+      });
+    `,
+    );
+    const findings = detectVacuousAssertions(tmpDir, ['unguarded-for-of.test.ts']);
+    const forOfFindings = findings.filter((f) => f.section === 'unguarded-for-of');
+    expect(forOfFindings).toHaveLength(1);
+    expect(forOfFindings[0]?.severity).toBe('blocker');
+  });
+
+  it('does NOT flag for...of preceded by expect(...).toHaveLength(N) (case F)', () => {
+    writeTestFile(
+      'guarded-for-of.test.ts',
+      `
+      it('guarded for-of', () => {
+        expect(results).toHaveLength(3);
+        for (const r of results) {
+          expect(r.value).toBe(1);
+        }
+      });
+    `,
+    );
+    const findings = detectVacuousAssertions(tmpDir, ['guarded-for-of.test.ts']);
+    expect(findings.filter((f) => f.section === 'unguarded-for-of')).toHaveLength(0);
   });
 });

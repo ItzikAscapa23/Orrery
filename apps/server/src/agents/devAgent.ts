@@ -417,6 +417,8 @@ export function buildSystemPrompt(task: DevTask, ctx: DevContext): string {
     'that pattern hijacks the test harness to serve as a print channel.',
     'To read a value: add console.log(value) to the test and read the CONSOLE: section of the bash result.',
     '',
+    '- Never write a test whose sole assertion is `expect(x).toBeDefined()` or iterate a collection with `.forEach()`/`for...of` without a non-empty guard — both are vacuous blocker shapes the detector will flag.',
+    '',
     '**bash(command)** — Run a single shell command. Use only for: npx jest / npx vitest run (not npm test — see Rules),',
     'npm run lint, npm run typecheck, read-only exploration',
     '(cat, ls, find, grep, head, tail, wc, pwd), and running scripts with node <file>.',

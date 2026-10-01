@@ -32,6 +32,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
   - `testOutputSummary.ts` — `summarizeBashTestRun`, `extractConsoleOutput`
   - `repoOrientation.ts` — `generateRepoOrientation()`
   - `bedrockPark.ts` — `parkTaskOnBedrockFailure`, `isEnvironmentalBedrockError`
+  - `vacuousAssertions.ts` — `detectVacuousAssertions` (warning + blocker findings)
 - `apps/server/src/jobs/` — devJob, testJob, taskTestJob, createAdoPrJob, agentWorker
 - `apps/server/src/agents/` — devAgent, testAgent, plannerAgent, testPlannerAgent
 - `apps/web/src/lib/eventFold.ts` — all UI state derived from folding the event log
@@ -48,7 +49,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Status
 
-- **Current phase:** 62 — Plan Phases 8 + 9 sweep
+- **Current phase:** 63 — A warning you approve in 35 seconds is not a gate
 - **State:** `complete`
 - **Last updated:** 2026-10-01
 
@@ -56,11 +57,7 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-Phase 62 (Plan Phases 8+9 sweep) complete. The next phase is **plan.md Phase 62**
-("A warning you approve in 35 seconds is not a gate" — vacuous assertion detector
-precision fix: tasks 201–204 + audit). plan.md Phase 62 was added at commit `1b5cb1c`
-while Phase 61 was active; its numbering collides with the HANDOVER counter. The next
-HANDOVER phase is 63 and covers plan.md Phase 62's tasks.
+Phase 63 complete. The next phase is **plan.md Phase 63** (not yet written).
 
 ---
 
@@ -85,7 +82,7 @@ HANDOVER phase is 63 and covers plan.md Phase 62's tasks.
 
 | Command | Result |
 |---|---|
-| `npm test` (repo root) | passed — **1338 passed across 96 files**, 2026-10-01 |
+| `npm test` (repo root) | passed — **1345 passed across 96 files**, 2026-10-01 |
 | `npm run typecheck` | passed — clean across all three workspaces, 2026-10-01 |
 | `npm run lint` | exit 0 — 0 problems, 2026-10-01 |
 
@@ -93,43 +90,67 @@ HANDOVER phase is 63 and covers plan.md Phase 62's tasks.
 
 ## Decisions
 
+- **Phase 63: Vacuous detector precision — take-25 before/after** —
+  Ran detector against `test/scenarios/cardAction/orderCardClubsListStrongIdentification.test.js`
+  at commit `d2fcf581d` in `/Users/itzhak/aws-workspace/bff`.
+
+  **Before (14 findings, all warnings):**
+  - vacuous assertions (9): lines 148, 166, 177, 192, 213, 280, 281, 891, 1004
+  - sole-assertion-vacuous (4): lines 171, 180, 195, 871
+  - unguarded-forEach (1): line 212
+
+  **After (6 findings — 2 blockers + 4 warnings):**
+  - warnings (4): lines 148 `toHaveProperty('token')`, 166 `toHaveProperty('token')`,
+    891 `toBeDefined()` (sole assertion, also drives finding below), 1004 `toHaveProperty('creditLimit')`
+  - blockers (2): line 871 `sole-assertion-vacuous` ("client-version gate" test sole assertion),
+    line 212 `unguarded-forEach` (`allClubs.forEach(...)`)
+  - Lines 891 AND 871 are BOTH present: 891 as warning from PATTERNS, 871 as blocker
+    from `detectSoleAssertionVacuous`. This pair is the one that caught the AC-10 defect.
+
+  **False positives eliminated (8):**
+  - Lines 177, 192, 213: `.not.toHaveProperty()` exemption (negative assertion is meaningful)
+  - Lines 280, 281: subject-matching lookback — `falseUrl` and `trueUrl` assigned by `.find()`
+    4 lines above; `expect(result).toBeDefined()` elsewhere is NOT exempt
+  - Lines 171, 180, 195: sole-assertion-vacuous entries driven by `.not.toHaveProperty`
+    false positives; once those assertions are exempt, the tests are no longer sole-vacuous
+
+- **Phase 63: Gate consequence of sole-assertion-vacuous blocker** —
+  After this phase, a finding with `severity: 'blocker'` and `resolution: null` from
+  `detectSoleAssertionVacuous` or `detectUnguardedForEach`/`detectUnguardedForOf` blocks
+  `POST /approve-test` until the operator dismisses it via `/findings/:id/dismiss`. This is
+  the intended behaviour: vacuous blockers require explicit operator sign-off, not just a click
+  through. Test case G (`testJob.test.ts`) documents this gate consequence explicitly with
+  `section: 'sole-assertion-vacuous'`. Previously `testJob.ts:1226` hardcoded `blockers: 0`
+  in the gate event — now computed from actual finding severities.
+
+- **Phase 63: subject-matching for toBeDefined accessor exemption** —
+  The original exemptCheck (one-line lookback) missed lines 280/281 in take-25 where `.find()`
+  assigns `falseUrl`/`trueUrl` 4 lines above the `expect()`. A wide 5-line any-accessor window
+  was rejected because it would accidentally exempt `expect(result).toBeDefined()` at line 891
+  (the real finding). Subject-matching extracts the identifier from `expect(IDENTIFIER)` and
+  looks back up to 5 lines for a line where BOTH that identifier is assigned AND an accessor
+  appears — identifier-specific, not window-based.
+
+- **Phase 63: scripts/demo-*/CLAUDE.md deleted** —
+  Both `scripts/demo-client/CLAUDE.md` and `scripts/demo-server/CLAUDE.md` were dead templates
+  never read by any orchestrator code path. `readClaudeMdFromDefaultBranch` reads
+  `git show main:CLAUDE.md` from the bare clone of the TARGET repo, not from scripts/.
+  The live files are at `/Users/itzhak/myProjects/Orrery-{client,server}-demo/CLAUDE.md`
+  and are served to agents via the bare clone fetch. Both updated and pushed:
+  - Orrery-client-demo: `5715d47`
+  - Orrery-server-demo: `45155a3`
+
+- **Phase 63: for...of detection added** —
+  `detectUnguardedForEach` now also detects `for (const x of collection)` loops using
+  `/for\s*\(\s*(?:const|let|var)\s+\w+\s+of\s+\w+/g`. Same 10-line guard lookback,
+  same `FOREACH_GUARD_RE`, section `'unguarded-for-of'`, severity `'blocker'`.
+  `testJob.ts` gate summary and counts updated.
+
 - **Phase 62: Plan Phases 8 and 9 — noop-success for already-implemented items** —
-  Audit found both Plan Phase 8 tasks already in the codebase and tested:
-  `plannerAgent.ts` line 95 states "each covered task triggers one full test-agent run";
-  `testPlannerAgent.ts` line 42 states test-deliverable tasks must always be SKIPPED.
-  Both rules have unit-test coverage (`plannerAgent.test.ts:188`, `testPlannerAgent.test.ts:253`).
-  Plan Phase 9 items 1–6 also already done: `docs/phase-6.md` cleaned; R-8 gate card
-  has gate-type-specific text with regression test; R-9 `discoverTestDir` fallback emits
-  `agent.log` in both `testJob.ts` and `taskTestJob.ts`; R-10 docblock at
-  `maybeAdvance.ts:13` is accurate; O-13 `/simulate` has 409 status guard; O-12
-  re-query inside the per-repo loop already in `createAdoPrJob.ts:149`.
-
-- **Phase 62: C-6 — nested test subdirectory test added** —
-  Added real-filesystem test in `testAgent.test.ts` (describe "path-jail integration")
-  verifying `checkReadAllowed` permits `src/__tests__/unit/helper.test.ts` on a real
-  tmpdir. Uses `mkdtempSync` so `realpathSync.native` runs on both root and candidate,
-  confirming the `startsWith` comparison stays valid under macOS symlink canonicalisation.
-
-- **Phase 62: R-7 — test.report vocabulary deferred** —
-  `TestFindingSchema` extends `FindingSchema` and uses `severity: 'blocker'`. Test
-  findings stored in the shared `finding` table are therefore dismissible via the review
-  `/findings/:id/dismiss` route. In practice the test gate (`/approve-test`) and review
-  gate (`/approve`) operate on different `specRev` values (TESTING vs CODE_REVIEW cycles
-  never overlap), so cross-gate dismissal cannot occur. The semantic confusion remains.
-  Fix requires a new `source: 'review' | 'test'` column on the `finding` table (Prisma
-  migration), which is larger than a backlog item — deferred to a focused phase.
+  See previous HANDOVER entry (commit `95fc54b`).
 
 - **Phase 61: test-agent suite accumulation — already wired, STOP** —
-  `getExistingTestFilesWithDescribes` (which filters via `X-Orrery-Agent: test` commit trailer)
-  is called in both `taskTestJob.ts:299` and `testJob.ts:715` and forwarded as `existingTestFiles`
-  to `runTestAgent`. Dev-authored files are excluded because dev commits use `feat(taskId): title`
-  with no `X-Orrery-Agent: test` trailer. Redundancy analysis on takes 21 and 22 found zero
-  cross-file assertion overlap — each task covers a distinct API endpoint. The TESTING phase grows
-  files with genuinely new cross-endpoint integration tests, not duplicates. No prompt change
-  needed; task 200 deferred. Four tests added: `taskTestJob.test.ts` and `testJob.test.ts` each
-  verify that (a) `existingTestFiles` is forwarded when prior tests have describe blocks, and
-  (b) it is omitted when no prior tests exist. Existing `getAuthoredTestFiles.test.ts:19` covers
-  the trailer-filter exclusion.
+  See previous HANDOVER entry (commit `19b9e2e`).
 
 - **Phase 60: `inspect_file` removed, not fixed** —
   Take-21 and take-22 never reached for `inspect_file`; every probe used `bash node <file>`.
@@ -150,19 +171,6 @@ HANDOVER phase is 63 and covers plan.md Phase 62's tasks.
   `subject?: string` on `PlanTaskSchema` and the `Task` model. Planner declares the
   component name explicitly. `extractSubjectComponent` was hard-deleted. Tasks without
   a subject skip render validation.
-
-- **Phase 57: Probe-loop stop condition — unimplemented** —
-  Recommended: fire `NonProgressError` if the same file is `write_file`'d and run 5+
-  times without an authored test passing. No phase in `plan.md` covers this.
-
-- **Phase 56: CONSOLE: is the sole channel for in-test values** —
-  `extractConsoleOutput` delivers up to 2048 chars of console output in the CONSOLE:
-  section of every bash result. A fresh process (node) cannot observe vitest runtime
-  state. Truncation is visible in the output prefix.
-
-- **Test-file boundary + finding identity (Phases 28, core)** —
-  `write_file`/`edit_file` in dev agents reject test-trailer files. Finding ids recur
-  per cycle — lookups must use composite `(featureId, specRev, id)`.
 
 ---
 
@@ -223,6 +231,7 @@ HANDOVER phase is 63 and covers plan.md Phase 62's tasks.
 | 60 | A channel nothing uses is not a channel | `3857634` | 2026-09-18 |
 | 61 | A test agent that knows what it already wrote | `19b9e2e` | 2026-09-18 |
 | 62 | Plan Phases 8 + 9 sweep | `95fc54b` | 2026-10-01 |
+| 63 | A warning you approve in 35 seconds is not a gate | pending | 2026-10-01 |
 
 ---
 

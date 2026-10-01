@@ -516,6 +516,9 @@ export function buildSystemPrompt(ctx: TestAgentContext): string {
     `that pattern hijacks the test harness to serve as a print channel.`,
     `To read a value: add console.log(value) to the test and read the CONSOLE: section of the bash result.`,
     '',
+    '- Never write a test whose sole assertion is `expect(x).toBeDefined()` — that always passes and the detector flags it as a blocker. Assert the exact field or value.',
+    '- Never iterate a collection with `.forEach()` or `for...of` without first asserting the collection is non-empty (`expect(arr).toHaveLength(n)` or `expect(arr.length).toBeGreaterThan(0)`). Unguarded iteration is a blocker.',
+    '',
     '**bash(command)** — Run a test-runner command only.',
     `Allowed: ${TEST_BASH_ALLOWED_PREFIXES.join(', ')}.`,
     'Prefer `npx jest --ci` or `npx vitest run` over `npm test` — `npm test` is a script alias' +

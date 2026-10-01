@@ -1214,16 +1214,20 @@ async function _advanceTestPass(
     const regularCount = warnings.filter((f) => f.section === 'vacuous assertions').length;
     const soleCount = warnings.filter((f) => f.section === 'sole-assertion-vacuous').length;
     const forEachCount = warnings.filter((f) => f.section === 'unguarded-forEach').length;
+    const forOfCount = warnings.filter((f) => f.section === 'unguarded-for-of').length;
     const summaryParts: string[] = [];
     if (regularCount) summaryParts.push(`${regularCount} vacuous assertion(s)`);
     if (soleCount) summaryParts.push(`${soleCount} sole-assertion test(s)`);
     if (forEachCount) summaryParts.push(`${forEachCount} unguarded forEach(s)`);
+    if (forOfCount) summaryParts.push(`${forOfCount} unguarded for...of`);
+    const blockerCount = warnings.filter((f) => f.severity === 'blocker').length;
+    const warningCount = warnings.filter((f) => f.severity === 'warning').length;
     await appendEvent(getPrisma(), featureId, {
       type: 'gate.opened',
       gate: 'test_report',
       summary: `${summaryParts.join(', ')} detected — review before accepting`,
       revision: specRev,
-      counts: { blockers: 0, warnings: warnings.length, suggestions: 0 },
+      counts: { blockers: blockerCount, warnings: warningCount, suggestions: 0 },
     });
     await appendEvent(getPrisma(), featureId, {
       type: 'agent.status',

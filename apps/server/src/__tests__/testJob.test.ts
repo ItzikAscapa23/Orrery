@@ -438,6 +438,35 @@ describe('POST /features/:id/approve-test', () => {
     const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve-test` });
     expect(res.statusCode).toBe(409);
   });
+
+  it('returns 409 when a sole-assertion-vacuous blocker is unresolved (case G)', async () => {
+    // gateOpenedCount counts spec_approval and plan_approval gates only.
+    // Seed one spec_approval → gateOpenedCount=1 → cycleRev=0.
+    // A vacuous blocker at specRev:0 blocks the gate — the operator must dismiss
+    // it before approve-test can proceed. This is the gate consequence of Phase 63.
+    await getPrisma().$transaction((tx) =>
+      appendEvent(tx, featureId, {
+        type: 'gate.opened',
+        gate: 'spec_approval',
+        summary: 'spec gate',
+        revision: 0,
+      }),
+    );
+    await getPrisma().finding.create({
+      data: {
+        id: 'vac-blocker-1',
+        featureId,
+        specRev: 0,
+        severity: 'blocker',
+        section: 'sole-assertion-vacuous',
+        issue: 'test "foo" — every assertion is vacuous',
+        resolution: null,
+      },
+    });
+    const res = await app.inject({ method: 'POST', url: `/features/${featureId}/approve-test` });
+    expect(res.statusCode).toBe(409);
+    expect((res.json() as { error: string }).error).toContain('dismissed');
+  });
 });
 
 describe('POST /features/:id/retry-test', () => {

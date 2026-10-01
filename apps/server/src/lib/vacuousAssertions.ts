@@ -29,11 +29,29 @@ const PATTERNS: VacuousPattern[] = [
     // Matches .toBeDefined() — passes for any non-undefined value.
     re: /\.toBeDefined\(\s*\)/g,
     reason: 'assertion always passes for any non-undefined value',
-    // Exempt when the subject comes from .find()/.get()/index access on the
-    // preceding line or the same line — toBeDefined() is a null-check there, not
-    // a content check.
-    exemptCheck: (lineIdx, lines) =>
-      ACCESSOR_RE.test(lines[lineIdx - 2] ?? '') || ACCESSOR_RE.test(lines[lineIdx - 1] ?? ''),
+    // Exempt when the subject identifier of expect(IDENTIFIER) was assigned via a
+    // .find()/.get()/index access within the preceding 5 lines.  This covers both
+    // the common one-line pattern and the multi-assignment pattern (two .find()
+    // calls followed by two expects, as in take-25 lines 276–281).
+    //
+    // Intentionally NOT a wide "any accessor in the window" check — that would
+    // accidentally exempt expect(result).toBeDefined() if an unrelated .find()
+    // appears nearby, and result IS a real finding (take-25 line 891).
+    exemptCheck: (lineIdx, lines) => {
+      const matchLine = lines[lineIdx - 1] ?? '';
+      const subjectMatch = /expect\s*\(\s*([\w$]+)\s*\)/.exec(matchLine);
+      if (!subjectMatch) return false;
+      const subject = subjectMatch[1]!;
+      // Look back up to 5 lines for an assignment of this exact identifier via accessor.
+      const identRe = new RegExp(`\\b${subject}\\b`);
+      const assignRe = /[=]\s/;
+      const start = Math.max(0, lineIdx - 6);
+      for (let i = start; i < lineIdx - 1; i++) {
+        const ln = lines[i] ?? '';
+        if (identRe.test(ln) && assignRe.test(ln) && ACCESSOR_RE.test(ln)) return true;
+      }
+      return false;
+    },
   },
   {
     name: 'toHaveProperty-no-value',
@@ -42,9 +60,12 @@ const PATTERNS: VacuousPattern[] = [
     // the closing paren immediately after the key string.
     re: /\.toHaveProperty\(\s*['"][^'"]+['"]\s*\)/g,
     reason: 'toHaveProperty with no value check passes for any property value',
-    // Exempt when the next non-blank line asserts on the same key with a value —
-    // the toHaveProperty acts as an existence guard before the value check.
+    // Exempt when: (a) the call is negated (.not.toHaveProperty) — that assertion
+    // IS meaningful (fails when the property EXISTS); or (b) the next non-blank
+    // line asserts on the same key with a value — the toHaveProperty acts as an
+    // existence guard before the value check.
     exemptCheck: (lineIdx, lines, matchText) => {
+      if ((lines[lineIdx - 1] ?? '').includes('.not.toHaveProperty')) return true;
       const keyMatch = /\.toHaveProperty\(\s*['"]([^'"]+)['"]\s*\)/.exec(matchText);
       if (!keyMatch) return false;
       const key = keyMatch[1]!;
@@ -110,7 +131,7 @@ function detectSoleAssertionVacuous(
               const locKey = `${relPath}:${blockStartLine}:sole-assertion-vacuous`;
               findings.push({
                 id: stableId(locKey),
-                severity: 'warning',
+                severity: 'blocker',
                 section: 'sole-assertion-vacuous',
                 issue: `${relPath}:${blockStartLine}: test "${testName}" — every assertion is vacuous`,
                 test_name: `${relPath}:${blockStartLine}`,
@@ -140,18 +161,17 @@ const FOREACH_GUARD_RE =
   /\.toHaveLength\s*\(|\.toBeGreaterThan\s*\(|if\s*\(.*\.length|\.length\s*[>!]=?\s*0/;
 
 /**
- * Detect .forEach() calls with no length guard in the preceding 10 lines.
- * Returns findings with section 'unguarded-forEach'.
+ * Detect .forEach() and for...of calls with no length guard in the preceding 10 lines.
+ * Returns findings: section 'unguarded-forEach' or 'unguarded-for-of', severity 'blocker'.
  */
 function detectUnguardedForEach(content: string, lines: string[], relPath: string): TestFinding[] {
   const findings: TestFinding[] = [];
-  const forEachRe = /\.forEach\s*\(/g;
 
   let m: RegExpExecArray | null;
+
+  const forEachRe = /\.forEach\s*\(/g;
   while ((m = forEachRe.exec(content)) !== null) {
     const lineIdx = content.slice(0, m.index).split('\n').length; // 1-based
-
-    // Scan back up to 10 lines for a guard.
     const lookback = Math.max(0, lineIdx - 10);
     let guarded = false;
     for (let i = lookback; i < lineIdx - 1; i++) {
@@ -165,9 +185,35 @@ function detectUnguardedForEach(content: string, lines: string[], relPath: strin
       const locKey = `${relPath}:${lineIdx}:unguarded-forEach`;
       findings.push({
         id: stableId(locKey),
-        severity: 'warning',
+        severity: 'blocker',
         section: 'unguarded-forEach',
         issue: `${relPath}:${lineIdx}: \`${lineText}\` — forEach over collection with no non-empty guard`,
+        test_name: `${relPath}:${lineIdx}`,
+      });
+    }
+  }
+
+  // Detect unguarded for...of loops — same guard pattern applies.
+  const forOfRe = /for\s*\(\s*(?:const|let|var)\s+\w+\s+of\s+\w+/g;
+  forOfRe.lastIndex = 0;
+  while ((m = forOfRe.exec(content)) !== null) {
+    const lineIdx = content.slice(0, m.index).split('\n').length;
+    const lookback = Math.max(0, lineIdx - 10);
+    let guarded = false;
+    for (let i = lookback; i < lineIdx - 1; i++) {
+      if (FOREACH_GUARD_RE.test(lines[i] ?? '')) {
+        guarded = true;
+        break;
+      }
+    }
+    if (!guarded) {
+      const lineText = (lines[lineIdx - 1] ?? '').trim().slice(0, 100);
+      const locKey = `${relPath}:${lineIdx}:unguarded-for-of`;
+      findings.push({
+        id: stableId(locKey),
+        severity: 'blocker',
+        section: 'unguarded-for-of',
+        issue: `${relPath}:${lineIdx}: \`${lineText}\` — for...of over collection with no non-empty guard`,
         test_name: `${relPath}:${lineIdx}`,
       });
     }
@@ -178,8 +224,11 @@ function detectUnguardedForEach(content: string, lines: string[], relPath: strin
 
 /**
  * Scan test-agent-authored files for assertion patterns that cannot meaningfully
- * fail. Returns TestFinding[] with severity 'warning' — not blockers, but surfaced
- * in the test report so the operator can decide whether the coverage is real.
+ * fail. Returns TestFinding[] with mixed severities:
+ * - 'warning': vacuous pattern matches (toBeDefined, toHaveProperty without value)
+ * - 'blocker': sole-assertion-vacuous tests and unguarded forEach/for-of iteration
+ *
+ * Blocker findings block the approve-test gate until dismissed per-finding.
  */
 export function detectVacuousAssertions(
   worktreePath: string,
