@@ -56,7 +56,11 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-Phase 62 complete. Phase 63 entry: Plan Phase 10 (Spec reconciliation) or R-7 fix.
+Phase 62 (Plan Phases 8+9 sweep) complete. The next phase is **plan.md Phase 62**
+("A warning you approve in 35 seconds is not a gate" — vacuous assertion detector
+precision fix: tasks 201–204 + audit). plan.md Phase 62 was added at commit `1b5cb1c`
+while Phase 61 was active; its numbering collides with the HANDOVER counter. The next
+HANDOVER phase is 63 and covers plan.md Phase 62's tasks.
 
 ---
 
@@ -218,7 +222,7 @@ Phase 62 complete. Phase 63 entry: Plan Phase 10 (Spec reconciliation) or R-7 fi
 | 59 | An expired credential is weather, not a verdict | `7d36ffb` | 2026-09-18 |
 | 60 | A channel nothing uses is not a channel | `3857634` | 2026-09-18 |
 | 61 | A test agent that knows what it already wrote | `19b9e2e` | 2026-09-18 |
-| 62 | Plan Phases 8 + 9 sweep | pending | 2026-10-01 |
+| 62 | Plan Phases 8 + 9 sweep | `95fc54b` | 2026-10-01 |
 
 ---
 
