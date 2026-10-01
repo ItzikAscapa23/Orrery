@@ -57,7 +57,12 @@ Tests are Vitest throughout. Agent shell work runs in Docker, `--network none`.
 
 ## Current phase progress
 
-Phase 63 complete. The next phase is **plan.md Phase 63** (not yet written).
+Phase 63 complete. plan.md and HANDOVER.md now agree at 63 — plan.md carries a
+"## Phase 62 — (no block)" stub recording that HANDOVER Phase 62 was the `95fc54b`
+sweep with no plan entry. No numbering offset remains.
+
+The next `/phase` will add **plan.md Phase 64** (not yet written) and log it as
+**HANDOVER Phase 64**.
 
 ---
 
